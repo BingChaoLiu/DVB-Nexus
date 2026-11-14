@@ -14,7 +14,15 @@ layer decides its mapping when the endpoints land (M3); no fabricated status.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    # Type-only: errors is the lowest layer of the adapter — process.py and
+    # client.py both import this module at runtime, so the payloads their
+    # errors carry are typed via string annotations to avoid the import
+    # cycle (task #37 review, B5).
+    from adapters.tsduck.client import TSDuckCallRecord
+    from adapters.tsduck.process import ProcessResult
 
 
 class TSDuckAdapterError(Exception):
@@ -78,7 +86,7 @@ class TSDuckTimeoutError(TSDuckAdapterError):
     code = "TSDUCK_TIMEOUT"
     http_status = 500
 
-    partial_result: Any | None = None
+    partial_result: "ProcessResult | None" = None
 
 
 class TSDuckCancelledError(TSDuckAdapterError):
@@ -92,7 +100,7 @@ class TSDuckCancelledError(TSDuckAdapterError):
     code = "TSDUCK_CANCELLED"
     http_status = 409
 
-    partial_result: Any | None = None
+    partial_result: "ProcessResult | None" = None
 
 
 class TSDuckJsonGateError(TSDuckAdapterError):
@@ -113,7 +121,7 @@ class TSDuckJsonGateError(TSDuckAdapterError):
     code = "TSDUCK_JSON_GATE_FAILED"
     http_status = 500
 
-    call_record: Any | None = None
+    call_record: "TSDuckCallRecord | None" = None
 
 
 class TSDuckPluginNotAllowedError(TSDuckAdapterError):
