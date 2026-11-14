@@ -21,3 +21,7 @@ After editing anything under `docs/spec/` (front-matter, package indexes, `REGIS
 ### Windows shell
 
 Git Bash + native Windows Python path/heredoc/encoding pitfalls: see `docs/agents/windows-shell.md`.
+
+### Implementation dispatch
+
+Parallel implementation-ticket dispatch recipe: frontier ordering, interface contracts, seam ownership, early CI draft PR. See `docs/agents/implementation-dispatch.md`.
