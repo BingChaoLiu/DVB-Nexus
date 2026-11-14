@@ -219,3 +219,74 @@ class TestProbeTimeout:
         assert result.version is None
         assert result.reason is TSDuckUnavailableReason.NOT_EXECUTABLE
         assert "timed out" in result.detail
+
+
+def _write_counting_tsp(bin_dir: Path) -> Path:
+    """Fake tsp that appends one marker line to calls.log per invocation.
+
+    The call-count file is the observable subprocess counter for the cache
+    seam (delegator seam 4): real spawn, real count, no mocking.
+    """
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    script = bin_dir / "tsp.cmd"
+    script.write_bytes(
+        b"@echo off\r\n"
+        b"echo called >>\"%~dp0calls.log\"\r\n"
+        b"echo " + MEASURED_VERSION_LINE.encode("utf-8") + b" 1>&2\r\n"
+    )
+    return script
+
+
+def _call_count(bin_dir: Path) -> int:
+    log = bin_dir / "calls.log"
+    if not log.exists():
+        return 0
+    return len([line for line in log.read_text(encoding="utf-8").splitlines() if line])
+
+
+class TestCache:
+    def test_second_probe_within_instance_served_from_cache(
+        self, tmp_path: Path, monkeypatch
+    ):
+        bin_dir = tmp_path / "bin"
+        _write_counting_tsp(bin_dir)
+        monkeypatch.setenv("PATH", str(bin_dir))
+        probe = TSDuckVersionProbe(fallback_roots=[])
+
+        first = probe.probe()
+        second = probe.probe()
+
+        assert first.available and second.available
+        assert first.version == second.version  # same cached payload object
+        assert _call_count(bin_dir) == 1  # second call spawned nothing
+
+    def test_fresh_instance_probes_again(self, tmp_path: Path, monkeypatch):
+        bin_dir = tmp_path / "bin"
+        _write_counting_tsp(bin_dir)
+        monkeypatch.setenv("PATH", str(bin_dir))
+
+        first = TSDuckVersionProbe(fallback_roots=[]).probe()
+        second = TSDuckVersionProbe(fallback_roots=[]).probe()
+
+        assert first.available and second.available
+        assert _call_count(bin_dir) == 2  # no cross-instance cache leakage
+
+    def test_failed_probe_is_not_cached(self, tmp_path: Path, monkeypatch):
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+        (bin_dir / "tsp.exe").write_bytes(b"not a real PE payload")
+        monkeypatch.setenv("PATH", str(bin_dir))
+        probe = TSDuckVersionProbe(fallback_roots=[])
+
+        broken = probe.probe()
+        assert broken.available is False
+
+        # Environment is repaired; the same instance must re-probe (failures
+        # are never cached — a transient timeout must not poison lifetime).
+        (bin_dir / "tsp.exe").unlink()
+        _write_fake_tsp(bin_dir)
+        repaired = probe.probe()
+
+        assert repaired.available is True
+        assert repaired.version is not None
+        assert repaired.version.version == "3.40-4165"
