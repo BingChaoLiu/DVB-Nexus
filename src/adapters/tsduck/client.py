@@ -210,7 +210,7 @@ class TSDuckClient:
         The input face for this ticket is a file path (M3 wires SPEC-503
         artifact IDs / run context). Every attempt produces the nine-field
         call record: success returns it inside :class:`AnalysisResult`; a
-        gate failure attaches it to the raised ``TSDUCK_JSON_GATE_ERROR``
+        gate failure attaches it to the raised ``TSDUCK_JSON_GATE_FAILED``
         (as ``call_record``) so the invocation is never lost (§7 义务).
         """
         started = time.time()
