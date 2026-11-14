@@ -39,6 +39,11 @@ def connect(path: Union[str, Path]) -> sqlite3.Connection:
     try:
         conn = sqlite3.connect(str(path), isolation_level=None)
         conn.row_factory = sqlite3.Row
+        # SPEC-502 section 3: WAL mode on; foreign_keys on. WAL persists in the
+        # database file and is verified working on Windows paths by
+        # tests/integration/adapters/storage/test_wal.py.
+        conn.execute("PRAGMA journal_mode = WAL")
+        conn.execute("PRAGMA foreign_keys = ON")
         conn.execute(f"PRAGMA busy_timeout = {BUSY_TIMEOUT_MS}")
     except sqlite3.Error as exc:
         raise StorageUnavailableError(f"cannot open database {path!r}") from exc
