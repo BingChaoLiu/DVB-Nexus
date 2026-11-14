@@ -1,0 +1,59 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  # SPEC-505 §5 CI 必绿组合（ticket #13 裁决）：unit + integration +
+  # conformance + e2e。tsduck 标记测试不进本 job（#14：兜底 skip 仅限本地，
+  # Windows job 全量跑）；slow 归 tests-nightly。
+  pytest-core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install project with dev dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+      - name: Run CI 必绿组合 (SPEC-505 §5, ticket #13)
+        run: pytest -m "(unit or integration or conformance or e2e) and not (tsduck or slow)" -ra
+
+  # REQ-TST-505-005 / ADR-0004：windows_only 断言 Windows CI 必跑。
+  # #14 Q6：CI 主路径 Windows runner winget 安装 TSDuck；安装失败 = 本
+  # job 失败（不算 skip）；tsduck 标记测试全量跑。
+  pytest-windows-first:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install project with dev dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+      - name: Install TSDuck (winget, ticket #14)
+        run: winget install --id TSDuck.TSDuck --silent --accept-source-agreements --accept-package-agreements
+      - name: Record TSDuck toolchain (missing tsp fails the job)
+        shell: pwsh
+        run: |
+          $tsp = Get-Command tsp -ErrorAction SilentlyContinue
+          if (-not $tsp) {
+            $candidate = Join-Path $env:ProgramFiles "TSDuck\bin\tsp.exe"
+            if (Test-Path $candidate) {
+              Add-Content -Path $env:GITHUB_PATH -Value (Split-Path $candidate)
+              $env:PATH = "$(Split-Path $candidate);$env:PATH"
+            } else {
+              Write-Error "tsp not found after winget install (looked in PATH and $candidate)"
+              exit 1
+            }
+          }
+          tsp --version
+      - name: Run windows-first + TSDuck tests (SPEC-505 §5, ticket #14)
+        run: pytest -m "windows_only or tsduck" -ra
