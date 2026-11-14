@@ -30,9 +30,9 @@ from adapters.storage.errors import StorageConflictError
 from domain.observation.artifact import TSArtifact
 from domain.observation.run_context import RunContext
 
-#: R9 (implementation plan §7): the status a run is created with. SPEC-502 §4
-#: has a status column but the §5 create protocol takes no status; SPEC-003 §3
-#: LifecycleState's first value is "created".
+#: R9 (ticket #23, review-fixed citation): the status a run is created with.
+#: SPEC-502 §4 has a status column but the §5 create protocol takes no status;
+#: SPEC-003 §3 LifecycleState's first value is "created".
 _INITIAL_RUN_STATUS = "created"
 
 
