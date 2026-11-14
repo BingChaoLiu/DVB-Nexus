@@ -26,6 +26,10 @@ dev = [
     "fastapi>=0.110,<1",
     "httpx2>=2,<3",
     "pydantic>=2.6,<3",
+    # CI-workflow structural consistency checks (tests/integration/
+    # test_ci_workflow_contract.py) keep the CI -m filters aligned with the
+    # registered markers.
+    "pyyaml>=6.0.1,<7",
 ]
 
 # ---------------------------------------------------------------------------
