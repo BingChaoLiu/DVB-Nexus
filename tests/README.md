@@ -123,6 +123,13 @@ function scope，探测结果为不可变缓存）。
   GBK stderr、进程树清理）在 Windows CI 必跑，非 Windows 显式 skip 不降级。
 - TSDuck stderr 为 GBK 本地化输出：只日志展示、显式 `errors="replace"` 解码，
   不做语义解析（SPEC-308）。
+- **实机测试断言形状，禁钉环境字面值**：`tsduck` / `windows_only` 等真环境
+  测试断言版本 token 形状（`^\d+\.\d+-\d+$`）且 parsed components 与 raw
+  line 自洽、路径形状（`…\TSDuck\bin\tsp.exe`，盘符无关、大小写不敏感）与
+  存在性——CI runner 与参考机的安装版本、盘符、盘上 casing 都不同（#69 CI
+  首跑：winget 装 3.45-4798 vs 参考机 3.40-4165）。字面钉扎（3.40-4165 等
+  锁定基线）只属于单测/fake 的合成 fixture——那里它们是输入数据，不是环境
+  假设。
 
 ## 7. 常用命令
 
