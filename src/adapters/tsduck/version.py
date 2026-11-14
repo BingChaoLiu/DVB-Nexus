@@ -29,6 +29,12 @@ Contract anchors:
 - Successful probes are cached per resolved executable (instance-level;
   the module-level :data:`DEFAULT_PROBE` plus :func:`probe_tsduck` provide
   the ADR-0005 process-lifetime cache). Failed probes are never cached.
+- Capability-surface interpretation (ticket #25 acceptance reading, made
+  durable here as assumption A1): the probe's "能力" surface is
+  availability/version/path metadata only — the measured assets contain no
+  TSDuck CLI capability enumeration (no subcommand inventory, no feature
+  flags). Analyze capability enumeration is the M2 report_parser's scope
+  (SPEC-308 §3 five-module layout).
 """
 
 from __future__ import annotations
@@ -203,6 +209,12 @@ class TSDuckVersion:
     and probe metadata (which stream carried the line, how the executable
     was resolved) so the M2 client can log the SPEC-308 §7 call-record
     fields without re-probing.
+
+    Capability note (ticket #25 assumption A1): this payload IS the probe's
+    whole "能力" surface — availability/version/path metadata. It makes no
+    claim about TSDuck feature capabilities: no CLI capability enumeration
+    exists in the measured assets, and analyze capability enumeration lands
+    with the M2 report_parser (SPEC-308 §3).
     """
 
     executable: Path
