@@ -129,6 +129,10 @@ class SqliteEventJournal(EventJournal):
     def query(
         self, session_id: str, *, after_seq: int = 0, limit: int = QUERY_LIMIT_DEFAULT
     ) -> list[EventRow]:
+        # SPEC-502 §8 via SPEC-305 §5: limit defaults to 100, hard cap 2000 —
+        # requests beyond the cap are invalid, not silently clamped.
+        if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= QUERY_LIMIT_HARD_CAP:
+            raise ValueError(f"limit must be an int within 1..{QUERY_LIMIT_HARD_CAP}, got {limit!r}")
         rows = self._conn.execute(
             "SELECT session_id, journal_seq, event_type, severity, producer_id, event_id,"
             " envelope_json FROM events WHERE session_id = ? AND journal_seq > ?"

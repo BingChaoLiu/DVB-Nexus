@@ -11,6 +11,8 @@ behaviors (WAL, concurrency across connections, migrations) live under
 tests/integration/adapters/storage/.
 """
 
+import pytest
+
 from adapters.storage import db
 from adapters.storage.errors import InvalidEnvelopeError
 from adapters.storage.journal import EventRow, SqliteEventJournal
@@ -143,3 +145,43 @@ def test_dedup_replay_after_other_events_returns_original_seq() -> None:
     journal.append(_envelope(event_id="evt-3"))
     replay_seq, replay_dup = journal.append(_envelope(event_id="evt-dup"))
     assert (replay_seq, replay_dup) == (1, True)
+
+
+# --- query: ordering, cursor, limits (SPEC-502 §5/§8 via SPEC-305 §5) -------
+
+
+def test_query_returns_rows_in_seq_order_after_cursor() -> None:
+    journal = _journal()
+    for i in range(1, 4):
+        journal.append(_envelope(event_id=f"evt-{i}"))
+
+    full = journal.query("sess-1")
+    assert [row.journal_seq for row in full] == [1, 2, 3]
+    assert [row.event_id for row in full] == ["evt-1", "evt-2", "evt-3"]
+    assert [row.envelope["event_id"] for row in full] == ["evt-1", "evt-2", "evt-3"]
+
+    after_first = journal.query("sess-1", after_seq=1)
+    assert [row.journal_seq for row in after_first] == [2, 3]
+
+    assert journal.query("no-such-session") == []
+
+
+def test_query_default_limit_is_100() -> None:
+    journal = _journal()
+    for i in range(150):
+        journal.append(_envelope(event_id=f"evt-{i}"))
+
+    assert len(journal.query("sess-1")) == 100
+    assert [row.journal_seq for row in journal.query("sess-1")] == list(range(1, 101))
+    assert len(journal.query("sess-1", limit=150)) == 150
+
+
+def test_query_enforces_hard_cap_2000() -> None:
+    journal = _journal()
+    journal.append(_envelope())
+
+    assert len(journal.query("sess-1", limit=2000)) == 1
+    with pytest.raises(ValueError):
+        journal.query("sess-1", limit=2001)
+    with pytest.raises(ValueError):
+        journal.query("sess-1", limit=0)
