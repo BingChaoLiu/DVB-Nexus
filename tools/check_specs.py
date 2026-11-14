@@ -1,6 +1,6 @@
-"""Spec 包一致性检查：front-matter / 包索引 / REGISTRY / 相对链接。
+"""Spec 包一致性检查：front-matter / 包索引 / REGISTRY / 相对链接 / 文本编码。
 
-覆盖四类漂移（均为本仓库实际发生过或高 probable 的事故类）：
+覆盖五类漂移（均为本仓库实际发生过或高 probable 的事故类）：
 
 1. front-matter 校验：所有带 YAML front-matter 的规格/契约文件要求
    spec_id 全仓唯一、version 为 semver、status 在受控词表内；
@@ -11,6 +11,9 @@
    文件 front-matter 与包级 version/status 一致。
 4. REGISTRY ↔ 模块文件：modules/ 下每个 SPEC-<n> 文件的 id 必须出现在
    REGISTRY 表行中；REGISTRY 行无对应文件视为合法占位（NOTE 不报错）。
+5. 全仓 tracked 文本文件须可 UTF-8 解码（utf-8-sig 容忍 BOM）——仓库
+   约定统一 UTF-8，UTF-16 等坏编码历史上真实出现过（#68 README UTF-16，
+   pip install -e . 读 readme 即 UnicodeDecodeError）。
 
 用法（任意 CWD）：python -I tools/check_specs.py
 退出码：0 = 通过；1 = 有 FAIL。
@@ -18,6 +21,7 @@
 from __future__ import annotations
 
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -206,6 +210,39 @@ def check_relative_links() -> None:
                 fail(f"{rel(p)}: 相对链接断链: {target}")
 
 
+BINARY_SUFFIXES = {
+    ".png", ".jpg", ".jpeg", ".gif", ".ico", ".webp", ".pdf", ".zip",
+    ".gz", ".7z", ".exe", ".dll", ".so", ".dylib", ".woff", ".woff2",
+    ".ttf", ".otf", ".eot", ".mp3", ".mp4", ".ts", ".bin",  # .ts/.bin = MPEG-TS 资产
+}
+
+
+def check_text_encoding() -> None:
+    """全仓 tracked 文件须可 UTF-8 解码（utf-8-sig 容忍 BOM）。
+
+    以 git ls-files 取 tracked 面（自动排除 .scratch/.venv 等 untracked
+    本地物）；按扩展名跳过二进制资产。UTF-16/GBK 等坏编码报 FAIL。
+    """
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(ROOT), "ls-files", "-z"],
+            capture_output=True, check=True,
+        ).stdout
+    except (subprocess.CalledProcessError, FileNotFoundError) as exc:
+        fail(f"text-encoding: git ls-files 不可用，扫描跳过依据缺失: {exc}")
+        return
+    for raw in out.decode("utf-8", "replace").split("\0"):
+        if not raw:
+            continue
+        p = ROOT / raw
+        if p.suffix.lower() in BINARY_SUFFIXES:
+            continue
+        try:
+            p.read_bytes().decode("utf-8-sig")
+        except UnicodeDecodeError as exc:
+            fail(f"{raw}: 非 UTF-8 编码（{exc}）——仓库统一 UTF-8，见 #68")
+
+
 def main() -> int:
     if not SPEC_ROOT.exists():
         fail(f"spec 包根目录不存在: {rel(SPEC_ROOT)}")
@@ -217,6 +254,7 @@ def main() -> int:
         check_ts_core_index(front)
         check_registry(front)
     check_relative_links()
+    check_text_encoding()
 
     for n in notes:
         print(f"NOTE  {n}")
