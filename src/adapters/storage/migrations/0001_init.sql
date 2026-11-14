@@ -2,9 +2,10 @@
 --
 -- Column names, order, uniqueness and keys come from the SPEC-502 §4 table
 -- text; DDL details the spec text does not pin (nullability, timestamp
--- encodings, index predicates) follow the interpretations R1..R8/R11 recorded
--- in .scratch/task-23/IMPLEMENTATION_PLAN.md section 7 and are pinned by
--- tests/integration/adapters/storage/test_schema.py literals.
+-- encodings, index predicates) follow the interpretations R1..R8/R11 made in
+-- ticket #23 (GitHub issue 23; interpretation register anchored to SPEC-502
+-- §4/§7) and are pinned by tests/integration/adapters/storage/test_schema.py
+-- literals.
 --
 -- Pragmas (WAL, foreign_keys) are connection-level and live in db.connect(),
 -- not in this script. user_version is set by the migration runner inside the

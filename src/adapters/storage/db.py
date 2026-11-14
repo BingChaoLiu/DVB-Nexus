@@ -22,7 +22,7 @@ from adapters.storage.errors import MigrationError, StorageUnavailableError
 
 #: How long a writer waits for the single-writer lock before failing
 #: (SPEC-502 section 8: SQLite single-writer semantics; value not spec-pinned,
-#: recorded as interpretation R14 in the implementation plan).
+#: recorded as interpretation R14 of ticket #23, GitHub issue 23).
 BUSY_TIMEOUT_MS = 10_000
 
 _MIGRATIONS_SUBDIR = "migrations"

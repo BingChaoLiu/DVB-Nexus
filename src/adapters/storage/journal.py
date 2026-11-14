@@ -198,9 +198,10 @@ def _extract_columns(envelope: Any) -> _EnvelopeColumns:
     scope = envelope.get("scope")
     if not isinstance(scope, dict):
         raise InvalidEnvelopeError("envelope field scope must be an object")
-    # R4 (implementation plan §7): the stamp key is a session and the events
-    # PK is (session_id, journal_seq); SPEC-301 §3's null session_id
-    # (system-level events) has no MVP registry entry, so it is rejected here.
+    # R4 (ticket #23 interpretation register, GitHub issue 23; SPEC-502 §5/§6):
+    # the stamp key is a session and the events PK is (session_id,
+    # journal_seq); SPEC-301 §3's null session_id (system-level events) has
+    # no MVP registry entry, so it is rejected here.
     session_id = _non_empty_str(scope, "session_id")
     return _EnvelopeColumns(session_id, event_type, severity, producer_id, event_id)
 

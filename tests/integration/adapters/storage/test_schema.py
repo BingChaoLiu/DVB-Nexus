@@ -5,8 +5,9 @@ Seam (delegator-approved): after the packaged migration, introspect
 compare against expected literals typed by hand from the spec text — the test
 is the independent truth source, NOT generated from the DDL.
 
-Interpretations R1..R8/R11 referenced below are recorded in
-``.scratch/task-23/IMPLEMENTATION_PLAN.md`` section 7.
+Interpretations R1..R8/R11 referenced below were made in ticket #23's
+interpretation register (GitHub issue 23; the implementation plan itself is
+not tracked), anchored to the SPEC-502 §4/§7 text.
 """
 
 import sqlite3
