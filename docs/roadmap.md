@@ -50,6 +50,8 @@
 
 前端远期行 **SPEC-407 Timeline & Replay UI**（P2，依赖 SPEC-640/501）自规格包 `REGISTRY.md` §D 移入本目录（[编号体系重建 #10](https://github.com/BingChaoLiu/DVB-Nexus/issues/10)）：随 Time Machine（SPEC-640，Later Phase）另启 effort，规格文本未编写。
 
+**生成过程可视化（packet 级构造事件流）**：属自研语义层职责（ADR-0005 决策 3），但 UI 与事件类型清单均 MVP 外（[前端最小 UI 范围裁决 #18](https://github.com/BingChaoLiu/DVB-Nexus/issues/18)）——SPEC-301 §4 预留条款原样保持，TS Core MVP 无发射义务；事件类型注册表与生成可视化 UI 在 roadmap 期一并裁决。
+
 ## 4. v0.3 故障案例库（远期靶场素材）
 
 > 原文见 `docs/spec/provenance/v03.md` §7。以下条目已按标准核查报告（`docs/research/standards-audit.md` §8）**订正**——⚠️ 标注处为对 v0.3 原文的修正，实现知识卡片时以本节为准。

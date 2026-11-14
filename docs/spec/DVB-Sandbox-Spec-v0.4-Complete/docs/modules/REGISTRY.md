@@ -56,15 +56,17 @@ SPEC-200～206 已于 2026-11-14 批准为 MVP 基线（APPROVED 0.5.0，[ticket
 
 ## D. Frontend
 
-| Spec ID | 名称 | 范围 | 建议依赖 | 优先级 |
-|---|---|---|---|---|
-| SPEC-400 | Frontend Architecture | 页面结构、状态、DTO、路由和构建 | SPEC-001/003 | P0 |
-| SPEC-401 | Topology Editor | 节点/端口/连线/拖拽/校验展示 | SPEC-003/500 | P0 |
-| SPEC-402 | Node Inspector | 节点属性、配置表单和校验提示 | SPEC-401/500 | P0 |
-| SPEC-403 | Stream Monitor | 概览、PID、Bitrate、CC/PCR 聚合指标 | SPEC-302/501 | P0 |
-| SPEC-404 | Packet Inspector | Packet 列表、Header/Hex/字段下钻 | SPEC-100/305/503 | P1 |
-| SPEC-405 | CLI Console | 真实 TSDuck 输出、模拟日志的来源标识 | SPEC-308/501 | P0 |
-| SPEC-406 | Training Lab UI | 实验目标、提示、步骤、通关结果 | SPEC-205/206 | P0 |
+SPEC-400～406 的 MVP 范围切集已随 [前端最小 UI 范围裁决](https://github.com/BingChaoLiu/DVB-Nexus/issues/18) 裁决为**范围级预批准**（各 spec 实体文本未编写，编写归 M5 实现流程）；切集明细收录于 [Frontend/](Frontend/SPEC-INDEX-FRONTEND.md)。SPEC-404 原列 P1，按最小证据下钻（hex + header 解码）收编进 MVP，完整能力仍为后续增强；packet 级构造可视化事件 = MVP 外（SPEC-301 §4 预留保持，归 roadmap 期）；SPEC-407 Timeline & Replay UI（P2）已移 roadmap §3（见 §F 说明）。
+
+| Spec ID | 名称 | 范围 | MVP 切集 gist（#18） | 建议依赖 | 优先级 |
+|---|---|---|---|---|---|
+| SPEC-400 | Frontend Architecture | 页面结构、状态、DTO、路由和构建 | 单 SPA 三路由区（Topologies/Monitor/Lab）；服务端状态=查询缓存+WS journal/hint 重取、不自建第二事实源；TS 类型权威=SPEC-500 Pydantic（CI 锁漂移）；测试最小面=关键交互组件测试+一条八步闭环 E2E 冒烟；组件库/状态库版本编写期定（React Flow 归 #19） | SPEC-001/003 | P0 |
+| SPEC-401 | Topology Editor | 节点/端口/连线/拖拽/校验展示 | 拖放建节点+端口级连线+默认端口自动生成+MPEG_TS 单平面+校验错误就地展示（SPEC-202 path-addressed+prepare 422）+保存=PUT 新 revision；不做撤销重做/复制粘贴/多 tab/平面切换/diff | SPEC-003/500 | P0 |
+| SPEC-402 | Node Inspector | 节点属性、配置表单和校验提示 | 每节点类型声明式字段清单→控件映射（SPEC-108 §4+Config Schema）；422 schema path 定位到字段；draft 编辑校验通过才可保存；不做通用 JSON Schema 表单引擎/实时校验/自定义布局 | SPEC-401/500 | P0 |
+| SPEC-403 | Stream Monitor | 概览、PID、Bitrate、CC/PCR 聚合指标 | 运行控制条（SPEC-200 穷举表驱动）+概览卡+PID/指标表（305 扁平标量）+诊断列表（priority/severity+confidence 三档+evidence locator）+verify 结果卡（三态+判据六 kind）；诊断/verify 呈现组件归 403、406 复用；journal/hint 节流重取非流式；不做时间轴/独立告警页/dashboard | SPEC-302/501 | P0 |
+| SPEC-404 | Packet Inspector | Packet 列表、Header/Hex/字段下钻 | 最小证据下钻：locator（pid+packet_index+artifact）→Range 按 188×index 取单包→hex+TS header 字段解码；不做 section 树/PES/baseline-faulted A/B 对照（后续增强） | SPEC-100/305/503 | P0 |
+| SPEC-405 | CLI Console | 真实 TSDuck 输出、模拟日志的来源标识 | 对照=来源标识区分（非双解析器 diff，309 归 roadmap）：调用记录九字段+详情（stderr GBK 只展示、exit 0≠有效标注）+source 徽章四值过滤；不做命令输入/终端仿真/双栏 diff | SPEC-308/501 | P0 |
+| SPEC-406 | Training Lab UI | 实验目标、提示、步骤、通关结果 | 场景库列表（SC-01~05）+场景详情渲染（目标/分阶段 hints/步骤/pass_criteria）+建实验 session+hints 渐进揭示（纯前端）+通关结果卡（复用 403 组件）+八步闭环 stepper+hidden_reference_solution 通关后展开；不做计分/进度存档/场景编辑器 | SPEC-205/206 | P0 |
 
 ## E. API / Storage / Quality
 
