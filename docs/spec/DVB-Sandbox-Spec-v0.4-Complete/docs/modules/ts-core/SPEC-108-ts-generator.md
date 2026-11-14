@@ -1,7 +1,7 @@
 ---
 spec_id: SPEC-108
 title: Deterministic MPEG-TS Generator
-version: 0.5.0
+version: 0.5.1
 status: APPROVED
 phase: MVP
 owner: TS Core
@@ -65,8 +65,8 @@ class GeneratorConfig:
     target_bitrate_bps: int
     output_packet_count: int
     program: ProgramConfig
-    pat_period_ms: int = 100
-    pmt_period_ms: int = 100
+    pat_period_ms: int = 101  # 默认错相，避免双表同相位重复格（#72 裁决）
+    pmt_period_ms: int = 103
     pcr_interval_ms: int = 40
     pcr_insertion_policy: str = "payload_packet_first"
 ```
@@ -86,6 +86,8 @@ class GeneratorConfig:
 | `program.streams[]`（`pid` / `stream_type` / `stream_id` / `bitrate_bps` / `payload_profile` / `payload_seed_offset`） | `ElementaryStreamConfig` 同名字段 | 数组，元素字段 snake_case |
 | `pat_period_ms` / `pmt_period_ms` / `pcr_interval_ms` | 同名字段 | int > 0 |
 | `pcr_insertion_policy` | `pcr_insertion_policy` | 枚举，见 §5 |
+
+默认表周期为错相配置（PAT 101 ms / PMT 103 ms，#72 裁决）：两表首个 Section 均于媒体 tick 0 到期，若默认同相（如均 100 ms），PAT 与 PMT 的每个重复 slot 都同位重合，与任意常规 ES pull 构成 ≥3 pulls/slot，结构性违反 SPEC-107 §5 的 deadline 窗（#34 实测：B=3 Mbps 自然配置 slot 200/399/599 三重 pull、slot 202 abort）。错相后双表重合点收敛为 lcm(101,103)=10 403 ms 的可计算稀疏点；仍触发 deadline 窗的配置按 SPEC-107 §5 第 6 条响亮失败，属设计行为而非缺陷。
 
 ## 5. 配置校验
 
