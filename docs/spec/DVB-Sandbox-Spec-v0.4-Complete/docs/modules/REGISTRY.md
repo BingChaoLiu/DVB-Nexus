@@ -6,7 +6,7 @@
 
 ## A. TS Core
 
-TS Core 的完整模块级规格已收录于 [`ts-core/`](ts-core/SPEC-INDEX-TS-CORE.md)。该目录中的 SPEC-100～SPEC-108 当前为 DRAFT，注册不代表批准。
+TS Core 的完整模块级规格已收录于 [`ts-core/`](ts-core/SPEC-INDEX-TS-CORE.md)。该目录中的 SPEC-100～SPEC-108 已于 2026-11-14 批准为 MVP 基线（APPROVED 0.5.0，[ticket #11](https://github.com/BingChaoLiu/DVB-Nexus/issues/11)）；权威状态以各文件 front-matter 为准，此处不重复。
 
 
 | Spec ID | 名称 | 范围 | 建议依赖 | 优先级 |
