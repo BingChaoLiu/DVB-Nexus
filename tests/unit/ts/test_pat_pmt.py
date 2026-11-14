@@ -199,3 +199,202 @@ class TestPmtRoundTrip:
         assert reparsed.streams[1].descriptors == b""
         assert reparsed.streams[0].stream_type == 0x1B
         assert reparsed.streams[1].stream_type == 0x0F
+
+
+class TestTableMetadataAndCrc:
+    """REQ-TS-103-003 — CRC / version / section-number correctness (primary)."""
+
+    def test_table_metadata_and_crc(self) -> None:
+        from ts.crc import verify_mpeg2_crc32
+        from ts.errors import InvalidSectionError
+        from ts.section import CrcPolicy, SectionPolicy, parse_section
+        from ts.tables.pat import (
+            PAT_SECTION_POLICY,
+            PATBuilder,
+            PATProgram,
+            PATSection,
+            parse_pat,
+        )
+        from ts.tables.pmt import (
+            PMT_SECTION_POLICY,
+            PMTBuilder,
+            PMTSection,
+            ElementaryStream,
+            parse_pmt,
+        )
+
+        # version_number 0 and 31, current_next 0/1 on both tables.
+        for version in (0, 31):
+            for current_next in (True, False):
+                pat = PATSection(
+                    transport_stream_id=0x1234,
+                    version_number=version,
+                    current_next_indicator=current_next,
+                    section_number=0,
+                    last_section_number=0,
+                    programs=(PATProgram(1, 0x1000),),
+                )
+                psi = PATBuilder().build(pat)
+                back = parse_pat(parse_section(psi.raw_bytes, PAT_SECTION_POLICY))
+                assert back == pat
+                assert back.version_number == version
+                assert back.current_next_indicator is current_next
+                pmt = PMTSection(
+                    program_number=1,
+                    version_number=version,
+                    current_next_indicator=current_next,
+                    section_number=0,
+                    last_section_number=0,
+                    pcr_pid=0x1000,
+                    program_descriptors=b"",
+                    streams=(ElementaryStream(0x1B, 0x0101),),
+                )
+                psi_pmt = PMTBuilder().build(pmt)
+                back_pmt = parse_pmt(
+                    parse_section(psi_pmt.raw_bytes, PMT_SECTION_POLICY)
+                )
+                assert back_pmt == pmt
+                assert back_pmt.version_number == version
+                assert back_pmt.current_next_indicator is current_next
+
+        # Section-number edges: 0/0 and 255/255 round-trip (§7 ranges).
+        edge = PATSection(
+            transport_stream_id=1,
+            version_number=3,
+            current_next_indicator=True,
+            section_number=255,
+            last_section_number=255,
+            programs=(PATProgram(1, 0x1000),),
+        )
+        assert parse_pat(
+            parse_section(PATBuilder().build(edge).raw_bytes, PAT_SECTION_POLICY)
+        ) == edge
+        edge_pmt = PMTSection(
+            program_number=1,
+            version_number=3,
+            current_next_indicator=True,
+            section_number=255,
+            last_section_number=255,
+            pcr_pid=0x1000,
+            program_descriptors=b"",
+            streams=(),
+        )
+        assert parse_pmt(
+            parse_section(PMTBuilder().build(edge_pmt).raw_bytes, PMT_SECTION_POLICY)
+        ) == edge_pmt
+
+        # Builder CRC fields verify over the exact wire bytes.
+        built_pat = PATBuilder().build(
+            PATSection(1, 0, True, 0, 0, (PATProgram(1, 0x1000),))
+        )
+        built_pmt = PMTBuilder().build(
+            PMTSection(1, 0, True, 0, 0, 0x1000, b"", ())
+        )
+        assert verify_mpeg2_crc32(built_pat.raw_bytes)
+        assert verify_mpeg2_crc32(built_pmt.raw_bytes)
+
+        # Corruption -> parse-time rejection at BOTH layers (ruling #9:
+        # PMT_INVALID_CRC corruption semantics; persistent symptom).
+        corrupted = bytearray(built_pmt.raw_bytes)
+        corrupted[10] ^= 0xFF
+        with pytest.raises(InvalidSectionError) as excinfo:
+            parse_section(bytes(corrupted), PMT_SECTION_POLICY)
+        assert "SECTION_CRC_INVALID" in str(excinfo.value)
+        lenient = parse_section(bytes(corrupted), PMT_SECTION_POLICY, strict=False)
+        with pytest.raises(InvalidSectionError) as excinfo:
+            parse_pmt(lenient)
+        assert "SECTION_CRC_INVALID" in str(excinfo.value)
+
+        corrupted_pat = bytearray(built_pat.raw_bytes)
+        corrupted_pat[12] ^= 0x01
+        with pytest.raises(InvalidSectionError) as excinfo:
+            parse_section(bytes(corrupted_pat), PAT_SECTION_POLICY)
+        assert "SECTION_CRC_INVALID" in str(excinfo.value)
+        with pytest.raises(InvalidSectionError) as excinfo:
+            parse_pat(
+                parse_section(bytes(corrupted_pat), PAT_SECTION_POLICY, strict=False)
+            )
+        assert "SECTION_CRC_INVALID" in str(excinfo.value)
+
+        # CRC is mandatory: no room for the field -> SECTION_CRC_MISSING.
+        from ts.section import PSISection
+
+        crcless = PSISection(
+            table_id=0x00,
+            section_syntax_indicator=True,
+            private_indicator=False,
+            section_length=2,
+            raw_bytes=b"\x00\xb0\x02\xaa\xbb",
+        )
+        with pytest.raises(InvalidSectionError) as excinfo:
+            parse_pat(crcless)
+        assert "SECTION_CRC_MISSING" in str(excinfo.value)
+
+        # Wrong table_id -> table-specific code, at the table layer.
+        neutral = SectionPolicy(max_section_length=1021, crc_policy=CrcPolicy.OPTIONAL)
+        wrong_pat = bytes([0x42]) + MINIMAL_PAT[1:]
+        psi_wrong = parse_section(wrong_pat, neutral)
+        with pytest.raises(InvalidSectionError) as excinfo:
+            parse_pat(psi_wrong)
+        assert "PAT_TABLE_ID_INVALID" in str(excinfo.value)
+        with pytest.raises(InvalidSectionError) as excinfo:
+            parse_pmt(parse_section(MINIMAL_PAT, neutral))
+        assert "PMT_TABLE_ID_INVALID" in str(excinfo.value)
+
+        # Builder: single-section overflow is an explicit failure (§3/§4).
+        with pytest.raises(InvalidSectionError) as excinfo:
+            PATBuilder().build(
+                PATSection(
+                    transport_stream_id=1,
+                    version_number=0,
+                    current_next_indicator=True,
+                    section_number=0,
+                    last_section_number=0,
+                    programs=tuple(
+                        PATProgram(number, 0x1000 + number)
+                        for number in range(1, 255)  # 9 + 4*254 = 1025 > 1021
+                    ),
+                )
+            )
+        assert "TABLE_SECTION_TOO_LARGE" in str(excinfo.value)
+        # Boundary: exactly 1021 encodes fine (9 + 4*253).
+        max_pat = PATSection(
+            transport_stream_id=1,
+            version_number=0,
+            current_next_indicator=True,
+            section_number=0,
+            last_section_number=0,
+            programs=tuple(
+                PATProgram(number, 0x0100 + number) for number in range(1, 254)
+            ),
+        )
+        assert PATBuilder().build(max_pat).section_length == 1021
+
+        with pytest.raises(InvalidSectionError) as excinfo:
+            PMTBuilder().build(
+                PMTSection(
+                    program_number=1,
+                    version_number=0,
+                    current_next_indicator=True,
+                    section_number=0,
+                    last_section_number=0,
+                    pcr_pid=0x1000,
+                    program_descriptors=bytes(range(4)),  # 13+4+5*202 > 1021
+                    streams=tuple(
+                        ElementaryStream(0x1B, 0x0100 + n) for n in range(202)
+                    ),
+                )
+            )
+        assert "TABLE_SECTION_TOO_LARGE" in str(excinfo.value)
+        # Boundary: 13 + 3 + 5*201 = 1021 encodes fine.
+        max_pmt = PMTSection(
+            program_number=1,
+            version_number=0,
+            current_next_indicator=True,
+            section_number=0,
+            last_section_number=0,
+            pcr_pid=0x1000,
+            program_descriptors=b"\x01\x02\x03",
+            streams=tuple(ElementaryStream(0x1B, 0x0100 + n) for n in range(201)),
+        )
+        assert PMTBuilder().build(max_pmt).section_length == 1021
