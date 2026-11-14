@@ -19,6 +19,7 @@
 
 - **禁止** `python -I some_file << 'EOF'`：文件参数会被当作**脚本**执行，heredoc 进 stdin 被忽略——实际跑的 不是你想要的逻辑。stdin 脚本一律用 `python -I -`。
 - 处理仓库外不可信数据时保持 `-I`（隔离模式，不加载脚本目录与当前目录代码）。
+- **路径/文件名比较一律先 `.lower()`**：Windows 文件系统大小写不敏感，API 返回盘上原样 casing（`shutil.which("tsp")` 因机器而异返回 `tsp.exe` 或 `tsp.EXE`）——精确 `== "tsp.exe"` 比较会踩坑（M0 会话实机测试踩中，#69）。
 
 ## 编码与显示
 
