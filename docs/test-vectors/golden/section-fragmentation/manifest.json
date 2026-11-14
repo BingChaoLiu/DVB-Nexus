@@ -1,0 +1,18 @@
+{
+  "vector_id": "section-fragmentation",
+  "kind": "generated_ts",
+  "related_specs": [
+    "SPEC-102",
+    "SPEC-106"
+  ],
+  "generator_version": "tools/make_golden_ts_vectors.py v1 (script-construct; no src/ts involvement)",
+  "config_hash": null,
+  "sha256": "sha256:43297aa2754fd8b8376e031a1863e8605f0cc28a1b9b6a470aa356dcb27b8f42",
+  "packet_count": 3,
+  "fault_plan_ref": null,
+  "verification": {
+    "path": "tsduck-cross",
+    "direction": "script-construct→tsduck-analyze",
+    "evidence_ref": "docs/test-vectors/golden/section-fragmentation/section-fragmentation.verification.md"
+  }
+}

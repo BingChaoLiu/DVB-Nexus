@@ -1,0 +1,165 @@
+{
+  "expectations": [
+    {
+      "event_type": "ts.packet_batch_observed",
+      "locator": {
+        "packet_index": 0
+      },
+      "detail": {
+        "tei": 0,
+        "pusi": 1,
+        "priority": 0,
+        "pid": 0,
+        "scrambling": 0,
+        "afc": 1,
+        "cc": 0,
+        "pointer_field": 0
+      }
+    },
+    {
+      "event_type": "ts.packet_batch_observed",
+      "locator": {
+        "packet_index": 1
+      },
+      "detail": {
+        "tei": 1,
+        "pusi": 0,
+        "priority": 0,
+        "pid": 0,
+        "scrambling": 0,
+        "afc": 1,
+        "cc": 1
+      }
+    },
+    {
+      "event_type": "ts.packet_batch_observed",
+      "locator": {
+        "packet_index": 2
+      },
+      "detail": {
+        "tei": 0,
+        "pusi": 0,
+        "priority": 1,
+        "pid": 1,
+        "scrambling": 0,
+        "afc": 1,
+        "cc": 15
+      }
+    },
+    {
+      "event_type": "ts.packet_batch_observed",
+      "locator": {
+        "packet_index": 3
+      },
+      "detail": {
+        "tei": 0,
+        "pusi": 0,
+        "priority": 0,
+        "pid": 8191,
+        "scrambling": 0,
+        "afc": 1,
+        "cc": 0,
+        "payload_fill": "0xff (canonical null packet body)"
+      }
+    },
+    {
+      "event_type": "ts.packet_batch_observed",
+      "locator": {
+        "packet_index": 4
+      },
+      "detail": {
+        "tei": 0,
+        "pusi": 1,
+        "priority": 0,
+        "pid": 8190,
+        "scrambling": 0,
+        "afc": 1,
+        "cc": 8
+      }
+    },
+    {
+      "event_type": "ts.packet_batch_observed",
+      "locator": {
+        "packet_index": 5
+      },
+      "detail": {
+        "tei": 0,
+        "pusi": 0,
+        "priority": 0,
+        "pid": 16,
+        "scrambling": 1,
+        "afc": 1,
+        "cc": 3,
+        "validation_issue": "TS_SCRAMBLING_RESERVED (kept verbatim)"
+      }
+    },
+    {
+      "event_type": "ts.packet_batch_observed",
+      "locator": {
+        "packet_index": 6
+      },
+      "detail": {
+        "tei": 0,
+        "pusi": 0,
+        "priority": 0,
+        "pid": 256,
+        "scrambling": 2,
+        "afc": 3,
+        "cc": 4,
+        "pcr": {
+          "base": 12345,
+          "extension": 0
+        }
+      }
+    },
+    {
+      "event_type": "ts.packet_batch_observed",
+      "locator": {
+        "packet_index": 7
+      },
+      "detail": {
+        "tei": 0,
+        "pusi": 0,
+        "priority": 0,
+        "pid": 256,
+        "scrambling": 3,
+        "afc": 2,
+        "cc": 4,
+        "cc_rule": "adaptation-only reuses last payload CC (SPEC-100 §5.4)"
+      }
+    },
+    {
+      "event_type": "ts.packet_batch_observed",
+      "locator": {
+        "packet_index": 8
+      },
+      "detail": {
+        "tei": 0,
+        "pusi": 0,
+        "priority": 0,
+        "pid": 17,
+        "scrambling": 0,
+        "afc": 2,
+        "cc": 9,
+        "discontinuity_indicator": true,
+        "af_length": 183
+      }
+    },
+    {
+      "event_type": "ts.packet_batch_observed",
+      "locator": {
+        "packet_index": 9
+      },
+      "detail": {
+        "tei": 0,
+        "pusi": 1,
+        "priority": 0,
+        "pid": 18,
+        "scrambling": 0,
+        "afc": 3,
+        "cc": 10,
+        "af_length": 0
+      }
+    }
+  ]
+}

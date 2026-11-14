@@ -1,0 +1,21 @@
+{
+  "expectations": [
+    {
+      "event_type": "ts.psi_section_observed",
+      "locator": {
+        "pid": 4096
+      },
+      "detail": {
+        "crc_valid": false,
+        "corruption": "invert",
+        "mode": "persistent",
+        "packet_index": [
+          1,
+          206,
+          412
+        ],
+        "note": "PMT_INVALID_CRC: every PMT instance fails CRC (SPEC-204 §6.2)"
+      }
+    }
+  ]
+}

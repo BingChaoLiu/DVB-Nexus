@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "profile": "analysis_only",
+  "deterministic": true,
+  "seed": 20260101,
+  "initial_media_clock_27mhz": 0,
+  "target_bitrate_bps": 3008000,
+  "output_packet_count": 1000,
+  "program": {
+    "transport_stream_id": 1,
+    "program_number": 1,
+    "pmt_pid": 4096,
+    "pcr_pid": 256,
+    "version_number": 0,
+    "program_descriptors": "",
+    "streams": [
+      {
+        "pid": 256,
+        "stream_type": 27,
+        "stream_id": 224,
+        "bitrate_bps": 120320,
+        "payload_profile": "synthetic_test_data",
+        "payload_seed_offset": 0
+      }
+    ]
+  },
+  "pat_period_ms": 101,
+  "pmt_period_ms": 103,
+  "pcr_interval_ms": 40,
+  "pcr_insertion_policy": "payload_packet_first"
+}

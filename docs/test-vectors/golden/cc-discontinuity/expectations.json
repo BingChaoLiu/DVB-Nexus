@@ -1,0 +1,18 @@
+{
+  "expectations": [
+    {
+      "event_type": "ts.continuity_error",
+      "locator": {
+        "pid": 256,
+        "packet_index": 50
+      },
+      "detail": {
+        "expected_cc": 1,
+        "actual_cc": 4,
+        "delta": 3,
+        "persists": true,
+        "note": "CC_DISCONTINUITY: relative offset 3 lands on the first payload packet after activation and persists (SPEC-204 §6.3)"
+      }
+    }
+  ]
+}

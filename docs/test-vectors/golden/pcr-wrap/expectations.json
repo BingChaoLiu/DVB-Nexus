@@ -1,0 +1,76 @@
+{
+  "expectations": [
+    {
+      "event_type": "ts.packet_batch_observed",
+      "locator": {
+        "pid": 256,
+        "packet_index": 0
+      },
+      "detail": {
+        "pcr_base": 8589934589,
+        "pcr_extension": 0,
+        "note": "hand-set around 2^33 boundary"
+      }
+    },
+    {
+      "event_type": "ts.packet_batch_observed",
+      "locator": {
+        "pid": 256,
+        "packet_index": 1
+      },
+      "detail": {
+        "pcr_base": 8589934590,
+        "pcr_extension": 0,
+        "note": "hand-set around 2^33 boundary"
+      }
+    },
+    {
+      "event_type": "ts.packet_batch_observed",
+      "locator": {
+        "pid": 256,
+        "packet_index": 2
+      },
+      "detail": {
+        "pcr_base": 8589934591,
+        "pcr_extension": 0,
+        "note": "largest legal base"
+      }
+    },
+    {
+      "event_type": "ts.packet_batch_observed",
+      "locator": {
+        "pid": 256,
+        "packet_index": 3
+      },
+      "detail": {
+        "pcr_base": 0,
+        "pcr_extension": 0,
+        "note": "wrap step"
+      }
+    },
+    {
+      "event_type": "ts.packet_batch_observed",
+      "locator": {
+        "pid": 256,
+        "packet_index": 4
+      },
+      "detail": {
+        "pcr_base": 1,
+        "pcr_extension": 0,
+        "note": "hand-set around 2^33 boundary"
+      }
+    },
+    {
+      "event_type": "ts.packet_batch_observed",
+      "locator": {
+        "pid": 256,
+        "packet_index": 5
+      },
+      "detail": {
+        "pcr_base": 2,
+        "pcr_extension": 0,
+        "note": "hand-set around 2^33 boundary"
+      }
+    }
+  ]
+}

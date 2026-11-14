@@ -1,0 +1,29 @@
+{
+  "vector_id": "pmt-invalid-crc",
+  "kind": "faulted_ts",
+  "related_specs": [
+    "SPEC-204",
+    "SPEC-108"
+  ],
+  "generator_version": "tools/golden_fault_transform.py v1 (independent byte-level transform; no src/ts involvement)",
+  "config_hash": null,
+  "sha256": "sha256:d3db32f63e4af99365dd54d7a5272588556f9439dde704d497bfb59466d7fbb7",
+  "packet_count": null,
+  "fault_plan_ref": "pmt-invalid-crc-baseline",
+  "fault_parameters": {
+    "schema_version": 1,
+    "fault_type": "PMT_INVALID_CRC",
+    "activation": {
+      "packet_index": 1
+    },
+    "parameters": {
+      "mode": "persistent",
+      "corruption": "invert"
+    }
+  },
+  "verification": {
+    "path": "tsduck-cross",
+    "direction": "independent-transform→tsduck-analyze",
+    "evidence_ref": "docs/test-vectors/golden/pmt-invalid-crc/pmt-invalid-crc.verification.md"
+  }
+}

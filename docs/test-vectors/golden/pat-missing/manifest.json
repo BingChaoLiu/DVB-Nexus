@@ -1,0 +1,26 @@
+{
+  "vector_id": "pat-missing",
+  "kind": "faulted_ts",
+  "related_specs": [
+    "SPEC-204",
+    "SPEC-108"
+  ],
+  "generator_version": "tools/golden_fault_transform.py v1 (independent byte-level transform; no src/ts involvement)",
+  "config_hash": null,
+  "sha256": "sha256:e2c6a43a9bb1025cc3856b8cb2e6f85043578176c28eba4b675c8cef2fa251f2",
+  "packet_count": null,
+  "fault_plan_ref": "pat-missing-baseline",
+  "fault_parameters": {
+    "schema_version": 1,
+    "fault_type": "PAT_MISSING",
+    "activation": {
+      "packet_index": 202
+    },
+    "parameters": {}
+  },
+  "verification": {
+    "path": "tsduck-cross",
+    "direction": "independent-transform→tsduck-analyze",
+    "evidence_ref": "docs/test-vectors/golden/pat-missing/pat-missing.verification.md"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "vector_id": "packet-header-set",
+  "kind": "bit_level",
+  "related_specs": [
+    "SPEC-100"
+  ],
+  "generator_version": "tools/make_golden_packet_header_set.py v1 (hand-derived from SPEC-100 §3; no src/ts involvement)",
+  "config_hash": null,
+  "sha256": "sha256:eb6ff7f3b4ffbb3746b9f6030b621c2df0e43bc8b37398226eb4c073c3b05770",
+  "packet_count": 10,
+  "fault_plan_ref": null,
+  "verification": {
+    "path": "bit-level-review",
+    "direction": "spec-table-derivation→self-parse",
+    "evidence_ref": "docs/test-vectors/PACKET-HEADER-SET.md + docs/test-vectors/golden/packet-header-set/packet-header-set.verification.md"
+  }
+}

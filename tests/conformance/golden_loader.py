@@ -1,5 +1,9 @@
 """SPEC-506 golden vector registration format (§4) — loader + test writer.
 
+Home: ``tests/conformance/golden_loader.py`` per SPEC-506 §11 交付要求
+(moved from ``tests/_support/golden.py``; import surface is
+``tests.conformance.golden_loader``).
+
 The ``golden_loader`` fixture (SPEC-505 §4) yields :class:`GoldenLoader`.
 A registered vector is a trio under ``<root>/<vector_id>/``:
 
