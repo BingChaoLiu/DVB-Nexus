@@ -210,17 +210,28 @@ forbidden_modules = [
 ]
 
 # ADR-0005 D4-4: "simulation -> ts/faults/adapters". Everything else is
-# forbidden by complement.
+# forbidden by complement — with one M3 exception ruled by the orchestrator
+# (dispatch log on #15, resolves M0 #21 open question): ADR-0005 D4-5
+# positively declares "observation 为统一事件交换接口", so simulation gains
+# the edge to the single canonical event envelope (domain.observation) and
+# may not invent a fourth envelope format. The complement contract cannot
+# express a subpackage carve-out, so the other domain subpackages are
+# enumerated explicitly (diagnosis, topology) in both bare and wildcard
+# forms — whichever match semantics import-linter uses, both are covered.
+# New domain subpackages must be added here; the bare `domain` root import
+# stays unflagged (root __init__ holds no re-exports, enforced by review).
 [[tool.importlinter.contracts]]
-name = "simulation depends only on ts/faults/adapters (ADR-0005 decision 4)"
+name = "simulation depends only on ts/faults/adapters plus the canonical observation envelope (ADR-0005 D4-4 + D4-5 hub, M3 ruling)"
 type = "forbidden"
 source_modules = ["simulation"]
 forbidden_modules = [
     "api",
     "application",
     "knowledge",
-    "domain",
-    "domain.*",
+    "domain.diagnosis",
+    "domain.diagnosis.*",
+    "domain.topology",
+    "domain.topology.*",
 ]
 
 # ADR-0005 D4-4: "application -> 全部" read as all packages except api
