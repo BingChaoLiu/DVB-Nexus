@@ -392,3 +392,62 @@ class TestPESPacketizer:
                 PESPacketizer(bad_pid, CCAllocator())
         with pytest.raises(TypeError):
             PESPacketizer(True, CCAllocator())  # type: ignore[arg-type]
+
+
+# ---------------------------------------------------------------------------
+# Primary test REQ-TS-106-003
+# ---------------------------------------------------------------------------
+
+
+class TestPacketizerPacketSize:
+    """REQ-TS-106-003: 每个输出 Packet 固定 188 bytes."""
+
+    def test_packetizer_packet_size(self) -> None:
+        """容量边界矩阵: 每个 packet 序列化恰好 188 bytes 且可无损回读."""
+        from ts.cc import CCAllocator
+        from ts.packet import TSPacket
+        from ts.packetizer.pes_packetizer import PESPacketizer
+        from ts.packetizer.section_packetizer import SectionPacketizer
+
+        # Section sizes across every capacity boundary of §5: single-packet
+        # (< 183, == 183), two-packet (184..367), three-packet (368..551).
+        section_sizes = (3, 4, 10, 100, 182, 183, 184, 185, 366, 367, 368, 551, 900)
+        for size in section_sizes:
+            packets = list(
+                SectionPacketizer(300, CCAllocator()).packetize(make_section(size))
+            )
+            assert packets, f"section size {size} produced no packets"
+            for pkt in packets:
+                wire = pkt.to_bytes()
+                assert len(wire) == 188, (
+                    f"section size {size}: packet serializes to {len(wire)} bytes"
+                )
+                # Canonical bytes survive a strict SPEC-100 parse and
+                # re-serialize unchanged (object-level AF stuffing differs
+                # by design: constructed AFs pad at encode time).
+                assert TSPacket.from_bytes(wire).to_bytes() == wire
+
+        # PES sizes across every capacity boundary of §6/§7, with and
+        # without the caller-requested AF content where it fits.
+        pes_sizes = (9, 10, 100, 176, 177, 182, 183, 184, 185, 200, 368, 400)
+        for size in pes_sizes:
+            pes = make_pes_bytes(size)
+            variants = ({},)
+            if size <= 176 or size >= 185:
+                variants = ({}, {"first_packet_pcr": make_pcr()}, {"random_access": True})
+            elif size <= 182:
+                variants = ({}, {"random_access": True})
+            for kwargs in variants:
+                packets = list(
+                    PESPacketizer(300, CCAllocator()).packetize(pes, **kwargs)
+                )
+                assert packets, f"PES size {size} {kwargs} produced no packets"
+                for pkt in packets:
+                    wire = pkt.to_bytes()
+                    assert len(wire) == 188, (
+                        f"PES size {size} {kwargs}: packet serializes to "
+                        f"{len(wire)} bytes"
+                    )
+                    assert TSPacket.from_bytes(wire).to_bytes() == wire
+                # The PES bytes survive framing contiguously in all variants.
+                assert b"".join(p.payload for p in packets) == pes
