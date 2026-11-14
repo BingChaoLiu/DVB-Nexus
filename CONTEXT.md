@@ -34,6 +34,10 @@ _Avoid_: TS Generator（仅指 TS Core 中的端到端装配模块）
 外部 TS 处理工具链，CLI 子进程集成，承担三重角色：**外部验证器**、**传输层故障注入器**、**生成兜底**（MVP 期）。自研 TS Core 仍是核心技术资产，TSDuck 不取代语义层。
 _Avoid_: 把 TSDuck 结果当作绝对真值、让 TSDuck 取代自研语义层、把 TSDuck 输出标为 measured
 
+**故障双路由（Fault Dual-Route）**:
+故障注入的两条执行通路：语义级故障（PSI/CC 等）走自研包流过滤器，传输级故障走 TSDuck inject；同一 FaultDefinition 按层级路由，MVP 只启用语义级。
+_Avoid_: 用 TSDuck 注入语义级故障、在 TS Core 生成链路内置故障分支
+
 **analysis_only**:
 MVP 唯一验收的生成 Profile：TS 结构合规、可解析可分析，但负载为确定性合成数据，不承诺可播放。
 _Avoid_: playback_ready（MVP 不承诺）
@@ -46,6 +50,10 @@ _Avoid_: playback_ready（MVP 不承诺）
 **故障靶场（Fault Lab）**:
 预置故障场景的实验体系：注入真实码流/状态级故障，学员修复后重新生成并验证。
 _Avoid_: 故障注入（Fault Injection 仅指注入机制本身，不含场景/评测）
+
+**等位替换（Slot-Preserving Substitution）**:
+MVP 故障只做等位改写（顶替/原位改字段），不增删包：CBR 与 188 对齐在故障流上维持，baseline 与 faulted 码流共用同一包序，packet index 在两条流中指向同一槽位。
+_Avoid_: 删包注入、把 faulted 流的 index 当独立参照系
 
 **通关（Recovery Verification）**:
 以**新的观测结果**判定实验通过——修复动作本身、UI 变绿都不算证据。判定为 PASS / FAIL / INCONCLUSIVE 三态。
