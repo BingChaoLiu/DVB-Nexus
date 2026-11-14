@@ -12,6 +12,7 @@ from pathlib import Path
 
 import pytest
 
+from adapters.storage.errors import MigrationError
 from tests._support.paths import repo_root
 from tests._support.sqlite_support import apply_sql_migrations
 
@@ -114,14 +115,24 @@ class TestJournalIsolation:
 
 
 class TestMigrationApplier:
-    def test_out_of_order_and_non_numbered_files_rejected(self, tmp_path: Path):
+    """Fixture applier = production runner (review-fix #2 consolidation).
+
+    ``apply_sql_migrations`` delegates to ``adapters.storage.db.migrate``, so
+    the unified policy is asserted here: numbering is contiguous from 001
+    (a lone late-numbered script is a gap at position 0) and errors surface
+    as the production :class:`MigrationError` (fail-fast, SPEC-505 §7).
+    Non-``NNN_*.sql`` files are ignored by the production scan — foreign
+    files ride along in the first test, the numbering still fails.
+    """
+
+    def test_non_contiguous_numbering_rejected(self, tmp_path: Path):
         migrations = tmp_path / "m"
         migrations.mkdir()
         (migrations / "10_late.sql").write_text("SELECT 1;\n", encoding="utf-8")
         (migrations / "readme.txt").write_text("not sql\n", encoding="utf-8")
         connection = sqlite3.connect(":memory:")
         try:
-            with pytest.raises(ValueError):
+            with pytest.raises(MigrationError):
                 apply_sql_migrations(connection, migrations)
         finally:
             connection.close()
@@ -133,7 +144,7 @@ class TestMigrationApplier:
         (migrations / "0003_c.sql").write_text("SELECT 2;\n", encoding="utf-8")
         connection = sqlite3.connect(":memory:")
         try:
-            with pytest.raises(ValueError):
+            with pytest.raises(MigrationError):
                 apply_sql_migrations(connection, migrations)
         finally:
             connection.close()

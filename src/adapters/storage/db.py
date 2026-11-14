@@ -113,7 +113,11 @@ def _available_scripts(migrations_dir: Optional[Union[str, Path]]) -> list[_Migr
     """Read and order migration scripts, ``NNN_*.sql`` ascending.
 
     Files not matching the ``NNN_*.sql`` naming are ignored; duplicate version
-    prefixes are a configuration error (fail-fast).
+    prefixes are a configuration error (fail-fast). SPEC-502 section 3
+    ("``migrations/NNN_*.sql`` 顺序编号脚本") is enforced strictly: the
+    surviving sequence must be contiguous from 001 — a gap is a structural
+    configuration error raised before any script runs (enforcement ported
+    from the former test-support runner, review-fix #2 consolidation).
     """
     if migrations_dir is None:
         root: Union[Path, resources.abc.Traversable] = resources.files(
@@ -133,7 +137,16 @@ def _available_scripts(migrations_dir: Optional[Union[str, Path]]) -> list[_Migr
         with entry.open("r", encoding="utf-8") as handle:
             sql = handle.read()
         found[version] = _MigrationScript(version, entry.name, sql)
-    return [found[version] for version in sorted(found)]
+
+    scripts = [found[version] for version in sorted(found)]
+    for position, script in enumerate(scripts):
+        expected = position + 1
+        if script.version != expected:
+            raise MigrationError(
+                f"migration numbering gap: expected {expected:03d} at position "
+                f"{position}, found {script.version:03d} ({script.name})"
+            )
+    return scripts
 
 
 def _split_statements(sql: str) -> Iterator[str]:

@@ -4,29 +4,27 @@ Provides the fixture-level infrastructure SPEC-502 mandates:
 
 - pragma policy: WAL journal mode + ``foreign_keys=ON`` on every connection;
 - numbered ``NNN_*.sql`` migrations applied pending-only inside a single
-  explicit transaction, stamping ``PRAGMA user_version`` with the highest
-  applied number (idempotent on re-run).
+  explicit transaction, stamping ``PRAGMA user_version`` (idempotent).
 
-Seam note (ticket #22 report): the production migration runner belongs to
-the SPEC-502 adapter implementation (``adapters/storage``); this module is
-the test-side generic applier so ``journal`` already behaves per SPEC-502
-against whatever ``migrations/`` tree exists. When the SPEC-502 ticket
-lands, its runner replaces/feeds this seam (fixture 参数/默认目录已对齐
-SPEC-502 §11 建议落点 ``src/adapters/storage/migrations``).
+Consolidation note (review-fix #2): the formerly duplicated test-side
+migration runner (``_migration_files`` / ``_split_statements`` /
+``apply_sql_migrations``) is gone — :func:`apply_sql_migrations` is a thin
+delegate to the PRODUCTION runner :func:`adapters.storage.db.migrate`
+(SPEC-502 §3), which now carries the strict contiguous-numbering
+enforcement the test copy pioneered. Production and fixture therefore share
+one policy: single transaction, ``user_version`` stamping, numbering gaps
+and duplicate prefixes fail fast with :class:`MigrationError`. The fixture
+默认目录 remains SPEC-502 §11 建议落点 ``src/adapters/storage/migrations``.
 """
 
 from __future__ import annotations
 
-import re
 import sqlite3
 from pathlib import Path
 
-from tests._support.paths import repo_root
+from adapters.storage.db import migrate as _production_migrate
 
-#: SPEC-502 migration file naming: sequential numeric prefix (§5 pattern
-#: "NNN_*.sql"; the §11 example "migrations/0001_init.sql" uses four digits,
-#: so any ≥3-digit zero-padded prefix is accepted and numeric order enforced).
-_MIGRATION_NAME = re.compile(r"^(\d{3,})_[A-Za-z0-9_-]+\.sql$")
+from tests._support.paths import repo_root
 
 #: Default migrations home (SPEC-502 §11 建议文件: adapters/storage/migrations).
 DEFAULT_MIGRATIONS_SUBPATH = ("src", "adapters", "storage", "migrations")
@@ -38,92 +36,22 @@ def default_migrations_dir() -> Path | None:
     return candidate if candidate.is_dir() else None
 
 
-def _migration_files(migrations_dir: Path) -> list[tuple[int, Path, str]]:
-    """Parse and strictly order the migration scripts in ``migrations_dir``."""
-    entries: list[tuple[int, Path]] = []
-    for path in migrations_dir.iterdir():
-        match = _MIGRATION_NAME.match(path.name)
-        if match is None:
-            raise ValueError(
-                f"unexpected file in migrations dir {migrations_dir}: {path.name} "
-                f"(expected NNN_name.sql per SPEC-502)"
-            )
-        entries.append((int(match.group(1)), path))
-    entries.sort(key=lambda entry: entry[0])
-    scripts: list[tuple[int, Path, str]] = []
-    for position, (number, path) in enumerate(entries):
-        expected = position + 1
-        if number != expected:
-            raise ValueError(
-                f"migration numbering gap: expected {expected:03d} at position "
-                f"{position}, found {number:03d} ({path.name})"
-            )
-        scripts.append((number, path, path.read_text(encoding="utf-8")))
-    return scripts
-
-
-def _split_statements(sql: str) -> list[str]:
-    """Split a SQL script into complete statements.
-
-    ``sqlite3.complete_statement`` understands string literals containing
-    ``;`` and trigger ``BEGIN...END`` bodies. Note: ``executescript`` cannot
-    be used here — CPython commits any open transaction before running a
-    script, which would break the single-transaction envelope.
-    """
-    statements: list[str] = []
-    buffer = ""
-    for line in sql.splitlines(keepends=True):
-        buffer += line
-        if sqlite3.complete_statement(buffer):
-            text = buffer.strip()
-            if text:
-                statements.append(text)
-            buffer = ""
-    tail = buffer.strip()
-    if tail:
-        statements.append(tail)
-    return statements
-
-
 def apply_sql_migrations(
     connection: sqlite3.Connection, migrations_dir: Path
 ) -> int:
-    """Apply pending ``NNN_*.sql`` migrations in one explicit transaction.
+    """Apply pending ``NNN_*.sql`` migrations via the production runner.
 
-    Returns the resulting ``user_version``. Idempotent: scripts numbered
-    ≤ current ``user_version`` are skipped. The connection is used in
-    autocommit mode (``isolation_level=None``) so the explicit
+    Thin delegate to :func:`adapters.storage.db.migrate` (SPEC-502 §3:
+    启动时在单事务内执行未应用脚本). Returns the resulting ``user_version``;
+    idempotent on re-run. The connection must be in autocommit mode
+    (``isolation_level=None`` — as returned by
+    :func:`adapters.storage.db.connect`) so the production runner's explicit
     ``BEGIN IMMEDIATE`` / ``COMMIT`` envelope is the only transaction
-    boundary (SPEC-502: 启动时在单事务内执行未应用脚本).
+    boundary. Invalid trees (naming, duplicate prefix, numbering gap) raise
+    :class:`adapters.storage.errors.MigrationError` — fail-fast, no degraded
+    operation (SPEC-505 §7 不降级跳过).
     """
-    directory = Path(migrations_dir)
-    if not directory.is_dir():
-        raise FileNotFoundError(f"migrations dir not found: {directory}")
-
-    scripts = _migration_files(directory)
-    if not scripts:
-        return int(connection.execute("PRAGMA user_version").fetchone()[0])
-
-    saved_isolation = connection.isolation_level
-    connection.isolation_level = None  # explicit transaction control
-    try:
-        current = int(connection.execute("PRAGMA user_version").fetchone()[0])
-        pending = [(number, sql) for number, _path, sql in scripts if number > current]
-        if not pending:
-            return current
-        connection.execute("BEGIN IMMEDIATE")
-        try:
-            for number, sql in pending:
-                for statement in _split_statements(sql):
-                    connection.execute(statement)
-                connection.execute(f"PRAGMA user_version = {number}")
-            connection.execute("COMMIT")
-        except BaseException:
-            connection.execute("ROLLBACK")
-            raise
-        return int(connection.execute("PRAGMA user_version").fetchone()[0])
-    finally:
-        connection.isolation_level = saved_isolation
+    return _production_migrate(connection, migrations_dir)
 
 
 def apply_pragma_policy(connection: sqlite3.Connection) -> sqlite3.Connection:

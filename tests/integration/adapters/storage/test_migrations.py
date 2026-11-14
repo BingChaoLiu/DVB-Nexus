@@ -109,6 +109,44 @@ def test_migrate_rejects_database_ahead_of_scripts(tmp_path: Path) -> None:
         conn.close()
 
 
+def test_migrate_rejects_numbering_gap(tmp_path: Path) -> None:
+    # SPEC-502 section 3 "顺序编号脚本": numbering is contiguous from 001.
+    # A gap (0001 + 0003, no 0002) is a structural configuration error —
+    # fail-fast before any script runs (review-fix #2: enforcement ported
+    # from the test-support runner so production and fixture share one
+    # policy).
+    scripts = tmp_path / "migrations"
+    _write_script(scripts, "0001_sample.sql", "CREATE TABLE sample (id INTEGER PRIMARY KEY);")
+    _write_script(scripts, "0003_extra.sql", "CREATE TABLE extra (id INTEGER PRIMARY KEY);")
+
+    conn = db.connect(tmp_path / "db.sqlite3")
+    try:
+        with pytest.raises(MigrationError):
+            db.migrate(conn, migrations_dir=scripts)
+        assert _user_version(conn) == 0
+        names = {
+            row[0]
+            for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
+        }
+        assert "sample" not in names and "extra" not in names
+    finally:
+        conn.close()
+
+
+def test_migrate_rejects_numbering_not_starting_at_001(tmp_path: Path) -> None:
+    # The contiguous sequence starts at 001: a lone 0007 script is a gap at
+    # position 0 (same strict policy the fixture applier always enforced).
+    scripts = tmp_path / "migrations"
+    _write_script(scripts, "0007_late.sql", "CREATE TABLE late (id INTEGER PRIMARY KEY);")
+
+    conn = db.connect(tmp_path / "db.sqlite3")
+    try:
+        with pytest.raises(MigrationError):
+            db.migrate(conn, migrations_dir=scripts)
+    finally:
+        conn.close()
+
+
 def test_connect_raises_unavailable_when_target_cannot_open(tmp_path: Path) -> None:
     # Parent directory does not exist -> sqlite cannot open the file (SPEC-502
     # section 7 "库不可用" surfaces as the 503-mapped storage error).
