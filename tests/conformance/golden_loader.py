@@ -17,7 +17,8 @@ identity, kind closed enum, sha256(bytes) == manifest sha256 (``sha256:``
 prefix optional), minimal expectations shape, path-safe vector ids, and the
 SPEC-506 §5 independent-verification gate (ticket #38): every registration
 carries a ``verification`` triple whose ``path`` is in the sanctioned
-``VERIFICATION_PATHS`` closed enum — 同源自证 (L3 self-roundtrip) = 登记拒绝.
+``VERIFICATION_PATHS`` closed enum and whose ``evidence_ref`` addresses an
+existing file — 同源自证 (L3 self-roundtrip) = 登记拒绝.
 ``write_golden_vector`` exists for **tests only** — it registers private tmp
 copies; bytes must come from sanctioned constructors (SPEC-505 §6), and the
 digest is always computed from the given bytes, never trusted from callers.
@@ -31,6 +32,8 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
+
+from tests._support.paths import REPO_ROOT
 
 #: SPEC-506 §4 manifest kind closed enum.
 KINDS: tuple[str, ...] = ("generated_ts", "faulted_ts", "bit_level")
@@ -202,6 +205,22 @@ def load_golden_vector(root: Path, vector_id: str) -> GoldenVector:
         raise GoldenRegistrationError(
             f"vector {checked_id!r}: verification direction/evidence_ref must "
             "be non-empty strings (SPEC-506 §4)"
+        )
+    # Evidence must exist on disk — parity with the §8 validator (review fix
+    # A2: the loader only checked non-empty while the validator stat'ed the
+    # file, so the two gates disagreed). Resolution convention matches the
+    # validator's ``evidence_ref.split(" + ")[0]`` shape: repo-relative for
+    # registered-tree assets, absolute for tmp private registrations — but
+    # resolved from REPO_ROOT (derived from __file__), never the process cwd
+    # (tests/README.md §6), so the loader gate is cwd-independent where the
+    # validator relies on being run from the repo root.
+    evidence_anchor = Path(evidence_ref.split(" + ")[0])
+    if not evidence_anchor.is_absolute():
+        evidence_anchor = REPO_ROOT / evidence_anchor
+    if not evidence_anchor.is_file():
+        raise GoldenRegistrationError(
+            f"vector {checked_id!r}: verification evidence_ref missing on "
+            f"disk: {evidence_ref} (SPEC-506 §4/§5 — 独立验证证据必须存在)"
         )
     verification = VerificationRecord(
         path=str(verification_path),

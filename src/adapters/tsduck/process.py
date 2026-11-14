@@ -32,7 +32,7 @@ import subprocess
 import sys
 import time
 from dataclasses import dataclass
-from typing import Callable, Mapping, Sequence
+from typing import Callable, Mapping, NoReturn, Sequence
 
 from adapters.tsduck.errors import (
     TSDuckCancelledError,
@@ -79,7 +79,13 @@ class ProcessResult:
 
     @property
     def stderr_text(self) -> str:
-        """GBK-tolerant display decode — never parsed semantically (SPEC-308 §7)."""
+        """Display-only decode of the (GBK-localized) stderr stream.
+
+        The decode itself is UTF-8 with ``errors="replace"`` (undecodable GBK
+        bytes become replacement characters, never a crash); the discipline
+        that matters is that this text is never parsed semantically —
+        diagnostics display only (SPEC-308 §7, ticket #3).
+        """
         return self.stderr.decode("utf-8", errors="replace")
 
 
@@ -123,6 +129,43 @@ def is_pid_alive(pid: int) -> bool:
     )
     # "INFO: No tasks are running..." (localized) vs. a task row naming the PID.
     return f" {pid} " in completed.stdout.decode("utf-8", errors="replace")
+
+
+async def _partial_result(
+    argv: Sequence[str],
+    process: asyncio.subprocess.Process,
+    started: float,
+    *,
+    timed_out: bool = False,
+    cancelled: bool = False,
+) -> ProcessResult:
+    """Build the partial :class:`ProcessResult` of a killed run.
+
+    Shared by the timeout and cancellation branches (tree kill → drain the
+    streams → record what was captured): one construction site instead of
+    twin blocks drifting apart.
+    """
+    stdout, stderr = await process.communicate()
+    return ProcessResult(
+        argv=tuple(argv),
+        exit_code=process.returncode,
+        stdout=stdout or b"",
+        stderr=stderr or b"",
+        duration_seconds=time.monotonic() - started,
+        pid=process.pid,
+        timed_out=timed_out,
+        cancelled=cancelled,
+    )
+
+
+def _raise_partial(
+    error: TSDuckTimeoutError | TSDuckCancelledError,
+    partial: ProcessResult,
+) -> NoReturn:
+    """Attach the partial run to the §9 error and raise it (from None — the
+    asyncio.TimeoutError/CancelledError frame is transport noise, not cause)."""
+    error.partial_result = partial
+    raise error from None
 
 
 class TSDuckProcessRunner:
@@ -185,41 +228,29 @@ class TSDuckProcessRunner:
                 )
             except asyncio.TimeoutError:
                 _kill_tree(process.pid)
-                stdout, stderr = await process.communicate()
-                partial = ProcessResult(
-                    argv=tuple(argv),
-                    exit_code=process.returncode,
-                    stdout=stdout or b"",
-                    stderr=stderr or b"",
-                    duration_seconds=time.monotonic() - started,
-                    pid=process.pid,
-                    timed_out=True,
+                partial = await _partial_result(
+                    argv, process, started, timed_out=True
                 )
-                error = TSDuckTimeoutError(
-                    f"process tree killed after {effective_timeout}s timeout "
-                    f"(pid={process.pid}, argv={list(argv)!r}); "
-                    "partial output attached"
+                _raise_partial(
+                    TSDuckTimeoutError(
+                        f"process tree killed after {effective_timeout}s timeout "
+                        f"(pid={process.pid}, argv={list(argv)!r}); "
+                        "partial output attached"
+                    ),
+                    partial,
                 )
-                error.partial_result = partial
-                raise error from None
             except asyncio.CancelledError:
                 _kill_tree(process.pid)
-                stdout, stderr = await process.communicate()
-                partial = ProcessResult(
-                    argv=tuple(argv),
-                    exit_code=process.returncode,
-                    stdout=stdout or b"",
-                    stderr=stderr or b"",
-                    duration_seconds=time.monotonic() - started,
-                    pid=process.pid,
-                    cancelled=True,
+                partial = await _partial_result(
+                    argv, process, started, cancelled=True
                 )
-                error = TSDuckCancelledError(
-                    f"process tree killed on cancellation (pid={process.pid}); "
-                    "partial output attached"
+                _raise_partial(
+                    TSDuckCancelledError(
+                        f"process tree killed on cancellation (pid={process.pid}); "
+                        "partial output attached"
+                    ),
+                    partial,
                 )
-                error.partial_result = partial
-                raise error from None
 
         return ProcessResult(
             argv=tuple(argv),

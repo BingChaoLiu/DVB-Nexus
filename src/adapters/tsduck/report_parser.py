@@ -304,19 +304,20 @@ class AnalysisReport:
             PidReport(
                 pid=_int_or_zero(raw_pid, "id"),
                 description=raw_pid.get("description"),
-                packets_total=_int_or_zero(raw_pid.get("packets") or {}, "total"),
-                clear=_int_or_zero(raw_pid.get("packets") or {}, "clear"),
-                scrambled=_int_or_zero(raw_pid.get("packets") or {}, "scrambled"),
-                discontinuities=_int_or_zero(
-                    raw_pid.get("packets") or {}, "discontinuities"
-                ),
-                duplicated=_int_or_zero(raw_pid.get("packets") or {}, "duplicated"),
-                pcr=_int_or_zero(raw_pid.get("packets") or {}, "pcr"),
-                pts=_int_or_zero(raw_pid.get("packets") or {}, "pts"),
+                packets_total=_int_or_zero(pid_packets, "total"),
+                clear=_int_or_zero(pid_packets, "clear"),
+                scrambled=_int_or_zero(pid_packets, "scrambled"),
+                discontinuities=_int_or_zero(pid_packets, "discontinuities"),
+                duplicated=_int_or_zero(pid_packets, "duplicated"),
+                pcr=_int_or_zero(pid_packets, "pcr"),
+                pts=_int_or_zero(pid_packets, "pts"),
                 is_scrambled=raw_pid.get("is-scrambled"),
                 service_ids=tuple(raw_pid.get("services") or ()),
             )
+            # one packets-dict extraction per PID row (absent → empty dict),
+            # shared by all seven packet counters below (review fix B4).
             for raw_pid in document.get("pids") or ()
+            for pid_packets in (raw_pid.get("packets") or {},)
         )
 
         services = tuple(

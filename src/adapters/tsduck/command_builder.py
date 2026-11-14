@@ -20,6 +20,7 @@ Single argv construction surface of the adapter:
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 from adapters.tsduck.errors import TSDuckPluginNotAllowedError
@@ -27,6 +28,7 @@ from adapters.tsduck.errors import TSDuckPluginNotAllowedError
 __all__ = [
     "PLUGIN_WHITELIST",
     "ANALYZE_TOOL",
+    "ANALYZE_EXECUTABLE",
     "ANALYZE_JSON_FLAG",
     "build_analyze_argv",
     "require_allowed_plugin",
@@ -55,6 +57,12 @@ PLUGIN_WHITELIST = frozenset(
 
 #: The analyze entry tool (tsduck-env.md §6.2: ``tsanalyze --json <file>``).
 ANALYZE_TOOL = "tsanalyze"
+
+#: The on-disk analyze executable name — derived from the single tool-name
+#: source above (review fix B3), never a second hardcoded "tsanalyze".
+#: Windows installs ship ``tsanalyze.exe``; POSIX installs ship ``tsanalyze``
+#: (tsduck-env.md §2.1, #35 ts_e2e seam-3 layout).
+ANALYZE_EXECUTABLE = ANALYZE_TOOL + (".exe" if sys.platform == "win32" else "")
 
 #: JSON report flag — stdout is the only JSON channel (tsduck-env.md §4.3).
 ANALYZE_JSON_FLAG = "--json"

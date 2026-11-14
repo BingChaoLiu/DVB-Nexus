@@ -58,6 +58,16 @@ def tmp_golden_root(tmp_path: Path) -> Path:
 
 
 def _register(root: Path, vector_id: str, verification: dict | None) -> None:
+    if verification is not None and "evidence_ref" in verification:
+        # Loader/validator parity (review fix A2): the evidence_ref must
+        # address an existing file, so tmp registrations carry an absolute
+        # path into the test's own tmp tree (repo-relative refs resolve
+        # against REPO_ROOT and are for registered-tree assets).
+        evidence = root.parent / "loader-evidence.md"
+        evidence.write_text(
+            "# measured independent verification evidence\n", encoding="utf-8"
+        )
+        verification = {**verification, "evidence_ref": str(evidence)}
     write_golden_vector(
         root,
         vector_id,
@@ -105,6 +115,53 @@ class TestLoaderIndependentVerificationGate:
         _register(tmp_golden_root, "no-evidence", None)
         with pytest.raises(GoldenRegistrationError, match="verification|独立验证"):
             GoldenLoader(tmp_golden_root).load("no-evidence")
+
+    def test_nonexistent_evidence_file_rejected(self, tmp_golden_root):
+        """Loader/validator parity (review fix A2): an evidence_ref whose
+        file is absent on disk is a registration error — the same gate the
+        §8 validator enforces on the registered tree."""
+        write_golden_vector(
+            tmp_golden_root,
+            "ghost-evidence",
+            seeded_ts_stream(39, 16),
+            kind="generated_ts",
+            expectations=(
+                {"event_type": "ts.psi_section_observed", "locator": {"pid": 0}},
+            ),
+            verification={
+                "path": "tsduck-cross",
+                "direction": "self-generate→tsduck-analyze",
+                "evidence_ref": str(tmp_golden_root.parent / "no_such_evidence.md"),
+            },
+        )
+        with pytest.raises(GoldenRegistrationError, match="evidence"):
+            GoldenLoader(tmp_golden_root).load("ghost-evidence")
+
+    def test_repo_relative_evidence_resolves_against_repo_root(
+        self, tmp_golden_root
+    ):
+        """Registered-tree evidence convention: repo-relative evidence refs
+        (e.g. ``docs/test-vectors/…`` anchors) resolve against REPO_ROOT —
+        cwd-independent (tests/README.md §6)."""
+        write_golden_vector(
+            tmp_golden_root,
+            "repo-evidence",
+            seeded_ts_stream(40, 16),
+            kind="generated_ts",
+            expectations=(
+                {"event_type": "ts.psi_section_observed", "locator": {"pid": 0}},
+            ),
+            verification={
+                "path": "tsduck-cross",
+                "direction": "self-generate→tsduck-analyze",
+                "evidence_ref": "docs/test-vectors/TEST-VECTOR-INDEX.md",
+            },
+        )
+        vector = GoldenLoader(tmp_golden_root).load("repo-evidence")
+        assert vector.verification is not None
+        assert vector.verification.evidence_ref == (
+            "docs/test-vectors/TEST-VECTOR-INDEX.md"
+        )
 
     @pytest.mark.parametrize(
         "incomplete",

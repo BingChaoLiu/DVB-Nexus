@@ -17,8 +17,11 @@ The analyze input face for this ticket is a **file path** (ticket #37: the
 SPEC-503 artifact / run-context wiring is M3 scope). The nine-field call
 record (§7): version, executable path, argv, start/finish time, exit code,
 stdout, stderr, input-artifact SHA-256 — plus the optional ``run_id``
-association. Every analyze attempt is recorded, including gate failures
-(the record travels on the raised ``TSDUCK_JSON_GATE_FAILED`` error).
+association. Every analyze attempt is recorded, gate failures included
+(the record travels on the raised ``TSDUCK_JSON_GATE_FAILED`` error) and
+so do the §9 process failures — timeout/cancellation/spawn failure attach
+the record built from the runner's partial run (data-less fields explicit
+``None``, never fabricated).
 
 stderr handling: the process runner decodes both streams display-only
 (errors="replace"); the call record stores that text verbatim — GBK
@@ -29,22 +32,23 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 from adapters.tsduck import command_builder, report_parser
 from adapters.tsduck.errors import (
     TSDuckNotFoundError,
     TSDuckNotEnabledError,
+    TSDuckCancelledError,
     TSDuckJsonGateError,
+    TSDuckSpawnFailedError,
+    TSDuckTimeoutError,
     TSDuckVersionUnsupportedError,
 )
 from adapters.tsduck.process import (
     DEFAULT_TIMEOUT_SECONDS,
-    ProcessResult,
     TSDuckProcessRunner,
 )
 from adapters.tsduck.version import (
@@ -90,6 +94,14 @@ class TSDuckCallRecord:
     exit code / stdout / stderr / input-artifact SHA-256 — plus the optional
     ``run_id`` association (有则填). ``stdout_text``/``stderr_text`` are
     display-only decodes; GBK stderr content is never parsed (§7).
+
+    Failure-path records (gate failure / timeout / cancellation / spawn
+    failure — the record travels on the raised §9 error, review fix A1):
+    a field with no data carries explicit ``None`` — never a fabricated
+    value. ``exit_code`` is ``None`` when the process never exited to a
+    reaped code; ``stdout_text``/``stderr_text`` are ``None`` when nothing
+    was ever captured (spawn failure), and the captured-or-empty display
+    text when a partial run was drained (timeout/cancellation).
     """
 
     version: str | None
@@ -98,8 +110,8 @@ class TSDuckCallRecord:
     started_at: float
     finished_at: float
     exit_code: int | None
-    stdout_text: str
-    stderr_text: str
+    stdout_text: str | None
+    stderr_text: str | None
     input_artifact_sha256: str | None
     run_id: str | None = None
 
@@ -125,9 +137,9 @@ def _file_sha256(path: Path) -> str:
 
 def _tsanalyze_sibling(tsp_executable: Path) -> Path:
     """``tsanalyze`` lives next to the probed ``tsp`` (one install per bin
-    directory — tsduck-env.md §2.1, #35 ts_e2e seam-3 layout)."""
-    name = "tsanalyze.exe" if sys.platform == "win32" else "tsanalyze"
-    return tsp_executable.parent / name
+    directory — tsduck-env.md §2.1, #35 ts_e2e seam-3 layout). The on-disk
+    name comes from command_builder's single tool-name source (B3)."""
+    return tsp_executable.parent / command_builder.ANALYZE_EXECUTABLE
 
 
 class TSDuckClient:
@@ -209,9 +221,13 @@ class TSDuckClient:
 
         The input face for this ticket is a file path (M3 wires SPEC-503
         artifact IDs / run context). Every attempt produces the nine-field
-        call record: success returns it inside :class:`AnalysisResult`; a
-        gate failure attaches it to the raised ``TSDUCK_JSON_GATE_ERROR``
-        (as ``call_record``) so the invocation is never lost (§7 义务).
+        call record (§7 recording duty holds on every failure path, review
+        fix A1): success returns it inside :class:`AnalysisResult`; a gate
+        failure attaches it to the raised ``TSDUCK_JSON_GATE_FAILED``, and
+        a timeout/cancellation/spawn failure attaches it to the raised
+        ``TSDUCK_TIMEOUT``/``TSDUCK_CANCELLED``/``TSDUCK_SPAWN_FAILED`` (as
+        ``call_record``) so the invocation is never lost. Fields with no
+        data on a failure path carry explicit ``None`` — never fabricated.
         """
         started = time.time()
         version = await self.get_version()
@@ -223,24 +239,71 @@ class TSDuckClient:
             )
 
         argv = command_builder.build_analyze_argv(input_path)
-        result = await self._runner.run_async(argv, timeout=timeout)
 
+        # §7 sha field, hashed BEFORE the spawn (review fix B9): every analyze
+        # attempt's record must carry the input digest even when the runner
+        # raises (timeout/cancel/spawn failure) — a post-run hash would never
+        # happen on those paths. Residual race, documented: the file can still
+        # change between this hash and tsanalyze's own read of the path, in
+        # which case the record names the pre-spawn bytes rather than the
+        # bytes actually analyzed (the input face stays a bare path until M3
+        # wires SPEC-503 artifact IDs; a content-addressed artifact removes
+        # the race structurally).
         input_sha256: str | None
         try:
             input_sha256 = _file_sha256(Path(input_path))
         except OSError:
-            # Unreadable input (e.g. deleted between spawn and hash): the
-            # §7 sha field carries None and the gate still governs validity
-            # — tsanalyze has already failed on the same file (exit 1, #3).
+            # Unreadable input (never existed / no permission): the §7 sha
+            # field carries None and the gate still governs validity —
+            # tsanalyze fails on the same file (exit 1, #3 §4.4).
             input_sha256 = None
+
+        try:
+            result = await self._runner.run_async(argv, timeout=timeout)
+        except TSDuckSpawnFailedError as error:
+            # §7 recording duty on the §9 failure family (A1): the spawn
+            # never happened, so exit code and captured streams are explicit
+            # None — never fabricated.
+            error.call_record = self._call_record(
+                version=version,
+                executable=executable,
+                argv=argv,
+                started=started,
+                input_sha256=input_sha256,
+                run_id=run_id,
+                exit_code=None,
+                stdout_text=None,
+                stderr_text=None,
+            )
+            raise
+        except (TSDuckTimeoutError, TSDuckCancelledError) as error:
+            # Partial run drained by the runner (process.py): its exit code
+            # and display-decoded streams are data — the record is built
+            # from them, never invented.
+            partial = error.partial_result
+            error.call_record = self._call_record(
+                version=version,
+                executable=executable,
+                argv=argv,
+                started=started,
+                input_sha256=input_sha256,
+                run_id=run_id,
+                exit_code=partial.exit_code if partial is not None else None,
+                stdout_text=partial.stdout_text if partial is not None else None,
+                stderr_text=partial.stderr_text if partial is not None else None,
+            )
+            raise
+
         record = self._call_record(
             version=version,
             executable=executable,
             argv=argv,
-            result=result,
             started=started,
             input_sha256=input_sha256,
             run_id=run_id,
+            exit_code=result.exit_code,
+            stdout_text=result.stdout_text,
+            stderr_text=result.stderr_text,
         )
 
         try:
@@ -255,11 +318,13 @@ class TSDuckClient:
         *,
         version: TSDuckVersion,
         executable: Path,
-        argv: tuple[str, ...],
-        result: ProcessResult,
+        argv: Sequence[str],
         started: float,
-        input_sha256: str,
+        input_sha256: str | None,
         run_id: str | None,
+        exit_code: int | None,
+        stdout_text: str | None,
+        stderr_text: str | None,
     ) -> TSDuckCallRecord:
         return TSDuckCallRecord(
             version=version.version,
@@ -267,9 +332,9 @@ class TSDuckClient:
             argv=tuple(argv),
             started_at=started,
             finished_at=time.time(),
-            exit_code=result.exit_code,
-            stdout_text=result.stdout_text,
-            stderr_text=result.stderr_text,
+            exit_code=exit_code,
+            stdout_text=stdout_text,
+            stderr_text=stderr_text,
             input_artifact_sha256=input_sha256,
             run_id=run_id,
         )
