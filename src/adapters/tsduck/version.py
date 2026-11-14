@@ -29,10 +29,8 @@ Contract anchors:
 
 from __future__ import annotations
 
-import os
 import re
 import shutil
-import string
 import subprocess
 from dataclasses import dataclass
 from enum import Enum
@@ -155,3 +153,164 @@ def scan_for_version(stdout: bytes, stderr: bytes) -> VersionMatch | None:
                 build=int(components.group(3)),
             )
     return None
+
+
+@dataclass(frozen=True)
+class TSDuckVersion:
+    """Found-probe payload: SPEC-308 §4's ``get_version()`` return type.
+
+    Carries the executable path, the version token with parsed components,
+    and probe metadata (which stream carried the line, how the executable
+    was resolved) so the M2 client can log the SPEC-308 §7 call-record
+    fields without re-probing.
+    """
+
+    executable: Path
+    version: str
+    major: int
+    minor: int
+    build: int
+    raw_version_line: str
+    stream: VersionStream
+    resolution: ResolutionSource
+
+
+@dataclass(frozen=True)
+class TSDuckProbeResult:
+    """Structured probe outcome — found payload or explicit unavailability.
+
+    Invariants (enforced, consumed by the M2 client): ``available`` is true
+    iff ``version`` is set; unavailable results always carry a
+    :class:`TSDuckUnavailableReason`. ``detail`` is human-readable
+    diagnostics for display/log only (GBK stderr content never parsed).
+    """
+
+    available: bool
+    version: TSDuckVersion | None
+    reason: TSDuckUnavailableReason | None
+    detail: str
+
+    def __post_init__(self) -> None:
+        if self.available and self.version is None:
+            raise ValueError("available probe result must carry a TSDuckVersion")
+        if not self.available and self.reason is None:
+            raise ValueError("unavailable probe result must carry a reason")
+        if self.available and self.reason is not None:
+            raise ValueError("available probe result must not carry a reason")
+
+
+class TSDuckVersionProbe:
+    """Environment probe: executable discovery + version extraction + cache.
+
+    One instance owns one cache (successful probes only, keyed by resolved
+    executable). Fresh instance = fresh probing, which is how tests observe
+    cache behavior; the module-level :data:`DEFAULT_PROBE` (with
+    :func:`probe_tsduck`) provides the ADR-0005 process-lifetime cache for
+    production callers.
+    """
+
+    def __init__(self, *, timeout: float = PROBE_TIMEOUT_SECONDS) -> None:
+        if timeout <= 0:
+            raise ValueError("timeout must be positive")
+        self._timeout = timeout
+        self._cache: dict[str, TSDuckProbeResult] = {}
+
+    def probe(self, *, override: str | Path | None = None) -> TSDuckProbeResult:
+        """Probe TSDuck availability; never raises for TSDuck-missing states.
+
+        ``override`` (explicit executable or name to resolve first) beats
+        PATH discovery. Resolution order: override → PATH → fallback roots.
+        Successful results are cached per resolved executable; failures are
+        never cached (a transient timeout must not poison process lifetime).
+        """
+        resolved = self._resolve(override)
+        if resolved is None:
+            return TSDuckProbeResult(
+                available=False,
+                version=None,
+                reason=TSDuckUnavailableReason.NOT_INSTALLED,
+                detail="TSDuck CLI 'tsp' not found on PATH or fallback locations",
+            )
+        executable, source = resolved
+        cache_key = str(executable)
+        cached = self._cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        result = self._run_version_probe(executable, source)
+        if result.available:
+            self._cache[cache_key] = result
+        return result
+
+    def _resolve(
+        self, override: str | Path | None
+    ) -> tuple[Path, ResolutionSource] | None:
+        if override is not None:
+            raise NotImplementedError("override resolution lands with slice 3")
+        found = shutil.which("tsp")
+        if found is None:
+            return None
+        return Path(found), ResolutionSource.PATH
+
+    def _run_version_probe(
+        self, executable: Path, source: ResolutionSource
+    ) -> TSDuckProbeResult:
+        """``<executable> --version`` with argument-array spawn discipline."""
+        try:
+            completed = subprocess.run(
+                [str(executable), "--version"],
+                capture_output=True,
+                timeout=self._timeout,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired) as error:
+            return TSDuckProbeResult(
+                available=False,
+                version=None,
+                reason=TSDuckUnavailableReason.NOT_EXECUTABLE,
+                detail=(
+                    f"{str(executable)!r} --version failed: {error!r} "
+                    "(spawn error / timeout; stderr text is display-only)"
+                ),
+            )
+
+        match = scan_for_version(completed.stdout, completed.stderr)
+        if match is None:
+            return TSDuckProbeResult(
+                available=False,
+                version=None,
+                reason=TSDuckUnavailableReason.VERSION_UNPARSEABLE,
+                detail=(
+                    f"{str(executable)!r} exited {completed.returncode} but no "
+                    "measured version token found in stdout/stderr "
+                    "(exit 0 never proves validity, ticket #3)"
+                ),
+            )
+        version = TSDuckVersion(
+            executable=executable,
+            version=match.version,
+            major=match.major,
+            minor=match.minor,
+            build=match.build,
+            raw_version_line=match.raw_version_line,
+            stream=match.stream,
+            resolution=source,
+        )
+        return TSDuckProbeResult(
+            available=True,
+            version=version,
+            reason=None,
+            detail=(
+                f"TSDuck {version.version} via {executable} "
+                f"(source={source.value}, stream={match.stream.value})"
+            ),
+        )
+
+
+#: Process-lifetime default probe (ADR-0005 decision 6 cache discipline).
+DEFAULT_PROBE = TSDuckVersionProbe()
+
+
+def probe_tsduck(*, override: str | Path | None = None) -> TSDuckProbeResult:
+    """Probe via the process-lifetime default probe instance."""
+    return DEFAULT_PROBE.probe(override=override)
