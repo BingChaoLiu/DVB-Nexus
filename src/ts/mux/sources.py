@@ -74,6 +74,20 @@ class TablePacketSource:
     run of the section (SPEC-106 output; MVP minimal tables are a single
     packet).  Every repetition re-emits the SAME finished packets — the
     mux never re-frames or modifies them (contract §9).
+
+    Repetition semantics (PI-1 ruling, #35 closing comment, option (a)):
+    a table repetition is a **duplicate retransmission** — the same group
+    of already-finished packets is re-emitted verbatim, so the
+    continuity_counter does NOT increment across repetitions.  This is the
+    ISO/IEC 13818-1 duplicate-packet mechanism: a receiver that sees two
+    packets with the same CC on one PID discards the second per the
+    standard, and PSI reassembly is unaffected (verified in both
+    directions by the #35 TSDuck cross-validation: ``duplicated=2+2`` /
+    ``4+4`` agrees with the duplicate-aware walkthrough).  Alternatives
+    were explicitly not adopted: (b) incrementing CC on repetition would
+    change the frozen SPEC-107 packet-repetition semantics through a spec
+    change, and (c) per-repetition CC carry-over conflicts with contract
+    §9 (the mux never modifies finished packets).
     """
 
     def __init__(self, source_id: str, packets: Iterable[TSPacket]) -> None:
