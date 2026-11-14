@@ -11,11 +11,6 @@ behaviors (WAL, concurrency across connections, migrations) live under
 tests/integration/adapters/storage/.
 """
 
-import json
-import sqlite3
-
-import pytest
-
 from adapters.storage import db
 from adapters.storage.errors import InvalidEnvelopeError
 from adapters.storage.journal import EventRow, SqliteEventJournal
@@ -109,3 +104,42 @@ def test_append_overwrites_producer_supplied_journal_seq() -> None:
 
     assert (seq, duplicate) == (1, False)
     assert journal.query("sess-1")[0].envelope["journal_seq"] == 1
+
+
+# --- dedup: (producer_id, event_id) replay (REQ-PLT-502-003) -----------------
+
+
+def test_dedup_replay_returns_original_seq_and_stores_no_row() -> None:
+    """SPEC-301 §5: at-least-once delivery — the replayed append returns the
+    ORIGINAL journal_seq with duplicate=True and creates no new row."""
+    journal = _journal()
+    envelope = _envelope(event_id="evt-dup")
+
+    first_seq, first_dup = journal.append(envelope)
+    replay_seq, replay_dup = journal.append(envelope)
+
+    assert (first_seq, first_dup) == (1, False)
+    assert (replay_seq, replay_dup) == (1, True)
+    rows = journal.query("sess-1")
+    assert len(rows) == 1
+    # The stored envelope stays the FIRST stamped one, not a re-stamp.
+    assert rows[0].envelope["journal_seq"] == 1
+
+
+def test_same_event_id_from_different_producer_is_not_dedup() -> None:
+    journal = _journal()
+    first = journal.append(_envelope(event_id="evt-x", producer_id="producer-a"))
+    second = journal.append(_envelope(event_id="evt-x", producer_id="producer-b"))
+    assert first == (1, False)
+    assert second == (2, False)
+    assert len(journal.query("sess-1")) == 2
+
+
+def test_dedup_replay_after_other_events_returns_original_seq() -> None:
+    """The original seq survives later appends on the same session."""
+    journal = _journal()
+    journal.append(_envelope(event_id="evt-dup"))
+    journal.append(_envelope(event_id="evt-2"))
+    journal.append(_envelope(event_id="evt-3"))
+    replay_seq, replay_dup = journal.append(_envelope(event_id="evt-dup"))
+    assert (replay_seq, replay_dup) == (1, True)
