@@ -24,6 +24,7 @@ import pytest
 from tests._support.artifact_paths import ArtifactStoreHandle
 from tests._support.markers import check_layer_markers, layer_for_path
 from tests._support.sqlite_support import JournalHandle, default_migrations_dir
+from tests._support.tsduck_probe import TSP_ENV_OVERRIDE, probe_tsp
 
 
 def pytest_collection_modifyitems(config, items):
@@ -113,3 +114,26 @@ def artifact_store(tmp_path: Path) -> ArtifactStoreHandle:
     fixture never fabricates index rows.
     """
     return ArtifactStoreHandle(root=tmp_path / "artifact_store")
+
+
+@pytest.fixture
+def tsduck() -> "TSDuckProbe":
+    """SPEC-505 §4 `tsduck`: availability probe (SPEC-308).
+
+    Missing/broken CLI → explicit ``pytest.skip`` with a summary-visible
+    reason (SPEC-505 §5 禁静默跳过; #14: 兜底 skip 仅限本地 — the Windows CI
+    job installs ``TSDuck.TSDuck`` via winget and an install failure fails
+    that job). Available → frozen probe result (executable, measured-format
+    version, raw line). Probe results are immutable and cached per
+    executable path, so sharing them crosses no mutable state.
+    """
+    from tests._support.tsduck_probe import TSDuckProbe
+
+    probe = probe_tsp()
+    if not probe.available:
+        pytest.skip(
+            f"tsduck: TSDuck CLI unavailable — {probe.detail} "
+            "(explicit skip per SPEC-505 §5; 兜底仅限本地 per #14)"
+        )
+    assert isinstance(probe, TSDuckProbe)
+    return probe
