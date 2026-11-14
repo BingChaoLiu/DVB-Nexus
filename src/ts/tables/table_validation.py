@@ -55,19 +55,18 @@ from ts.tables.pat import (
     PAT_PROGRAM_NUMBER_INVALID,
     PATSection,
 )
+from ts._bytesutil import PID_MAX
 from ts.tables.pmt import PMT_PID_INVALID, PMTSection
 
 #: Null-packet PID (project PID policy constant, SPEC-103 §7/§8.6).
 NULL_PID = 0x1FFF
 
-_PID_MAX = 0x1FFF
-
 
 def _check_pid(value: object, name: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int):
         raise TypeError(f"{name} must be int, got {type(value).__name__}")
-    if not 0 <= value <= _PID_MAX:
-        raise ValueError(f"{name} must be in 0..{_PID_MAX} (13-bit), got {value}")
+    if not 0 <= value <= PID_MAX:
+        raise ValueError(f"{name} must be in 0..{PID_MAX} (13-bit), got {value}")
     return value
 
 

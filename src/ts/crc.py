@@ -8,8 +8,9 @@ implemented as a pure, incremental, standard-library-only module:
   contract §5).
 - Check vector: ``b"123456789"`` -> ``0x0376E6E7``.
 - The bitwise MSB-first (left-shift) loop is the reference implementation;
-  a 256-entry lookup-table variant (``_mpeg2_crc32_table``) exists for
-  cross-verification and optional optimization (SPEC-101 §5).
+  a 256-entry lookup-table variant (``_mpeg2_crc32_table``) exists as the
+  independent second implementation for the §7.7 cross-implementation
+  test — the public API never switches implementations.
 - CRC fields are 4-byte big-endian; a section that already carries its CRC
   verifies when the CRC computed over the whole byte string is zero.
 
@@ -18,30 +19,13 @@ The module imports no other project package and no third-party package
 ``TSPacket`` and PSI Section (SPEC-102) consumers.
 """
 
+from ts._bytesutil import _coerce_bytes
+
 CRC32_MPEG2_POLY = 0x04C11DB7
 CRC32_MPEG2_INIT = 0xFFFFFFFF
 
 _MASK32 = 0xFFFFFFFF
 _CRC_FIELD_WIDTH = 4
-
-_BYTES_LIKE = (bytes, bytearray, memoryview)
-
-
-def _coerce_bytes(data: bytes, *, param: str) -> bytes:
-    """Validate a bytes-like argument and normalize it to ``bytes``.
-
-    ``bytes`` is returned as-is; ``bytearray`` / ``memoryview`` are copied.
-    Anything else raises ``TypeError`` — no silent coercion (SPEC-101 §6:
-    ``str`` and ``int`` in particular must not be accepted implicitly).
-    """
-    if isinstance(data, bytes):
-        return data
-    if isinstance(data, _BYTES_LIKE):
-        return bytes(data)
-    raise TypeError(
-        f"{param} must be a bytes-like object (bytes, bytearray, memoryview), "
-        f"got {type(data).__name__}"
-    )
 
 
 def _validate_initial(initial: int, *, param: str = "initial") -> int:
@@ -109,9 +93,12 @@ def _mpeg2_crc32_table(
 ) -> int:
     """Table-driven CRC-32/MPEG-2; cross-verified against the bitwise core.
 
-    Private helper kept for the SPEC-101 §7.7 cross-implementation test and
-    as an opt-in optimization path; the public API uses the bitwise
-    reference implementation.
+    Private helper that exists solely as the independent second
+    implementation of the SPEC-101 §7.7 cross-implementation test: bitwise
+    and table-driven must agree on a large fixed-seed vector set, so a
+    coding fault in either cannot pass unnoticed.  The public API always
+    uses the bitwise reference implementation; this variant is never an
+    opt-in fast path.
     """
     return _advance_table(
         _validate_initial(initial), _coerce_bytes(data, param="data")

@@ -57,6 +57,7 @@ codes by the underlying parser): ``SECTION_POINTER_FIELD_INVALID``,
 
 from __future__ import annotations
 
+from ts._bytesutil import PID_MAX
 from ts.errors import InvalidSectionError
 from ts.issues import ParseIssue
 from ts.packet import TSPacket
@@ -77,9 +78,6 @@ SECTION_DISCARDED_ON_DISCONTINUITY = "SECTION_DISCARDED_ON_DISCONTINUITY"
 SECTION_TRUNCATED_AT_EOF = "SECTION_TRUNCATED_AT_EOF"
 
 _HEADER_SIZE = 3  # section header size (ts.section.SECTION_HEADER_SIZE)
-
-_PID_MAX = 0x1FFF
-
 
 class _LengthFault(Exception):
     """Internal: section length beyond policy — state cleared, abort packet."""
@@ -102,8 +100,8 @@ class SectionAssembler:
     def __init__(self, pid: int, policy_resolver) -> None:
         if isinstance(pid, bool) or not isinstance(pid, int):
             raise TypeError(f"pid must be int, got {type(pid).__name__}")
-        if not 0 <= pid <= _PID_MAX:
-            raise ValueError(f"pid must be in 0..{_PID_MAX} (13-bit), got {pid}")
+        if not 0 <= pid <= PID_MAX:
+            raise ValueError(f"pid must be in 0..{PID_MAX} (13-bit), got {pid}")
         if not callable(policy_resolver):
             raise TypeError(
                 "policy_resolver must be callable(table_id) -> "
@@ -288,31 +286,49 @@ class SectionAssembler:
                         self._clear()
                         raise _LengthFault() from error
                     self._policy = policy
+                if len(self._buffer) >= self._total:
+                    # Declared section_length 0: the 3-byte header IS the
+                    # whole section and the payload boundary may end right
+                    # here — complete in place (§6.2; #35 difference report
+                    # §4) instead of waiting for a next packet that would
+                    # leave flush() reporting a "truncated" section that is
+                    # actually complete.
+                    self._finish_current_section()
                 continue  # accumulation branch handles take=0 completion
             take = min(self._total - len(self._buffer), end - pos)
             self._buffer += data[pos : pos + take]
             pos += take
             if len(self._buffer) < self._total:
                 return  # section still split; keep for the next packet
-            chunk = bytes(self._buffer[: self._total])
-            del self._buffer[: self._total]
-            self._active = False
-            self._total = None
-            policy = self._policy
-            self._policy = None
-            if policy is not None:
-                try:
-                    self._emitted.append(parse_section(chunk, policy, strict=True))
-                except InvalidSectionError as error:
-                    self._issues.append(
-                        ParseIssue(
-                            code=_error_code(error),
-                            message=str(error),
-                            offset=None,
-                        )
-                    )
-            # else: skip mode — the discarded section's bytes just dropped
+            self._finish_current_section()
             # loop continues at the section boundary
+
+    def _finish_current_section(self) -> None:
+        """Complete the buffered section: parse-emit it or skip-drop it.
+
+        Called with ``len(self._buffer) >= self._total`` (the total was
+        resolved and every section byte is buffered); clears the framing
+        state so the next boundary byte starts a fresh section. Parse
+        rejection is recorded as a :class:`ParseIssue`; skip mode (unknown
+        table_id, ``self._policy is None``) just drops the bytes.
+        """
+        chunk = bytes(self._buffer[: self._total])
+        del self._buffer[: self._total]
+        self._active = False
+        self._total = None
+        policy = self._policy
+        self._policy = None
+        if policy is not None:
+            try:
+                self._emitted.append(parse_section(chunk, policy, strict=True))
+            except InvalidSectionError as error:
+                self._issues.append(
+                    ParseIssue(
+                        code=_error_code(error),
+                        message=str(error),
+                        offset=None,
+                    )
+                )
 
     def _discard_partial(self, reason: str) -> None:
         """Drop an active partial section, recording the event (§6.2/§8)."""

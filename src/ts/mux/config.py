@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from ts._bytesutil import PID_MAX, _require_int
 from ts.clock import MediaClock
 from ts.errors import InvalidMuxConfigError
 from ts.mux.codes import (
@@ -28,9 +29,6 @@ from ts.mux.codes import (
     MUX_PCR_INTERVAL_INVALID,
     MUX_TABLE_PERIOD_INVALID,
 )
-
-#: 13-bit PID range upper bound (SPEC-100 §4).
-_PID_MAX = 0x1FFF
 
 #: The null PID — never a legal ES/PCR PID (project rule, SPEC-103 §8.6).
 _PID_NULL = 0x1FFF
@@ -48,17 +46,10 @@ INSERTION_POLICIES = (
 )
 
 
-def _require_int(value: object, name: str) -> int:
-    """Programming-error guard: strict int, bool excluded."""
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise TypeError(f"{name} must be int, got {type(value).__name__}")
-    return value
-
-
 def _require_mux_pid(pid: int, code: str, what: str) -> int:
     """13-bit PID in range and never the null PID (project rule)."""
     _require_int(pid, what)
-    if not 0 <= pid <= _PID_MAX or pid == _PID_NULL:
+    if not 0 <= pid <= PID_MAX or pid == _PID_NULL:
         raise InvalidMuxConfigError(
             f"{code}: {what} must be a 13-bit PID other than the null PID "
             f"0x1FFF, got {pid}"

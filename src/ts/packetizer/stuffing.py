@@ -31,7 +31,12 @@ from ts.adaptation_field import (
     af_encoded_length,
 )
 from ts.errors import PacketizationError
-from ts.packet import TS_PACKET_SIZE, TSPacket
+from ts.packet import (
+    AF_ONLY_BODY_LENGTH,
+    PAYLOAD_ONLY_LENGTH,
+    TS_PACKET_SIZE,
+    TSPacket,
+)
 from ts.pcr import PCR
 
 from ts.packetizer.codes import (
@@ -41,14 +46,14 @@ from ts.packetizer.codes import (
 )
 
 #: Bytes after the 4-byte packet header (AF length byte + AF body + payload).
-AF_REGION_SIZE = TS_PACKET_SIZE - 4  # 184
-
-#: Payload bytes of a payload-only (AFC=01) packet.
-PAYLOAD_ONLY_LENGTH = AF_REGION_SIZE  # 184
+#: Derived from the canonical frame geometry in :mod:`ts.packet` (review-fix
+#: F6: 183/184 single source); the historical public name is kept.
+AF_REGION_SIZE = PAYLOAD_ONLY_LENGTH  # 184
 
 #: Adaptation-field length byte value when the payload consumes the whole
-#: region minus the length byte (AFC=11 zero-length AF).
-ZERO_AF_PAYLOAD_LENGTH = AF_REGION_SIZE - 1  # 183
+#: region minus the length byte (AFC=11 zero-length AF). Derived from the
+#: canonical constant in :mod:`ts.packet`; the historical public name is kept.
+ZERO_AF_PAYLOAD_LENGTH = AF_ONLY_BODY_LENGTH  # 183
 
 
 def adaptation_field_length_for_payload(payload_length: int) -> int:

@@ -36,10 +36,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from ts._bytesutil import PID_MAX
 from ts.errors import InvalidPacketError
 from ts.packet import TS_CC_OUT_OF_RANGE, TS_PID_OUT_OF_RANGE
 
-_PID_MAX = 0x1FFF
 _CC_MAX = 0x0F
 _CC_MASK = 0x0F
 
@@ -123,8 +123,8 @@ class CCAllocator:
     def _validate_pid(pid: int) -> None:
         if isinstance(pid, bool) or not isinstance(pid, int):
             raise TypeError(f"pid must be int, got {type(pid).__name__}")
-        if not 0 <= pid <= _PID_MAX:
+        if not 0 <= pid <= PID_MAX:
             raise InvalidPacketError(
-                f"{TS_PID_OUT_OF_RANGE}: pid must be in 0..{_PID_MAX} "
+                f"{TS_PID_OUT_OF_RANGE}: pid must be in 0..{PID_MAX} "
                 f"(13-bit), got {pid}"
             )

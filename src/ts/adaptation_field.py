@@ -172,6 +172,7 @@ class _ZeroLengthAdaptationField(AdaptationField):
 
     @property
     def is_zero_length(self) -> bool:
+        """Always ``True`` — the wire form has no flags byte (§5.2)."""
         return True
 
 
