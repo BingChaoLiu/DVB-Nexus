@@ -16,9 +16,14 @@ requires-python = ">=3.10"
 # (ticket #24): app factory + error contract render through FastAPI
 # (ADR-0003 frozen stack, Presentation/Application boundary per ADR-0005);
 # pin kept identical to the dev-group entry added by ticket #22.
+# uvicorn declares the documented run posture (src/api/README.md 部署姿态,
+# app.py docstring): `uvicorn --factory api.app:create_app` — the #24
+# acceptance evidence gap ("app 可启动") closed in review-fix #7. 0.30 is a
+# current-generation floor; <1 guards against the next major.
 dependencies = [
     "pydantic>=2,<3",
     "fastapi>=0.110,<1",
+    "uvicorn>=0.30,<1",
 ]
 
 [project.optional-dependencies]
