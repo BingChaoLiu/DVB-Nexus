@@ -1,8 +1,8 @@
 ---
 spec_id: SPEC-100
 title: MPEG-2 Transport Stream Packet Core
-version: 0.4.0
-status: DRAFT
+version: 0.5.0
+status: APPROVED
 phase: MVP
 owner: TS Core
 priority: P0
@@ -47,7 +47,7 @@ requirements: [REQ-TS-100-001, REQ-TS-100-002, REQ-TS-100-003, REQ-TS-100-004, R
 | 1[6] | `payload_unit_start_indicator` | 1 | PUSI |
 | 1[5] | `transport_priority` | 1 | 优先级 |
 | 1[4:0] + 2 | `PID` | 13 | Packet Identifier |
-| 3[7:6] | `transport_scrambling_control` | 2 | 00 clear；01 reserved；10/11 scrambled parity |
+| 3[7:6] | `transport_scrambling_control` | 2 | 00 Not scrambled；01/10/11 User-defined（DVB 惯例 10/11 = 偶/奇钥，ISO/IEC 13818-1 Table 2-4） |
 | 3[5:4] | `adaptation_field_control` | 2 | 00 reserved/invalid；01 payload only；10 adaptation only；11 both |
 | 3[3:0] | `continuity_counter` | 4 | 0..15 |
 
@@ -109,7 +109,7 @@ class TSPacket:
 
 ### 5.2 Adaptation Field
 
-- `adaptation_field_length` 是紧随长度字节之后的 AF 字节数，范围 0..183。
+- `adaptation_field_length` 是紧随长度字节之后的 AF 字节数，范围 0..183（AFC=11 时上限 182）。
 - AF length 为 0 时，不存在 flags byte；为正数时，第一个 AF 内容字节为 8 个 Flags。
 - Flags 后的可选字段必须按 flags 顺序编码：PCR、OPCR、splice countdown、transport private data、adaptation extension。
 - PCR / OPCR 各占 6 bytes；具体位编码由 SPEC-105 定义，并由本模块调用。
@@ -148,6 +148,8 @@ class CCAllocator:
     def reset(self, pid: int, next_value: int) -> None: ...
     def clear(self) -> None: ...
 ```
+
+`ValidationIssue` 的权威定义见 `TS-CORE-INTEGRATION-CONTRACT.md` §6（code/message/severity/field）；本模块不重复定义。
 
 `allocate()` 的状态规则必须等价于：
 
@@ -199,7 +201,7 @@ return cc
 - PID 边界：0、1、0x1FFE、0x1FFF；拒绝 -1、0x2000。
 - CC 边界：0、15；拒绝 -1、16。
 - AFC 四种值：00 拒绝，01/10/11 正确解析。
-- AF length：0、1、183；超边界截断拒绝。
+- AF length：0、1、183（183 仅在 AFC=10 时合法）；超边界截断拒绝。
 - 同时包含 PCR、OPCR、private data、splice countdown 的 AF 边界组合。
 - AF extension opaque bytes round-trip。
 - payload 0、1、183、184 bytes 与合法 AFC 组合。
@@ -225,7 +227,7 @@ return cc
 
 ## 12. 交付要求
 
-建议文件：`backend/app/ts/packet.py`、`backend/app/ts/adaptation_field.py`（可按实现合并）、`backend/app/ts/cc.py`、`backend/app/ts/errors.py`；测试置于 `tests/unit/ts/`。提交 `IMPLEMENTATION_REPORT.md`，列出对应 REQ、所有边界测试和 188-byte round-trip 证据。
+建议文件：`ts/packet.py`、`ts/adaptation_field.py`（可按实现合并）、`ts/cc.py`、`ts/errors.py`（异常类权威清单见集成契约 §7）；测试置于 `tests/unit/ts/`。提交 `IMPLEMENTATION_REPORT.md`，列出对应 REQ、所有边界测试和 188-byte round-trip 证据。
 
 ## 13. 参考
 

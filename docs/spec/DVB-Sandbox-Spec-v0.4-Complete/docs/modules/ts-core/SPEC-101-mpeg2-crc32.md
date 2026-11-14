@@ -1,8 +1,8 @@
 ---
 spec_id: SPEC-101
 title: MPEG-2 CRC-32 Core
-version: 0.4.0
-status: DRAFT
+version: 0.5.0
+status: APPROVED
 phase: MVP
 owner: TS Core
 priority: P0
@@ -94,7 +94,7 @@ class MPEG2CRC32:
 
 ## 9. 交付要求
 
-建议文件：`backend/app/ts/crc.py`；测试：`tests/unit/ts/test_crc.py`；公共测试向量引用 `docs/test-vectors/CRC32-MPEG2.md`。CRC 实现必须与 PAT/PMT 生成逻辑解耦。
+建议文件：`ts/crc.py`；测试：`tests/unit/ts/test_crc.py`；公共测试向量引用 `docs/test-vectors/CRC32-MPEG2.md`。CRC 实现必须与 PAT/PMT 生成逻辑解耦。
 
 ## 10. 参考
 

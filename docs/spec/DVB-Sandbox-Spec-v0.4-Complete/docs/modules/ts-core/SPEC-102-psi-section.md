@@ -1,8 +1,8 @@
 ---
 spec_id: SPEC-102
 title: PSI Section Framing and Assembly
-version: 0.4.0
-status: DRAFT
+version: 0.5.0
+status: APPROVED
 phase: MVP
 owner: TS Core
 priority: P0
@@ -94,16 +94,16 @@ class SectionAssembler:
     def flush(self) -> list[ParseIssue]: ...
 ```
 
-`policy_resolver(table_id)` 返回 SectionPolicy。Assembler 只处理配置的一个 PID；一个 PID 对应多个 table_id 时按 table_id 选择 policy。
+`policy_resolver(table_id)` 返回 SectionPolicy。Assembler 只处理配置的一个 PID；一个 PID 对应多个 table_id 时按 table_id 选择 policy。resolver 对未配置的 table_id 无 policy 时，产生 `SECTION_TABLE_ID_UNEXPECTED` 并丢弃该 Section，不回退到默认 policy；MVP 配置只覆盖 PAT/PMT。
 
 ## 6. Parsing 与 Assembly 逻辑
 
 ### 6.1 单个 Section
 
-1. 输入不足 3 bytes 时 `TRUNCATED_SECTION_HEADER`。
+1. 输入不足 3 bytes 时 `SECTION_HEADER_TRUNCATED`。
 2. 解析 12-bit section_length，校验不超过 policy.max_section_length。
 3. 总长度为 `3 + section_length`；输入必须至少达到总长度。
-4. 如传入 buffer 含额外 bytes，单 Section parser 只解析首个 Section，并返回 consumed length 的扩展 API，或拒绝 trailing bytes；行为必须在实现中固定并测试。
+4. 如传入 buffer 含额外 bytes，`parse_section` 拒绝并报 `SECTION_TRAILING_BYTES`；多 Section 场景由 Assembler 以 `section_total_size()` 切片后逐段调用，不提供 consumed-length 双 API。
 5. 对 Long-form Section 验证公共头最小长度和字段完整性。
 6. 按 CRC policy 调用 SPEC-101；REQUIRED 缺 CRC/CRC 错误必须拒绝，OPTIONAL 依据表 profile 明确处理。
 7. 对 reserved bits 可记录 ValidationIssue；strict profile 可拒绝。
@@ -135,6 +135,7 @@ class SectionAssembler:
 | `SECTION_HEADER_TRUNCATED` | 不足 3 bytes |
 | `SECTION_LENGTH_EXCEEDS_POLICY` | section_length 超过指定表策略 |
 | `SECTION_BODY_TRUNCATED` | bytes 不足以达到 section_total_size |
+| `SECTION_TRAILING_BYTES` | 单 Section parser 输入含超出 `3 + section_length` 的额外 bytes |
 | `SECTION_LONG_HEADER_TRUNCATED` | Long-form 公共头不完整 |
 | `SECTION_CRC_MISSING` | 必须有 CRC 但缺失 |
 | `SECTION_CRC_INVALID` | CRC remainder 非 0 |
@@ -175,7 +176,7 @@ class SectionAssembler:
 
 ## 12. 交付要求
 
-建议文件：`section.py`、`section_assembler.py`、`section_errors.py`；测试覆盖 parser、assembler、CRC 集成。必须附带一个跨 Packet 的 Section fixture 和对应 packet index 说明。
+建议文件：`ts/section.py`、`ts/section_assembler.py`、`ts/section_errors.py`；测试覆盖 parser、assembler、CRC 集成。必须附带一个跨 Packet 的 Section fixture 和对应 packet index 说明。
 
 ## 13. 参考
 

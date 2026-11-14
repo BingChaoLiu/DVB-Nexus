@@ -1,8 +1,8 @@
 ---
 spec_id: TS-CORE-IC-001
 title: TS Core Cross-Module Integration Contract
-version: 0.4.0
-status: DRAFT
+version: 0.5.0
+status: APPROVED
 phase: MVP
 owner: Architecture
 applies_to: SPEC-100..SPEC-108
@@ -107,9 +107,16 @@ class ParseIssue:
     message: str
     offset: int | None = None
     severity: str = "error"
+
+@dataclass(frozen=True)
+class ValidationIssue:
+    code: str
+    message: str
+    severity: str = "warning"
+    field: str | None = None
 ```
 
-具体字段以各模块 Spec 为准；这是概念契约，不要求复制同名类到每个包。
+具体字段以各模块 Spec 为准；这是概念契约，不要求复制同名类到每个包。`ValidationIssue` 是语义校验问题（SPEC-100 `validate()`、SPEC-108 `validate_config()` 的返回类型）：validation 是语义层判断，不带 offset，与解析层的 `ParseIssue` 并排。
 
 ## 7. 异常类型注册
 
@@ -121,7 +128,25 @@ class ParseIssue:
 - `InvalidPESPacketError`：PES 起始码、Header 长度、PTS/DTS 编码错误。
 - `InvalidTimestampError`：时间戳超范围或 PCR extension 非法。
 - `InvalidMuxConfigError`：Mux 码率、PID、周期或容量配置非法。
+- `PacketizationError`：SPEC-106 封装过程失败（`PACKETIZER_*`）。
+- `MuxSchedulingError`：Mux 运行期调度失败（`MUX_PACKET_DEADLINE_MISSED` / `MUX_SLOT_COUNT_MISMATCH` / `MUX_SOURCE_EXHAUSTED`）。
 - `GenerationError`：生成配置无法表达或内部生成失败。
+
+错误码 → 异常类映射：
+
+| 错误码族 | 异常类 |
+|---|---|
+| `TS_*`（SPEC-100） | `InvalidPacketError` |
+| `SECTION_*`（SPEC-102） | `InvalidSectionError` |
+| `PAT_*` / `PMT_*` / `TABLE_*`（SPEC-103） | `InvalidSectionError` |
+| `PES_*`（SPEC-104） | `InvalidPESPacketError` |
+| `PCR_*` / `PTS_*` / `CLOCK_*`（SPEC-105） | `InvalidTimestampError` |
+| `PACKETIZER_*`（SPEC-106） | `PacketizationError` |
+| `MUX_INVALID_BITRATE` / `MUX_INVALID_PACKET_COUNT` / `MUX_PID_DUPLICATE_SOURCE` / `MUX_PID_RATE_OVERCOMMITTED` / `MUX_TABLE_PERIOD_INVALID` / `MUX_PCR_INTERVAL_INVALID` | `InvalidMuxConfigError` |
+| `MUX_PACKET_DEADLINE_MISSED` / `MUX_SLOT_COUNT_MISMATCH` / `MUX_SOURCE_EXHAUSTED` | `MuxSchedulingError` |
+| `GENERATOR_*`（SPEC-108） | `GenerationError` |
+
+归属约定：错误码字符串常量按模块归属（各 Spec 错误码表在各自模块文件定义）；`app/ts/errors.py` 只承载本节异常类与基类，不承载业务错误码常量。
 
 解析不可信数据的公共 API 应允许调用方选择 strict 模式或取得 `ParseIssue`；默认 strict，不得以全零对象伪装成功。
 
@@ -144,6 +169,7 @@ class ParseIssue:
 - `SPEC-100` 定义 Packet 的 CC 字段语义及用于生成的 `CCAllocator`；其 PCR 字段使用 SPEC-105 唯一的 `PCR` 数据类型，PCR 6-byte 编码算法仍只存在于 SPEC-105。
 - `SPEC-106` 在封装单 PID Packet 时调用 allocator，不自行维护第二套计数规则。
 - `SPEC-107` 不修改已封装 Packet 的 CC；如需要插入 PCR-only Packet，由 Packetizer/专用 PCR Packet Builder 调用同一个 allocator，并遵循 adaptation-only 使用最近 CC 的规则。
+- **PCR 插入三方职责**：**值**由 SPEC-105 MediaClock 按初始时钟与推进生成；**时机**由 SPEC-107 调度——PCR 实际位置为 `slot_time ≥ pcr_due_tick` 的第一个 slot，jitter 有界 ≤ 一个 slot 周期；**构造**由 SPEC-106 完成——payload 附着走 `PESPacketizer(first_packet_pcr)`，adaptation-only 走 `build_pcr_only_packet`，Mux 不自行构造或修改 AF。mid-PES PCR 附着不在 MVP 范围。
 - 输入流 CC 质量统计/告警属于 Observation/Metrics/Analyzer 范畴，不由 `CCAllocator` 完成。
 - 测试故障导致的 CC 篡改应放在 Fault Injector（SPEC-204），TS Core 正常生成链路不应内置故障分支。
 

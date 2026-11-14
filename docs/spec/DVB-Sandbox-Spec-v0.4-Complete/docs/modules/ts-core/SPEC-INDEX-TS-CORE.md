@@ -1,7 +1,7 @@
 # TS Core Spec Index
 
-**Package version:** 0.4.0  
-**Status:** DRAFT_FOR_REVIEW  
+**Package version:** 0.5.0  
+**Status:** MVP_BASELINE_APPROVED  
 **Normative parent:** DVB Sandbox SPEC-001/003/004/005  
 
 | Spec ID | Document | Depends on | MVP priority | Primary output |
@@ -31,3 +31,5 @@ SPEC-105 ──┬─ SPEC-100 ─┴─ SPEC-106 ─ SPEC-107 ─┐
 ## Status policy
 
 All entries are `DRAFT` at package creation. When an individual Spec is approved, update its front matter and this index. Do not update any document to `IMPLEMENTED` until code merge, test evidence, and acceptance review are complete.
+
+2026-11-14：SPEC-100~108 与 TS-CORE-INTEGRATION-CONTRACT 经 Wayfinder ticket「ts-core 规格逐份修订批准」逐份修订并批准为 MVP 基线（front-matter `status: APPROVED`、`version: 0.5.0`）。golden 向量补齐（包/section/TS 级）归 conformance ticket，阻塞实现完成而非规格批准。

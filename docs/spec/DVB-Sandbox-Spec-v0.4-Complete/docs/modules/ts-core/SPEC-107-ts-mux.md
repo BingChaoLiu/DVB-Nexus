@@ -1,8 +1,8 @@
 ---
 spec_id: SPEC-107
 title: MPEG-TS Multiplexer and CBR Scheduler
-version: 0.4.0
-status: DRAFT
+version: 0.5.0
+status: APPROVED
 phase: MVP
 owner: TS Core
 priority: P0
@@ -56,7 +56,7 @@ class ScheduledPacket:
     source_sequence: int
 ```
 
-同一 slot 有多个候选 Packet 时，使用确定性排序：最早 deadline、较高优先级（项目需冻结数值方向）、source_id、source_sequence。相同配置的 tie-break 必须稳定。
+同一 slot 有多个候选 Packet 时，使用确定性排序：最早 deadline、优先级数值越小越高（内建默认 PAT/PMT = 0、PCR = 1、ES = 2，可由配置覆盖）、source_id 字典序、source_sequence 升序。相同配置的 tie-break 必须稳定。
 
 ## 4. Mux 配置
 
@@ -66,6 +66,7 @@ class PIDRateConfig:
     pid: int
     bitrate_bps: int
     source_id: str
+    priority: int = 2  # 数值越小优先级越高；表/PCR 内建 source 为 0/1
 
 @dataclass(frozen=True)
 class TableRepetitionConfig:
@@ -94,7 +95,7 @@ MVP 必须校验 `target_bitrate_bps > 0`、packet_count 为正数、PID 唯一�
 
 1. 为每个 PID Source 维护独立的整数码率相位/令牌累加器，避免因 float 累加造成漂移。
 2. PAT/PMT 根据配置的周期生成待发送 Section，再由 SPEC-106 Packetizer 输出 Packet；表的发送周期由 Mux 配置控制。
-3. PCR 以目标周期进入调度。当 PCR_PID 的待发送 Payload Packet 可容纳 PCR 时，优先将 PCR 放入带 AF 的 Packet；若不能在允许窗口内找到可用 Payload Packet，则按配置产生 adaptation-only PCR Packet。
+3. PCR 以目标周期进入调度。`insertion_policy=payload_packet_first` 时优先附着 `pcr_pid` 的 PES 首 Packet（SPEC-106 `PESPacketizer(first_packet_pcr)`）；due tick 窗口内无 PES 首 Packet 时，调用 SPEC-106 `build_pcr_only_packet` 产生 adaptation-only PCR Packet。mid-PES PCR 附着不在 MVP 范围。
 4. adaptation-only PCR Packet 必须遵守 SPEC-100 CC 语义，不推进该 PID 的 CC。
 5. 选取已到期 Packet；无候选时输出 Null Packet。
 6. 如果候选 Packet 过期，按配置记录 deadline miss；MVP 默认生成错误并终止，不静默丢弃 Packet。
@@ -119,6 +120,7 @@ MVP 必须校验 `target_bitrate_bps > 0`、packet_count 为正数、PID 唯一�
 - `target_interval_ms` 是 Generator/Mux 配置。
 - DVB TR 101 290 的 PCR repetition / accuracy 检测规则由 Analyzer/Conformance Spec 实现；Mux 不将一个诊断阈值当作 PCR 编码规则。
 - MVP 建议初始 PCR 目标周期 40 ms，预留测量裕量；这是项目配置建议，不是本模块宣称的标准强制常数。
+- PCR 插入时序（三方职责见集成契约 §9）：PCR 实际位置为 `slot_time ≥ pcr_due_tick` 的第一个 slot，jitter 有界 ≤ 一个 slot 周期；包构造委托 SPEC-106，Mux 只做时机决策。
 
 ## 6. 公共接口
 
@@ -129,7 +131,16 @@ class TSMux:
     def summary(self) -> MuxSummary: ...
 ```
 
-`PacketSource` 是内部 Protocol，负责以稳定次序提供 ScheduledPacket 或 packet batches。Mux 不能依赖文件系统、TSDuck 或 FastAPI。
+`PacketSource` 是内部 Protocol，以稳定次序产出 Packet：
+
+```python
+class PacketSource(Protocol):
+    @property
+    def source_id(self) -> str: ...
+    def iter_packets(self) -> Iterator[TSPacket]: ...
+```
+
+`release_tick_27mhz` 由 Mux 按 `PIDRateConfig` 相位累加器计算盖章，`source_sequence` 为产出序号，`priority` 取自 `PIDRateConfig`——source 不感知媒体时钟。表与 PCR source 由 Mux 内建（priority 0/1）。**Deadline 语义**：`deadline = release_tick + 一个 slot 周期`——包必须在其 release slot 或下一 slot 内发出，否则报 `MUX_PACKET_DEADLINE_MISSED`。Mux 不能依赖文件系统、TSDuck 或 FastAPI。
 
 ## 7. 错误处理
 
@@ -143,7 +154,7 @@ class TSMux:
 - `MUX_SOURCE_EXHAUSTED`（按 source 定义；不应误判为全局错误）
 - `MUX_SLOT_COUNT_MISMATCH`
 
-所有终止错误需包含 run-independent 的可复现上下文：slot index、source_id、PID、target bitrate；禁止包含不可控临时路径。
+所有终止错误需包含 run-independent 的可复现上下文：slot index、source_id、PID、target bitrate；禁止包含不可控临时路径。异常类映射见集成契约 §7：`MUX_*` 运行期错误 → `MuxSchedulingError`，配置类错误 → `InvalidMuxConfigError`。
 
 ## 8. 测试规格
 
@@ -178,4 +189,4 @@ class TSMux:
 
 ## 11. 交付要求
 
-建议文件：`mux/config.py`、`mux/scheduler.py`、`mux/sources.py`、`mux/null_packet.py`。提供 packet slot 数、总 bitrate、PCR packet positions 和 Null packet count 的 MuxSummary。
+建议文件：`ts/mux/config.py`、`ts/mux/scheduler.py`、`ts/mux/sources.py`、`ts/mux/null_packet.py`。提供 packet slot 数、总 bitrate、PCR packet positions 和 Null packet count 的 MuxSummary。

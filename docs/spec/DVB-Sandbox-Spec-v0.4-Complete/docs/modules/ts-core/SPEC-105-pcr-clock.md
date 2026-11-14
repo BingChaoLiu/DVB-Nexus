@@ -1,8 +1,8 @@
 ---
 spec_id: SPEC-105
 title: MPEG Media Clock, PCR and PTS/DTS Primitives
-version: 0.4.0
-status: DRAFT
+version: 0.5.0
+status: APPROVED
 phase: MVP
 owner: TS Core
 priority: P0
@@ -82,7 +82,9 @@ def pts90_to_ticks27(pts: int) -> int: ...
 def modular_delta(current: int, previous: int, modulus: int) -> int: ...
 ```
 
-`prefix` 仅允许标准定义的 PTS/DTS prefix；调用方不得传任意 nibble。`modular_delta` 需定义“前向差值”范围并提供歧义说明；通常差值为 `(current-previous) % modulus`，但无法仅凭两个模值判断超过半周期的实际方向。
+`prefix` 仅允许标准定义的 PTS/DTS prefix；调用方不得传任意 nibble。
+
+`modular_delta(current, previous, modulus)` 返回 `(current - previous) % modulus`，值域 `[0, modulus)` 的前向差值。**方向可判定窗口冻结为 `[0, modulus/2)`**：差值小于半周期时，“current 在前”的判断可信；差值 ≥ 半周期时，仅凭两个模值无法区分“小幅回退”与“大幅前进”，调用方必须按方向不可判定处理（本函数不报错，比较策略归诊断/分析层）。PCR（27 MHz）与 PTS/DTS（90 kHz）的半周期等比，均为约 13.26 小时。
 
 ## 7. 计算和边界规则
 
@@ -139,7 +141,7 @@ def modular_delta(current: int, previous: int, modulus: int) -> int: ...
 
 ## 12. 交付要求
 
-建议文件：`clock.py`、`pcr.py`、`timestamp.py`；如果拆为多个文件，应保持公开接口集中导出。不得依赖系统时间或第三方 TS 工具。
+建议文件：`ts/clock.py`、`ts/pcr.py`、`ts/timestamp.py`；如果拆为多个文件，应保持公开接口集中导出。不得依赖系统时间或第三方 TS 工具。
 
 ## 13. 参考
 

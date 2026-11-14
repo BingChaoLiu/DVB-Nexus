@@ -1,8 +1,8 @@
 ---
 spec_id: SPEC-106
 title: PSI and PES to TS Packetization
-version: 0.4.0
-status: DRAFT
+version: 0.5.0
+status: APPROVED
 phase: MVP
 owner: TS Core
 priority: P0
@@ -18,8 +18,8 @@ requirements: [REQ-TS-106-001, REQ-TS-106-002, REQ-TS-106-003, REQ-TS-106-004, R
 
 ## 2. 范围
 
-**In Scope：** SectionPacketizer、PESPacketizer；跨 Packet 分片；Section pointer_field；PUSI；CCAllocator 集成；可配置 PCR/随机访问/Discontinuity 标记；AF stuffing；Packet count 和 packet index。  
-**Out of Scope：** Mux 多 PID 调度/CBR；实际 Fault Injection；TS 文件存储；自动码率控制；输入流 Packet 修复。
+**In Scope：** SectionPacketizer、PESPacketizer；跨 Packet 分片；Section pointer_field；PUSI；CCAllocator 集成；可配置 PCR/随机访问标记；adaptation-only PCR 包构造（`build_pcr_only_packet`）；AF stuffing；Packet count 和 packet index。  
+**Out of Scope：** Mux 多 PID 调度/CBR；实际 Fault Injection；TS 文件存储；自动码率控制；输入流 Packet 修复；PCR 附着 PES 首 Packet 之后的 mid-PES 插入（MVP 不支持）；AF `discontinuity_indicator` 的策略性设置（字段模型由 SPEC-100 提供，MVP 由调用者/故障路由经 `CCAllocator.reset` 处理）。
 
 ## 3. 输入与输出
 
@@ -44,7 +44,11 @@ class PESPacketizer:
         random_access: bool = False,
         first_packet_pcr: PCR | None = None,
     ) -> Iterator[TSPacket]: ...
+
+def build_pcr_only_packet(pid: int, pcr: PCR, cc_allocator: CCAllocator) -> TSPacket: ...
 ```
+
+`build_pcr_only_packet` 是 adaptation-only PCR 包的唯一构造权威：AFC=10、AF 占满 Header 后 184 bytes、含 PCR 字段与 `0xFF` stuffing；CC 遵循 SPEC-100 adaptation-only 语义（重用该 PID 最近 CC、不推进）。SPEC-107 Mux 在调度需要 PCR-only 包时调用本函数，不自行构造或修改 AF。
 
 实现可提供更一般的 `PacketizationOptions`，但默认行为必须与本 Spec 一致。
 
@@ -109,6 +113,7 @@ class PESPacketizer:
 - CC 按 PID 独立，Payload 包递增，adaptation-only 不递增，15→0 wrap。
 - 用 SPEC-102 SectionAssembler 和 SPEC-104 PESAssembler 反向重组，结果与原始输入 bytes 完全一致。
 - Null packet 不由 Packetizer 生成。
+- `build_pcr_only_packet`：AFC=10、恰好 188 bytes、PCR 可解码、CC 重用该 PID 最近 CC 且不推进。
 
 ## 11. 验收标准
 
@@ -125,4 +130,4 @@ MVP 每个 Section 独立起始 packet 是允许的效率折中，不要在没�
 
 ## 13. 交付要求
 
-建议文件：`packetizer/section_packetizer.py`、`packetizer/pes_packetizer.py`、`packetizer/stuffing.py`。提交 `Packetizer Round-trip` 集成报告。
+建议文件：`ts/packetizer/section_packetizer.py`、`ts/packetizer/pes_packetizer.py`、`ts/packetizer/stuffing.py`。提交 `Packetizer Round-trip` 集成报告。

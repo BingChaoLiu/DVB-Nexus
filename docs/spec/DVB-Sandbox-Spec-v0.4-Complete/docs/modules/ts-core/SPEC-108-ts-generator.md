@@ -1,8 +1,8 @@
 ---
 spec_id: SPEC-108
 title: Deterministic MPEG-TS Generator
-version: 0.4.0
-status: DRAFT
+version: 0.5.0
+status: APPROVED
 phase: MVP
 owner: TS Core
 priority: P0
@@ -68,9 +68,24 @@ class GeneratorConfig:
     pat_period_ms: int = 100
     pmt_period_ms: int = 100
     pcr_interval_ms: int = 40
+    pcr_insertion_policy: str = "payload_packet_first"
 ```
 
-说明：Pydantic API DTO 在 API/Application 层做 JSON validation；`app.ts` 接收已验证的 typed config，不直接依赖 Pydantic。
+说明：Pydantic API DTO 在 API/Application 层做 JSON validation；`app.ts` 接收已验证的 typed config，不直接依赖 Pydantic。JSON 请求体与 `GeneratorConfig` 的字段级映射约定如下（JSON 字段名 snake_case；Pydantic DTO 权威定义在 SPEC-500 REST 契约）：
+
+| JSON 字段 | GeneratorConfig 字段 | 约束 |
+|---|---|---|
+| `schema_version` | `schema_version` | int，受支持版本 |
+| `profile` | `profile` | MVP 仅 `"analysis_only"` |
+| `deterministic` | `deterministic` | bool，必须 true |
+| `seed` | `seed` | int |
+| `initial_media_clock_27mhz` | `initial_media_clock_27mhz` | int，非负 |
+| `target_bitrate_bps` | `target_bitrate_bps` | int > 0 |
+| `output_packet_count` | `output_packet_count` | int > 0 |
+| `program.transport_stream_id` / `program_number` / `pmt_pid` / `pcr_pid` / `version_number` / `program_descriptors` | `ProgramConfig` 同名字段 | bytes 字段（`program_descriptors`）JSON 以 hex 编码 |
+| `program.streams[]`（`pid` / `stream_type` / `stream_id` / `bitrate_bps` / `payload_profile` / `payload_seed_offset`） | `ElementaryStreamConfig` 同名字段 | 数组，元素字段 snake_case |
+| `pat_period_ms` / `pmt_period_ms` / `pcr_interval_ms` | 同名字段 | int > 0 |
+| `pcr_insertion_policy` | `pcr_insertion_policy` | 枚举，见 §5 |
 
 ## 5. 配置校验
 
@@ -84,6 +99,7 @@ class GeneratorConfig:
 - ES PID 在同一 Program 中唯一。
 - 所有 ES `bitrate_bps` 与 PAT/PMT/PCR 等 overhead 必须能装入 target bitrate；无法装入则拒绝或在 Mux 可证明的范围内按策略产生 deadline miss，不得静默降低 ES 码率。
 - `pat_period_ms`、`pmt_period_ms`、`pcr_interval_ms` 必须为正数。
+- `pcr_insertion_policy` 只允许 `payload_packet_first` / `adaptation_only_fallback`（语义见 SPEC-107 §5.3）。
 - `seed` 和 initial clock 必须进入生成指纹；不读取墙钟生成协议字段。
 
 ## 6. 公共接口
@@ -187,9 +203,9 @@ class TSGenerator:
 
 - `Simulation Runtime` 调用 `iter_packets()` 或 `generate_to()`；TS Core 不管理 Run 生命周期。
 - `Artifact Storage` 提供 sink 并记录 Artifact 元数据、SHA-256、config hash。
-- `Fault Injector` 接收正常 Packet 流/Artifact，产生单独 faulted 输出和 mutation log。
+- `Fault Injector` 接收正常 Packet 流/Artifact，产生单独 faulted 输出和 mutation log。MVP 语义级故障走流式过滤器（ADR-0007：Generator→sink 之间的语义包流过滤器，位于 faults 包）；Artifact 通道保留给 TSDuck 传输级路由。
 - `TSDuck Adapter` 对生成 Artifact 执行分析；TS Core 不启动 TSDuck。
 
 ## 14. 交付要求
 
-建议文件：`generator/config.py`、`generator/validator.py`、`generator/generator.py`、`generator/sources.py`。提供示例配置、正常 TS fixture、GenerationSummary 和 SHA-256 重复生成报告。
+建议文件：`ts/generator/config.py`、`ts/generator/validator.py`、`ts/generator/generator.py`、`ts/generator/sources.py`。提供示例配置、正常 TS fixture、GenerationSummary 和 SHA-256 重复生成报告。

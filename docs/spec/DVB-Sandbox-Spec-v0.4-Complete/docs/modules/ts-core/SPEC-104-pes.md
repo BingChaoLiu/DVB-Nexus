@@ -1,8 +1,8 @@
 ---
 spec_id: SPEC-104
 title: MPEG-2 PES Packet Core
-version: 0.4.0
-status: DRAFT
+version: 0.5.0
+status: APPROVED
 phase: MVP
 owner: TS Core
 priority: P0
@@ -57,7 +57,7 @@ class PESPacket:
     payload: bytes
 ```
 
-`raw_optional_header_data` 只承载本模块尚未解释但长度已校验的可选字段；PTS/DTS 字段不能同时在 raw 与 typed 字段中重复编码。需要定义明确的构造策略避免歧义。
+MVP 不提供 raw optional header 字段：遇到本模块未解释的 optional feature flags 一律报 `PES_OPTIONAL_FIELD_UNSUPPORTED`（见 §3），PTS/DTS 只存在于 typed 字段，不存在 raw/typed 重复编码问题。
 
 ## 5. 公共接口
 
@@ -142,7 +142,7 @@ class PESAssembler:
 
 ## 12. 交付要求
 
-建议文件：`pes.py`、`pes_assembler.py`；时间戳编码从 SPEC-105 复用。测试覆盖 header、timestamps、packet length、PES spanning packets。
+建议文件：`ts/pes.py`、`ts/pes_assembler.py`；时间戳编码从 SPEC-105 复用。测试覆盖 header、timestamps、packet length、PES spanning packets。
 
 ## 13. 参考
 

@@ -1,8 +1,8 @@
 ---
 spec_id: SPEC-103
 title: PAT and PMT Tables
-version: 0.4.0
-status: DRAFT
+version: 0.5.0
+status: APPROVED
 phase: MVP
 owner: TS Core
 priority: P0
@@ -103,7 +103,7 @@ def parse_pmt_sections(sections: list[PSISection]) -> "PMTTable": ...
 ## 7. 编码和校验规则
 
 - PAT/PMT 必须使用 SPEC-102 Section framing 和 SPEC-101 CRC。
-- PAT `section_length` = 5 bytes long-form header fields after section_length? 实现必须以真实编码长度累加，不允许在代码中靠未说明的魔法数。参考表结构：transport_stream_id(2) + version/current(1) + section_number(1) + last_section_number(1) + programs(4 each) + CRC(4)。
+- PAT `section_length` 按实际编码长度累加：transport_stream_id(2) + version/current(1) + section_number(1) + last_section_number(1) + program loop（每项 4 bytes）+ CRC(4)，即 `9 + 4 * program_entry_count`（与 §3 公式一致）；不允许在代码中依赖未说明的魔法数。
 - PMT 长度由 program_number(2)、version/current、section_number、last_section_number、PCR_PID(2)、program_info_length(2)、program descriptor bytes、ES entries（5-byte fixed prefix + descriptors）、CRC(4) 组成。
 - 所有 reserved bits 编码为标准规定的常量值；Parser 可保留原始值并报告不符合标准的 issue。
 - version_number 范围 0..31；section_number 与 last_section_number 范围 0..255，且 section_number ≤ last_section_number。
@@ -121,7 +121,7 @@ def parse_pmt_sections(sections: list[PSISection]) -> "PMTTable": ...
 3. PMT 的 `program_number` 与 PAT 项匹配。
 4. PMT 解析出的 Elementary PID 和 PCR PID 不应违反本项目的 PID 使用策略。
 5. 同一 Program 的 ES PID 不应重复（除非后续标准 profile 明确许可）。
-6. PCR_PID 不等于 Null PID；如果 PCR PID 是某个 ES PID，则该 PID Packet 必须能够容纳/承载所需 PCR。
+6. PCR_PID 不等于 Null PID（项目收紧规则：H.222.0 §2.4.4.8 明确允许无 PCR 关联的私有流 program 将 PCR_PID 置 0x1FFF；MVP 生成器校验按项目规则执行，validator 文案不得将其表述为标准断言）；如果 PCR PID 是某个 ES PID，则该 PID Packet 必须能够容纳/承载所需 PCR。
 7. 不存在的 PMT 或不匹配 program_number 应产生诊断 issue，而不是用默认 PMT 补齐。
 
 ## 9. 错误码
@@ -173,7 +173,7 @@ def parse_pmt_sections(sections: list[PSISection]) -> "PMTTable": ...
 
 ## 13. 交付要求
 
-建议文件：`tables/pat.py`、`tables/pmt.py`、`tables/table_validation.py`；测试：`tests/unit/ts/test_pat.py`、`test_pmt.py`。提交至少一份由本项目 Builder 生成、可被 TSDuck 识别的 `.ts` fixture 的表解码结果。
+建议文件：`ts/tables/pat.py`、`ts/tables/pmt.py`、`ts/tables/table_validation.py`；测试：`tests/unit/ts/test_pat.py`、`test_pmt.py`。提交至少一份由本项目 Builder 生成、可被 TSDuck 识别的 `.ts` fixture 的表解码结果。
 
 ## 14. 参考
 
