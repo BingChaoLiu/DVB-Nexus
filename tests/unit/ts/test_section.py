@@ -792,6 +792,66 @@ class TestSectionAssemblerRecovery:
             "SECTION_LENGTH_EXCEEDS_POLICY"
         ]
 
+    def test_declared_zero_section_completes_at_payload_boundary(self) -> None:
+        """A declared section_length=0 section (3-byte total) whose header
+        ends exactly at the payload boundary completes in place — flush()
+        yields the same parse verdict as the trailing-bytes control and
+        never the self-contradictory SECTION_TRUNCATED_AT_EOF "3 of 3
+        bytes" (#35 difference report §4 corner)."""
+        from ts.section_assembler import (
+            SECTION_TRUNCATED_AT_EOF,
+            SectionAssembler,
+        )
+
+        # 3-byte section under the 0x00 policy: table_id, flags byte with
+        # section_syntax=1, section_length=0 — total == 3 == header size.
+        SEC3 = bytes((0x00, 0x80, 0x00))
+
+        # Variant A (corner): the section ends EXACTLY at the payload end
+        # and the stream ends right there.
+        assembler = SectionAssembler(0x100, _resolver(_assembler_policies()))
+        assert assembler.push(_packet(b"\x00" + SEC3, pusi=True, cc=0)) == []
+        corner_codes = [issue.code for issue in assembler.flush()]
+        assert SECTION_TRUNCATED_AT_EOF not in corner_codes
+
+        # Variant B (control): same section with trailing bytes completes
+        # inside the same push; flush() carries only the parse verdict.
+        control = SectionAssembler(0x100, _resolver(_assembler_policies()))
+        # testdata-ok: 8 stuffing bytes are filler after the section end, not expected-value material
+        assert control.push(
+            _packet(b"\x00" + SEC3 + b"\xFF" * 8, pusi=True, cc=0)
+        ) == []
+        control_codes = [issue.code for issue in control.flush()]
+        assert SECTION_TRUNCATED_AT_EOF not in control_codes
+
+        # Corner and control must now agree on the verdict (the 3-byte
+        # long-form section is too short for the 5 public header bytes).
+        assert corner_codes == control_codes == ["SECTION_LONG_HEADER_TRUNCATED"]
+
+        # The framing state cleared: a PUSI=0 payload is not stitched on.
+        assert assembler.push(_packet(b"\xde\xad\xbe\xef", cc=1)) == []
+        assert [issue.code for issue in assembler.flush()] == [
+            "SECTION_CONTINUATION_WITHOUT_START"
+        ]
+
+    def test_declared_zero_unknown_table_id_completes_in_place(self) -> None:
+        """The skip-mode path (unknown table_id) completes a declared
+        section_length=0 section in place too: flush() keeps only the
+        SECTION_TABLE_ID_UNEXPECTED event, no stale truncation event."""
+        from ts.section_assembler import (
+            SECTION_TRUNCATED_AT_EOF,
+            SectionAssembler,
+        )
+
+        assembler = SectionAssembler(0x100, _resolver(_assembler_policies()))
+        # table_id 0x71 has no configured policy; declared length 0.
+        assert assembler.push(
+            _packet(b"\x00" + bytes((0x71, 0x80, 0x00)), pusi=True, cc=0)
+        ) == []
+        codes = [issue.code for issue in assembler.flush()]
+        assert codes == ["SECTION_TABLE_ID_UNEXPECTED"]
+        assert SECTION_TRUNCATED_AT_EOF not in codes
+
 
 # ---------------------------------------------------------------------------
 # Primary test REQ-TS-102-006
