@@ -1,0 +1,24 @@
+name: tests-nightly
+
+# SPEC-505 §5：slow 默认本地跑、CI 夜间跑。不进 PR 门（slow 用例改动由
+# 本地/夜间覆盖；夜间红即规格违约信号）。
+on:
+  schedule:
+    # 03:30 UTC daily
+    - cron: "30 3 * * *"
+  workflow_dispatch:
+
+jobs:
+  pytest-slow:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install project with dev dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+      - name: Run slow tests (SPEC-505 §5 nightly)
+        run: pytest -m slow -ra
