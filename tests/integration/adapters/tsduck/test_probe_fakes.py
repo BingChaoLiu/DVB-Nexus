@@ -47,6 +47,9 @@ def _write_fake_tsp(
         lines.append(f"echo {stdout_line}")
     if stderr_line is not None:
         lines.append(f"echo {stderr_line} 1>&2")
+    # Batch-script text is ordinary test text (not TS byte streams); the
+    # bytes material is produced by str.encode, per the 禁手拼字节 gate's
+    # constructor-zone discipline (tests/_support/data_rules.py).
     script.write_bytes(("\r\n".join(lines) + "\r\n").encode("utf-8"))
     return script
 
@@ -135,7 +138,7 @@ class TestNotExecutable:
         # OSError WinError 216, GBK-localized message). fallback_roots=[]
         # keeps the candidate environment hermetic on machines whose real
         # fallback roots contain a working TSDuck.
-        (bin_dir / "tsp.exe").write_bytes(b"not a real PE payload \x00\x01\x02")
+        (bin_dir / "tsp.exe").write_bytes("not a real PE payload \x00\x01\x02".encode("utf-8"))
         monkeypatch.setenv("PATH", str(bin_dir))
 
         result = TSDuckVersionProbe(fallback_roots=[]).probe()
@@ -150,7 +153,7 @@ class TestNotExecutable:
     ):
         broken_dir = tmp_path / "broken"
         broken_dir.mkdir()
-        (broken_dir / "tsp.exe").write_bytes(b"not a real PE payload")
+        (broken_dir / "tsp.exe").write_bytes("not a real PE payload".encode("utf-8"))
         monkeypatch.setenv("PATH", str(broken_dir))
         install_dir = tmp_path / "tsduck-install" / "bin"
         expected_script = _write_fake_tsp(install_dir)
@@ -201,14 +204,15 @@ class TestProbeTimeout:
         bin_dir.mkdir()
         script = bin_dir / "tsp.cmd"
         # ping -n 5 blocks ~4 seconds on the loopback (no network needed).
+        # Absolute path: the test strips PATH to the fake bin dir, so ping
+        # must be resolved explicitly. Batch text via str.encode (禁手拼字节
+        # gate: bytes literals only for golden/deterministic TS material).
         script.write_bytes(
-            b"@echo off\r\n"
-            # Absolute path: the test strips PATH to the fake bin dir, so
-            # ping must be resolved explicitly (also matches the production
-            # discipline that the probe never relies on caller PATH beyond
-            # executable resolution).
-            b"%SystemRoot%\\System32\\ping.exe -n 5 127.0.0.1 >nul\r\n"
-            b"echo " + MEASURED_VERSION_LINE.encode("utf-8") + b" 1>&2\r\n"
+            (
+                "@echo off\r\n"
+                "%SystemRoot%\\System32\\ping.exe -n 5 127.0.0.1 >nul\r\n"
+                f"echo {MEASURED_VERSION_LINE} 1>&2\r\n"
+            ).encode("utf-8")
         )
         monkeypatch.setenv("PATH", str(bin_dir))
         probe = TSDuckVersionProbe(timeout=1.0, fallback_roots=[])
@@ -230,9 +234,11 @@ def _write_counting_tsp(bin_dir: Path) -> Path:
     bin_dir.mkdir(parents=True, exist_ok=True)
     script = bin_dir / "tsp.cmd"
     script.write_bytes(
-        b"@echo off\r\n"
-        b"echo called >>\"%~dp0calls.log\"\r\n"
-        b"echo " + MEASURED_VERSION_LINE.encode("utf-8") + b" 1>&2\r\n"
+        (
+            "@echo off\r\n"
+            'echo called >>"%~dp0calls.log"\r\n'
+            f"echo {MEASURED_VERSION_LINE} 1>&2\r\n"
+        ).encode("utf-8")
     )
     return script
 
@@ -274,7 +280,7 @@ class TestCache:
     def test_failed_probe_is_not_cached(self, tmp_path: Path, monkeypatch):
         bin_dir = tmp_path / "bin"
         bin_dir.mkdir()
-        (bin_dir / "tsp.exe").write_bytes(b"not a real PE payload")
+        (bin_dir / "tsp.exe").write_bytes("not a real PE payload".encode("utf-8"))
         monkeypatch.setenv("PATH", str(bin_dir))
         probe = TSDuckVersionProbe(fallback_roots=[])
 

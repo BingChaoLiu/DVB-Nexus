@@ -92,7 +92,7 @@ class TestScanForVersionMeasuredLine:
         # Future tolerance: a line without the measured "Toolkit -" prefix
         # but carrying the version token (and not a `*` log line) still
         # matches through the loose tier of the measured regex.
-        payload = b"TSDuck version 3.42-4380\r\n"
+        payload = "TSDuck version 3.42-4380\r\n".encode("utf-8")
 
         match = scan_for_version(stdout=payload, stderr=b"")
 
@@ -103,7 +103,7 @@ class TestScanForVersionMeasuredLine:
         # The measured-regex gate: no "version <major>.<minor>-<build>"
         # token anywhere in either stream → no match (exit 0 never gates,
         # ticket #3 — garbage stdout payloads parse to nothing here).
-        assert scan_for_version(b"hello garbage world", b"") is None
+        assert scan_for_version("hello garbage world".encode("utf-8"), b"") is None
         assert scan_for_version(b"", b"\r\n\r\n") is None
 
     def test_gbk_encoded_stderr_decodes_via_fallback(self):
