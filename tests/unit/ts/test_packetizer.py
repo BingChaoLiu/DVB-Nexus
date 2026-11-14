@@ -641,3 +641,150 @@ class TestPacketizerCC:
             build_pcr_only_packet(100, make_pcr(), "not-an-allocator")  # type: ignore[arg-type]
         with pytest.raises(PacketizationError, match="PACKETIZER_PID_INVALID"):
             build_pcr_only_packet(0x2000, make_pcr(), alloc)
+
+
+# ---------------------------------------------------------------------------
+# Primary test REQ-TS-106-006
+# ---------------------------------------------------------------------------
+
+
+class TestPacketizerRoundTrip:
+    """REQ-TS-106-006: Section/PES 双向重组 round-trip 通过."""
+
+    def test_packetizer_round_trip(self) -> None:
+        """SPEC-102/SPEC-104 assembler 反向重组, bytes 与原始输入完全一致."""
+        from ts.cc import CCAllocator
+        from ts.packetizer.pes_packetizer import PESPacketizer
+        from ts.packetizer.section_packetizer import SectionPacketizer
+        from ts.pes import serialize_pes
+        from ts.pes_assembler import PESAssembler
+        from ts.section_assembler import SectionAssembler
+
+        # --- Sections: reassemble through the SPEC-102 SectionAssembler ---
+        # Total size 3 (declared section_length=0) is excluded here: the
+        # packetizer frames it correctly (see the size matrix in
+        # test_packetizer_packet_size), but the upstream SectionAssembler's
+        # completion branch is not reached when a section ends exactly at
+        # the payload end of the header-bearing packet (recorded in the
+        # task report for ticket #29). Total 4 = declared length 1 covers
+        # the spec's smallest single-packet section.
+        for size in (4, 100, 182, 183, 184, 185, 366, 367, 368, 900):
+            sec = make_section(size)
+            packets = list(
+                SectionPacketizer(100, CCAllocator()).packetize(sec)
+            )
+            assembler = SectionAssembler(100, _policy)
+            sections: list = []
+            for pkt in packets:
+                sections.extend(assembler.push(pkt))
+            assert assembler.flush() == []  # no partial-section issues
+            assert len(sections) == 1, f"section size {size}: {len(sections)} sections"
+            assert sections[0].raw_bytes == sec
+
+        # --- PES: reassemble through the SPEC-104 PESAssembler ---
+        for size in (9, 100, 176, 183, 184, 185, 400):
+            pes = make_pes_bytes(size)
+            packets = list(PESPacketizer(200, CCAllocator()).packetize(pes))
+            assembler = PESAssembler(200, max_buffer_bytes=1 << 20)
+            pes_packets: list = []
+            for pkt in packets:
+                pes_packets.extend(assembler.push(pkt))
+            assert len(pes_packets) == 1, f"PES size {size}: {len(pes_packets)} PES"
+            assert serialize_pes(pes_packets[0]) == pes
+
+    def test_round_trip_with_pcr_and_random_access(self) -> None:
+        """PCR 附着 / RAI 标记的 PES round-trip 依旧 byte-exact (AF 不进重组)."""
+        from ts.cc import CCAllocator
+        from ts.packetizer.pes_packetizer import PESPacketizer
+        from ts.pes import serialize_pes
+        from ts.pes_assembler import PESAssembler
+
+        pcr = make_pcr()
+        for size, kwargs in (
+            (100, {"first_packet_pcr": pcr}),
+            (176, {"first_packet_pcr": pcr, "random_access": True}),
+            (200, {"random_access": True}),
+            (400, {"first_packet_pcr": pcr, "random_access": True}),
+        ):
+            pes = make_pes_bytes(size)
+            packets = list(
+                PESPacketizer(200, CCAllocator()).packetize(pes, **kwargs)
+            )
+            assembler = PESAssembler(200, max_buffer_bytes=1 << 20)
+            pes_packets: list = []
+            for pkt in packets:
+                pes_packets.extend(assembler.push(pkt))
+            assert assembler.flush() == []
+            assert len(pes_packets) == 1, f"PES size {size} {kwargs}"
+            assert serialize_pes(pes_packets[0]) == pes
+
+    def test_round_trip_survives_interleaved_pcr_only_packets(self) -> None:
+        """PCR-only 包(payload=None)被 assembler 忽略, 不破坏重组 (§7 AFC=10)."""
+        from ts.cc import CCAllocator
+        from ts.packetizer.pes_packetizer import PESPacketizer, build_pcr_only_packet
+        from ts.packetizer.section_packetizer import SectionPacketizer
+        from ts.pes import serialize_pes
+        from ts.pes_assembler import PESAssembler
+        from ts.section_assembler import SectionAssembler
+
+        alloc = CCAllocator()
+        # One PCR-only packet per PID: adaptation-only reuse keeps each
+        # PID's CC stable (see test_packetizer_cc).
+        section_pcr_pkt = build_pcr_only_packet(100, make_pcr(), alloc)
+        pes_pcr_pkt = build_pcr_only_packet(200, make_pcr(), alloc)
+
+        # Sections: PCR-only packets interleaved before/between/after.
+        sec = make_section(368)  # 3 packets
+        packets = list(SectionPacketizer(100, alloc).packetize(sec))
+        assembler = SectionAssembler(100, _policy)
+        sections: list = []
+        sections.extend(assembler.push(section_pcr_pkt))
+        for pkt in packets:
+            sections.extend(assembler.push(section_pcr_pkt))
+            sections.extend(assembler.push(pkt))
+        sections.extend(assembler.push(section_pcr_pkt))
+        assert assembler.flush() == []
+        assert len(sections) == 1
+        assert sections[0].raw_bytes == sec
+
+        # PES: same interleave on the PES assembler.
+        pes = make_pes_bytes(200)  # 2 packets
+        packets = list(PESPacketizer(200, alloc).packetize(pes))
+        assembler = PESAssembler(200, max_buffer_bytes=1 << 20)
+        pes_packets: list = []
+        pes_packets.extend(assembler.push(pes_pcr_pkt))
+        for pkt in packets:
+            pes_packets.extend(assembler.push(pes_pcr_pkt))
+            pes_packets.extend(assembler.push(pkt))
+        pes_packets.extend(assembler.push(pes_pcr_pkt))
+        assert assembler.flush() == []
+        assert len(pes_packets) == 1
+        assert serialize_pes(pes_packets[0]) == pes
+
+    def test_round_trip_unbounded_video_pes_at_next_pusi(self) -> None:
+        """declared=0 的 unbounded 视频 PES 以下一个 PUSI 为完成边界重组."""
+        from ts.cc import CCAllocator
+        from ts.packetizer.pes_packetizer import PESPacketizer
+        from ts.pes import serialize_pes
+        from ts.pes_assembler import PESAssembler
+
+        # Unbounded video PES: stream_id 0xE0, declared length 0.
+        payload = bytes((i * 13 + 5) & 0x7E for i in range(50))
+        unbounded = b"\x00\x00\x01\xe0\x00\x00\x80\x00\x00" + payload
+        bounded = make_pes_bytes(100)
+        pktz = PESPacketizer(200, CCAllocator())
+        assembler = PESAssembler(200, max_buffer_bytes=1 << 20)
+
+        collected: list = []
+        # PES 1 (unbounded): no completion inside its own packets (§7.4).
+        for pkt in pktz.packetize(unbounded):
+            collected.extend(assembler.push(pkt))
+        assert collected == []
+        # PES 2 (bounded): its PUSI resolves PES 1, its length completes it.
+        for pkt in pktz.packetize(bounded):
+            collected.extend(assembler.push(pkt))
+        assert len(collected) == 2
+        assert (
+            serialize_pes(collected[0], packet_length_mode="zero") == unbounded
+        )
+        assert serialize_pes(collected[1]) == bounded
