@@ -29,7 +29,6 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -125,9 +124,9 @@ def _file_sha256(path: Path) -> str:
 
 def _tsanalyze_sibling(tsp_executable: Path) -> Path:
     """``tsanalyze`` lives next to the probed ``tsp`` (one install per bin
-    directory — tsduck-env.md §2.1, #35 ts_e2e seam-3 layout)."""
-    name = "tsanalyze.exe" if sys.platform == "win32" else "tsanalyze"
-    return tsp_executable.parent / name
+    directory — tsduck-env.md §2.1, #35 ts_e2e seam-3 layout). The on-disk
+    name comes from command_builder's single tool-name source (B3)."""
+    return tsp_executable.parent / command_builder.ANALYZE_EXECUTABLE
 
 
 class TSDuckClient:
