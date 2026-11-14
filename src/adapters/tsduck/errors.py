@@ -68,10 +68,17 @@ class TSDuckSpawnFailedError(TSDuckAdapterError):
     nonzero is NOT this error — ticket #3 makes the JSON content the only
     validity arbiter, so a started-but-failed run falls to the content gate.
     API mapping: 500.
+
+    ``call_record`` (set by the client) carries the §7 nine-field invocation
+    record — the recording duty holds on spawn failures too; fields with no
+    data (exit code, captured streams) carry explicit ``None``, never a
+    fabricated value.
     """
 
     code = "TSDUCK_SPAWN_FAILED"
     http_status = 500
+
+    call_record: "TSDuckCallRecord | None" = None
 
 
 class TSDuckTimeoutError(TSDuckAdapterError):
@@ -80,13 +87,15 @@ class TSDuckTimeoutError(TSDuckAdapterError):
 
     ``partial_result`` (set by the process runner) carries the partial
     stdout/stderr captured up to the kill — the partial-log retention the
-    §9 row mandates (排查依据).
+    §9 row mandates (排查依据). ``call_record`` (set by the client) carries
+    the §7 nine-field invocation record built from that partial run.
     """
 
     code = "TSDUCK_TIMEOUT"
     http_status = 500
 
     partial_result: "ProcessResult | None" = None
+    call_record: "TSDuckCallRecord | None" = None
 
 
 class TSDuckCancelledError(TSDuckAdapterError):
@@ -94,13 +103,16 @@ class TSDuckCancelledError(TSDuckAdapterError):
     (SPEC-308 §9 row 5). API mapping: 409.
 
     ``partial_result`` (set by the process runner) carries the partial
-    stdout/stderr captured up to the kill.
+    stdout/stderr captured up to the kill. ``call_record`` (set by the
+    client) carries the §7 nine-field invocation record built from that
+    partial run.
     """
 
     code = "TSDUCK_CANCELLED"
     http_status = 409
 
     partial_result: "ProcessResult | None" = None
+    call_record: "TSDuckCallRecord | None" = None
 
 
 class TSDuckJsonGateError(TSDuckAdapterError):

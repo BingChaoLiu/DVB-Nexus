@@ -24,7 +24,10 @@ import pytest
 from adapters.tsduck.client import TSDuckClient
 from adapters.tsduck.errors import (
     TSDuckNotFoundError,
+    TSDuckCancelledError,
     TSDuckJsonGateError,
+    TSDuckSpawnFailedError,
+    TSDuckTimeoutError,
     TSDuckVersionUnsupportedError,
 )
 from adapters.tsduck.process import ProcessResult
@@ -78,6 +81,23 @@ class FakeRunner:
     async def run_async(self, argv, *, timeout=None, env=None, on_start=None):
         self.calls.append({"argv": list(argv), "timeout": timeout, "env": env})
         return self.results.pop(0)
+
+
+class FailingRunner:
+    """Runner seam for the §9 failure family: raises like the real runner.
+
+    The real runner (process.py) raises TSDuckTimeoutError/TSDuckCancelled-
+    Error with ``partial_result`` attached (the drained partial run) and
+    TSDuckSpawnFailedError bare; this fake reproduces exactly that surface
+    so the client's failure-path recording duty (review fix A1) is
+    exercised without spawning anything.
+    """
+
+    def __init__(self, error: Exception) -> None:
+        self.error = error
+
+    async def run_async(self, argv, *, timeout=None, env=None, on_start=None):
+        raise self.error
 
 
 def _fake_version(tsp_path: Path, version: str = FAKE_VERSION) -> TSDuckVersion:
@@ -234,6 +254,116 @@ class TestAnalyzeOrchestration:
         assert record.exit_code == 0
         assert record.input_artifact_sha256 == hashlib.sha256(bytes(16)).hexdigest()
         assert record.run_id == "run-9"
+
+
+class TestFailurePathCallRecords:
+    """§7 recording duty holds on the §9 failure family (SPEC-308 §7/§9,
+    review fix A1, REQ-TSK-308-002): timeout/cancellation/spawn failure must
+    still produce the nine-field call record — it travels on the raised
+    error as ``call_record``; fields with no data are explicit ``None``,
+    never fabricated."""
+
+    def test_timeout_record_nine_fields_from_the_partial_run(
+        self, tmp_path, fake_install
+    ):
+        ts_file = tmp_path / "input.ts"
+        ts_file.write_bytes(bytes(32))
+        error = TSDuckTimeoutError("tree killed after timeout")
+        # The real runner's partial shape: drained streams, kill exit code.
+        error.partial_result = ProcessResult(
+            argv=(),
+            exit_code=1,
+            stdout=b"",
+            stderr=b"partial stderr bytes",
+            duration_seconds=2.0,
+            pid=99,
+            timed_out=True,
+        )
+        client = TSDuckClient(
+            probe=_available_probe(fake_install / "tsp.exe"),
+            runner=FailingRunner(error),
+        )
+
+        with pytest.raises(TSDuckTimeoutError) as excinfo:
+            asyncio.run(client.analyze(ts_file, run_id="run-timeout"))
+
+        record = excinfo.value.call_record
+        assert record is not None
+        assert excinfo.value.partial_result is error.partial_result
+        assert record.version == FAKE_VERSION
+        assert record.executable_path is not None
+        assert Path(record.executable_path).is_file()
+        assert record.argv == ("tsanalyze", "--json", str(ts_file))
+        assert record.started_at <= record.finished_at
+        assert record.exit_code == 1
+        assert record.stdout_text == ""  # captured-but-empty is data
+        assert record.stderr_text == "partial stderr bytes"  # display decode
+        assert record.input_artifact_sha256 == hashlib.sha256(bytes(32)).hexdigest()
+        assert record.run_id == "run-timeout"
+
+    def test_cancelled_record_nine_fields_from_the_partial_run(
+        self, tmp_path, fake_install
+    ):
+        ts_file = tmp_path / "input.ts"
+        ts_file.write_bytes(bytes(16))
+        error = TSDuckCancelledError("tree killed on cancellation")
+        error.partial_result = ProcessResult(
+            argv=(),
+            exit_code=1,
+            stdout=b"partial stdout bytes",
+            stderr=b"",
+            duration_seconds=0.5,
+            pid=7,
+            cancelled=True,
+        )
+        client = TSDuckClient(
+            probe=_available_probe(fake_install / "tsp.exe"),
+            runner=FailingRunner(error),
+        )
+
+        with pytest.raises(TSDuckCancelledError) as excinfo:
+            asyncio.run(client.analyze(ts_file, run_id="run-cancel"))
+
+        record = excinfo.value.call_record
+        assert record is not None
+        assert record.version == FAKE_VERSION
+        assert record.argv == ("tsanalyze", "--json", str(ts_file))
+        assert record.started_at <= record.finished_at
+        assert record.exit_code == 1
+        assert record.stdout_text == "partial stdout bytes"
+        assert record.stderr_text == ""
+        assert record.input_artifact_sha256 == hashlib.sha256(bytes(16)).hexdigest()
+        assert record.run_id == "run-cancel"
+
+    def test_spawn_failure_record_carries_explicit_none_for_no_data(
+        self, tmp_path, fake_install
+    ):
+        """Nothing was spawned and nothing was captured: exit code and the
+        two stream fields are explicit ``None`` — 不虚构 (§7 duty still
+        holds for the fields that DO have data)."""
+        ts_file = tmp_path / "input.ts"
+        ts_file.write_bytes(bytes(16))
+        client = TSDuckClient(
+            probe=_available_probe(fake_install / "tsp.exe"),
+            runner=FailingRunner(TSDuckSpawnFailedError("spawn boom")),
+        )
+
+        with pytest.raises(TSDuckSpawnFailedError) as excinfo:
+            asyncio.run(client.analyze(ts_file, run_id="run-spawn"))
+
+        record = excinfo.value.call_record
+        assert record is not None
+        assert record.version == FAKE_VERSION
+        assert record.executable_path is not None
+        assert Path(record.executable_path).is_file()
+        assert record.argv == ("tsanalyze", "--json", str(ts_file))
+        assert record.started_at <= record.finished_at
+        assert record.exit_code is None
+        assert record.stdout_text is None
+        assert record.stderr_text is None
+        # the pre-spawn hash (B9) is real data even when the spawn failed:
+        assert record.input_artifact_sha256 == hashlib.sha256(bytes(16)).hexdigest()
+        assert record.run_id == "run-spawn"
 
 
 class TestClientErrorFamily:
