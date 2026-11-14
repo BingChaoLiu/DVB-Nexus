@@ -361,14 +361,24 @@ class TSDuckVersionProbe:
                 timeout=self._timeout,
                 check=False,
             )
-        except (OSError, subprocess.TimeoutExpired) as error:
+        except subprocess.TimeoutExpired as error:
             return TSDuckProbeResult(
                 available=False,
                 version=None,
                 reason=TSDuckUnavailableReason.NOT_EXECUTABLE,
                 detail=(
-                    f"{str(executable)!r} --version failed: {error!r} "
-                    "(spawn error / timeout; stderr text is display-only)"
+                    f"{str(executable)!r} --version timed out after "
+                    f"{self._timeout}s ({error!r}); stderr text is display-only"
+                ),
+            )
+        except OSError as error:
+            return TSDuckProbeResult(
+                available=False,
+                version=None,
+                reason=TSDuckUnavailableReason.NOT_EXECUTABLE,
+                detail=(
+                    f"{str(executable)!r} --version failed to spawn: {error!r} "
+                    "(stderr text is display-only)"
                 ),
             )
 

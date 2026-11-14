@@ -124,3 +124,98 @@ class TestNotInstalled:
         assert result.version is None
         assert result.reason is TSDuckUnavailableReason.NOT_INSTALLED
         assert result.detail
+
+
+class TestNotExecutable:
+    def test_non_pe_candidate_yields_not_executable(self, tmp_path, monkeypatch):
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+        # A PATHEXT-visible file whose bytes are not a valid executable:
+        # resolution finds it, CreateProcess refuses it (measured:
+        # OSError WinError 216, GBK-localized message). fallback_roots=[]
+        # keeps the candidate environment hermetic on machines whose real
+        # fallback roots contain a working TSDuck.
+        (bin_dir / "tsp.exe").write_bytes(b"not a real PE payload \x00\x01\x02")
+        monkeypatch.setenv("PATH", str(bin_dir))
+
+        result = TSDuckVersionProbe(fallback_roots=[]).probe()
+
+        assert result.available is False
+        assert result.version is None
+        assert result.reason is TSDuckUnavailableReason.NOT_EXECUTABLE
+        assert result.detail
+
+    def test_unusable_path_candidate_falls_through_to_fallback(
+        self, tmp_path, monkeypatch
+    ):
+        broken_dir = tmp_path / "broken"
+        broken_dir.mkdir()
+        (broken_dir / "tsp.exe").write_bytes(b"not a real PE payload")
+        monkeypatch.setenv("PATH", str(broken_dir))
+        install_dir = tmp_path / "tsduck-install" / "bin"
+        expected_script = _write_fake_tsp(install_dir)
+
+        result = TSDuckVersionProbe(fallback_roots=[install_dir]).probe()
+
+        assert result.available is True
+        assert result.version is not None
+        assert result.version.resolution is ResolutionSource.FALLBACK
+        assert result.version.executable == expected_script
+
+
+class TestVersionGate:
+    def test_exit0_garbage_output_is_version_unparseable(self, tmp_path, monkeypatch):
+        # Ticket #3 measured fact: garbage in, exit 0 out — the version
+        # pattern, not the exit code, is the validity gate.
+        bin_dir = tmp_path / "bin"
+        _write_fake_tsp(bin_dir, stderr_line="hello garbage world")
+        monkeypatch.setenv("PATH", str(bin_dir))
+
+        result = TSDuckVersionProbe(fallback_roots=[]).probe()
+
+        assert result.available is False
+        assert result.version is None
+        assert result.reason is TSDuckUnavailableReason.VERSION_UNPARSEABLE
+        assert "exit 0 never proves validity" in result.detail
+
+    def test_version_line_on_stdout_beats_noise_stderr(self, tmp_path, monkeypatch):
+        # Both-streams seam end-to-end: version token on stdout, GBK-style
+        # noise on stderr — stdout match wins, stderr is never parsed.
+        bin_dir = tmp_path / "bin"
+        _write_fake_tsp(
+            bin_dir, stdout_line=MEASURED_VERSION_LINE, stderr_line="* Error: noise"
+        )
+        monkeypatch.setenv("PATH", str(bin_dir))
+
+        result = TSDuckVersionProbe().probe()
+
+        assert result.available is True
+        assert result.version is not None
+        assert result.version.version == "3.40-4165"
+        assert result.version.stream is VersionStream.STDOUT
+
+
+class TestProbeTimeout:
+    def test_blocking_candidate_yields_not_executable(self, tmp_path, monkeypatch):
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+        script = bin_dir / "tsp.cmd"
+        # ping -n 5 blocks ~4 seconds on the loopback (no network needed).
+        script.write_bytes(
+            b"@echo off\r\n"
+            # Absolute path: the test strips PATH to the fake bin dir, so
+            # ping must be resolved explicitly (also matches the production
+            # discipline that the probe never relies on caller PATH beyond
+            # executable resolution).
+            b"%SystemRoot%\\System32\\ping.exe -n 5 127.0.0.1 >nul\r\n"
+            b"echo " + MEASURED_VERSION_LINE.encode("utf-8") + b" 1>&2\r\n"
+        )
+        monkeypatch.setenv("PATH", str(bin_dir))
+        probe = TSDuckVersionProbe(timeout=1.0, fallback_roots=[])
+
+        result = probe.probe()
+
+        assert result.available is False
+        assert result.version is None
+        assert result.reason is TSDuckUnavailableReason.NOT_EXECUTABLE
+        assert "timed out" in result.detail
