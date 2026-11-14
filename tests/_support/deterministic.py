@@ -31,6 +31,15 @@ SEED_MAX: int = 2**64 - 1
 
 
 def _check_seed(seed: int) -> int:
+    return check_seed(seed)
+
+
+def check_seed(seed: int) -> int:
+    """Validate the SPEC-200 seed domain (uint64); returns the seed.
+
+    Public single source of truth for seed-domain validation, shared by the
+    deterministic constructors and the session/run factory.
+    """
     if not isinstance(seed, int) or isinstance(seed, bool):
         raise TypeError(f"seed must be int, got {type(seed).__name__}")
     if not SEED_MIN <= seed <= SEED_MAX:

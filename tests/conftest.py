@@ -23,6 +23,7 @@ import pytest
 
 from tests._support.artifact_paths import ArtifactStoreHandle
 from tests._support.markers import check_layer_markers, layer_for_path
+from tests._support.session_factory import SessionRunFactory
 from tests._support.sqlite_support import JournalHandle, default_migrations_dir
 from tests._support.tsduck_probe import TSP_ENV_OVERRIDE, probe_tsp
 
@@ -137,3 +138,16 @@ def tsduck() -> "TSDuckProbe":
         )
     assert isinstance(probe, TSDuckProbe)
     return probe
+
+
+@pytest.fixture
+def session_run() -> SessionRunFactory:
+    """SPEC-505 §4 `session_run`: deterministic session/run factory
+    (SPEC-200/203).
+
+    Fixed seed + SPEC-201 frozen clock config; identity derived purely from
+    the seed (no wall clock). Each ``create()`` returns a brand-new frozen
+    plan — tests own their plans, nothing is shared mutably. Migrates to the
+    real SPEC-200 domain models when they land (field names already match).
+    """
+    return SessionRunFactory()
