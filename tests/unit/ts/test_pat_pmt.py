@@ -398,3 +398,161 @@ class TestTableMetadataAndCrc:
             streams=tuple(ElementaryStream(0x1B, 0x0100 + n) for n in range(201)),
         )
         assert PMTBuilder().build(max_pmt).section_length == 1021
+
+
+class TestProgramPidMapping:
+    """REQ-TS-103-004 — program 0 semantics + PAT->PMT->ES association (primary)."""
+
+    def test_program_pid_mapping(self) -> None:
+        from ts.crc import mpeg2_crc32
+        from ts.errors import InvalidSectionError
+        from ts.issues import ValidationIssue
+        from ts.section import parse_section
+        from ts.tables.pat import (
+            PAT_SECTION_POLICY,
+            PATBuilder,
+            PATProgram,
+            PATSection,
+            parse_pat,
+        )
+        from ts.tables.pmt import (
+            PMT_SECTION_POLICY,
+            PMTBuilder,
+            PMTSection,
+            ElementaryStream,
+            parse_pmt,
+        )
+        from ts.tables.table_validation import validate_pid_associations
+
+        # program_number=0 is the network_PID entry (NIT), never a PMT.
+        pat = PATSection(
+            transport_stream_id=1,
+            version_number=0,
+            current_next_indicator=True,
+            section_number=0,
+            last_section_number=0,
+            programs=(
+                PATProgram(0, 0x0010),  # network_PID
+                PATProgram(1, 0x1000),
+            ),
+        )
+        back = parse_pat(parse_section(PATBuilder().build(pat).raw_bytes, PAT_SECTION_POLICY))
+        assert back.programs[0] == PATProgram(0, 0x0010)
+        assert back.programs[1] == PATProgram(1, 0x1000)
+
+        # A PMT cannot be created for program 0 (§5 hard rule).
+        with pytest.raises(ValueError):
+            PMTSection(
+                program_number=0, version_number=0,
+                current_next_indicator=True, section_number=0,
+                last_section_number=0, pcr_pid=0x1000,
+                program_descriptors=b"", streams=(),
+            )
+        # ... and a wire PMT claiming program 0 is an association mismatch.
+        rogue = bytearray(
+            PMTBuilder().build(
+                PMTSection(1, 0, True, 0, 0, 0x1000, b"", ())
+            ).raw_bytes
+        )
+        rogue[3] = 0x00
+        rogue[4] = 0x00
+        rogue[-4:] = mpeg2_crc32(bytes(rogue[:-4])).to_bytes(4, "big")
+        with pytest.raises(InvalidSectionError) as excinfo:
+            parse_pmt(parse_section(bytes(rogue), PMT_SECTION_POLICY))
+        assert "PAT_PMT_PROGRAM_MISMATCH" in str(excinfo.value)
+
+        # Happy association matrix: no diagnostics.
+        pmt1 = PMTSection(1, 0, True, 0, 0, 0x1000, b"", (
+            ElementaryStream(0x1B, 0x0100),
+            ElementaryStream(0x0F, 0x0101),
+        ))
+        pmt2 = PMTSection(2, 0, True, 0, 0, 0x1001, b"", (
+            ElementaryStream(0x1B, 0x0102),
+        ))
+        pat_ok = PATSection(1, 0, True, 0, 0, (
+            PATProgram(0, 0x0010), PATProgram(1, 0x1000), PATProgram(2, 0x1001),
+        ))
+        assert validate_pid_associations(0x0000, pat_ok, [(0x1000, pmt1), (0x1001, pmt2)]) == []
+
+        # Ruling #9 PMT_PID_MISMATCH semantics: the PAT entry is rewritten
+        # (CRC recomputed by the injector), the association check must
+        # surface a diagnostic — no default PMT is substituted (§8.7).
+        pat_faulted = PATSection(1, 0, True, 0, 0, (
+            PATProgram(1, 0x0500),  # rewritten: wrong PMT PID
+            PATProgram(2, 0x1001),
+        ))
+        issues = validate_pid_associations(0x0000, pat_faulted, [(0x1000, pmt1), (0x1001, pmt2)])
+        codes = [issue.code for issue in issues]
+        assert codes == ["PAT_PMT_PROGRAM_MISMATCH"]
+        assert "0x0500" in issues[0].message
+        assert "0x1000" in issues[0].message
+        assert all(issue.severity == "error" for issue in issues)
+
+        # A rewritten PID pointing where no PMT exists at all.
+        issues = validate_pid_associations(0x0000, pat_faulted, [(0x1001, pmt2)])
+        assert [issue.code for issue in issues] == ["PAT_PMT_PROGRAM_MISMATCH"]
+        assert "no PMT found" in issues[0].message
+
+        # PMT whose program_number matches no PAT entry. With only the
+        # orphan PMT provided, PAT programs 1 and 2 are also unmatched
+        # (§8.7 diagnostics for every association hole).
+        orphan = PMTSection(9, 0, True, 0, 0, 0x1002, b"", ())
+        issues = validate_pid_associations(0x0000, pat_ok, [(0x1002, orphan)])
+        assert [issue.code for issue in issues] == ["PAT_PMT_PROGRAM_MISMATCH"] * 3
+        assert any("no matching PAT entry" in issue.message for issue in issues)
+
+        # PAT not on PID 0x0000 (§8.1).
+        issues = validate_pid_associations(0x0001, pat_ok, [(0x1000, pmt1), (0x1001, pmt2)])
+        assert [issue.code for issue in issues] == ["PAT_PID_INVALID"]
+
+        # PAT entries may not map to the PAT PID or the Null PID (§7).
+        for bad_pid in (0x0000, 0x1FFF):
+            bad = PATSection(1, 0, True, 0, 0, (PATProgram(1, bad_pid),))
+            issues = validate_pid_associations(0x0000, bad, [])
+            assert [issue.code for issue in issues] == ["PAT_PMTPID_INVALID"]
+
+        # Duplicate program_number entries in one PAT (§8.2 ambiguity);
+        # with no PMTs provided the two entries are also unmatched, so the
+        # ambiguity diagnostic arrives first alongside §8.7 holes.
+        dup = PATSection(1, 0, True, 0, 0, (
+            PATProgram(1, 0x1000), PATProgram(1, 0x1001),
+        ))
+        issues = validate_pid_associations(0x0000, dup, [])
+        assert issues[0].code == "PAT_PROGRAM_NUMBER_INVALID"
+        assert issues[1].code == "PAT_PMT_PROGRAM_MISMATCH"
+
+        # ES/PCR PID policy (§8.4/§8.6), checked against a single-program
+        # PAT so association findings do not mix into the expectations.
+        pat_single = PATSection(1, 0, True, 0, 0, (PATProgram(1, 0x1000),))
+        # PCR_PID=0x1FFF is the project's tightened rule — the wording must
+        # not claim a standard violation.
+        no_pcr = PMTSection(1, 0, True, 0, 0, 0x1FFF, b"", (
+            ElementaryStream(0x1B, 0x0100),
+        ))
+        issues = validate_pid_associations(0x0000, pat_single, [(0x1000, no_pcr)])
+        assert [issue.code for issue in issues] == ["PMT_PID_INVALID"]
+        assert "project rule" in issues[0].message
+        assert "H.222.0" in issues[0].message
+
+        for bad_pid in (0x0000, 0x1FFF):
+            bad_pcr = PMTSection(1, 0, True, 0, 0, bad_pid, b"", ())
+            issues = validate_pid_associations(0x0000, pat_single, [(0x1000, bad_pcr)])
+            assert [issue.code for issue in issues] == ["PMT_PID_INVALID"]
+            bad_es = PMTSection(1, 0, True, 0, 0, 0x1000, b"", (
+                ElementaryStream(0x1B, bad_pid),
+            ))
+            issues = validate_pid_associations(0x0000, pat_single, [(0x1000, bad_es)])
+            assert [issue.code for issue in issues] == ["PMT_PID_INVALID"]
+
+        # Same program's ES PIDs must not repeat (§8.5).
+        dup_es = PMTSection(1, 0, True, 0, 0, 0x1000, b"", (
+            ElementaryStream(0x1B, 0x0100),
+            ElementaryStream(0x0F, 0x0100),  # duplicate PID
+        ))
+        issues = validate_pid_associations(0x0000, pat_single, [(0x1000, dup_es)])
+        assert [issue.code for issue in issues] == ["PMT_PID_INVALID"]
+        assert "0x0100" in issues[0].message
+
+        # PCR riding an ES PID is legal (§8.6 second clause): pmt1 carries
+        # PCR on 0x1000 while its first ES sits on the same PID.
+        assert validate_pid_associations(0x0000, pat_single, [(0x1000, pmt1)]) == []
