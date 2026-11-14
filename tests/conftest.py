@@ -17,10 +17,13 @@ Responsibilities:
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
 import pytest
 
+from tests._support.artifact_paths import ArtifactStoreHandle
 from tests._support.markers import check_layer_markers, layer_for_path
+from tests._support.sqlite_support import JournalHandle, default_migrations_dir
 
 
 def pytest_collection_modifyitems(config, items):
@@ -58,3 +61,55 @@ def _windows_only_platform_guard(request):
             f"running on sys.platform={sys.platform!r} — explicit skip, not silent",
             allow_module_level=False,
         )
+
+
+# ---------------------------------------------------------------------------
+# Core fixture 六件 (SPEC-505 §4). Fixtures are function-scoped: no implicit
+# shared mutable state between fixtures/tests; every test builds its own tmp
+# resources. Immutable probe results may be cached (see tsduck fixture).
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def journal_migrations_dir() -> Path | None:
+    """Where ``journal`` looks for ``NNN_*.sql`` migrations.
+
+    Default: SPEC-502 §11 suggested home ``src/adapters/storage/migrations``
+    when it exists (M0 skeleton: absent → no migrations applied, database
+    starts at ``user_version=0``). Override this fixture in a test module
+    to point at a tmp migrations tree.
+    """
+    return default_migrations_dir()
+
+
+@pytest.fixture
+def journal(tmp_path: Path, journal_migrations_dir: Path | None) -> JournalHandle:
+    """SPEC-505 §4 `journal`: tmp SQLite + 迁移后库 (SPEC-502).
+
+    Chosen variant: tmp **file** database (WAL + migration semantics are
+    only observable on files; SPEC-505 §4 "二选一实现期定"). Applies pending
+    numbered ``.sql`` migrations at setup — missing migrations dir is not an
+    initialization failure (M0 skeleton state), but a failing migration IS a
+    test failure (SPEC-505 §7 不降级跳过).
+    """
+    db_path = tmp_path / "journal.sqlite3"
+    handle = JournalHandle(db_path=db_path, migrations_dir=journal_migrations_dir)
+    try:
+        handle.migrate()
+    except BaseException:
+        handle.close_all()
+        raise
+    yield handle
+    handle.close_all()
+
+
+@pytest.fixture
+def artifact_store(tmp_path: Path) -> ArtifactStoreHandle:
+    """SPEC-505 §4 `artifact_store`: tmp root + 索引库 (SPEC-503).
+
+    Provides the content-addressed root skeleton (``artifacts/`` + ``tmp/``)
+    and the tmp→atomic-rename staging protocol. The index-DB half is the
+    SPEC-502/503 implementation seam (recorded in ticket #22 report); the
+    fixture never fabricates index rows.
+    """
+    return ArtifactStoreHandle(root=tmp_path / "artifact_store")
