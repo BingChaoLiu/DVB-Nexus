@@ -25,6 +25,7 @@ from adapters.tsduck.version import (
     TSDuckUnavailableReason,
     TSDuckVersionProbe,
     VersionStream,
+    extract_version,
 )
 
 pytestmark = [pytest.mark.windows_only]
@@ -65,7 +66,11 @@ class TestPathResolution:
         assert result.available is True
         assert result.reason is None
         assert result.version is not None
-        assert result.version.version == "3.40-4165"
+        # Expected token derived from the scripted input (ticket #70): the
+        # fake's version line is the frozen CANONICAL_VERSION_LINE, so the
+        # parse contract is "extracted token == the token in that line" —
+        # single-sourced, no machine-varying literal (tests/README.md §6).
+        assert result.version.version == extract_version(CANONICAL_VERSION_LINE)
         assert (result.version.major, result.version.minor, result.version.build) == (
             3,
             40,
@@ -194,7 +199,7 @@ class TestVersionGate:
 
         assert result.available is True
         assert result.version is not None
-        assert result.version.version == "3.40-4165"
+        assert result.version.version == extract_version(CANONICAL_VERSION_LINE)
         assert result.version.stream is VersionStream.STDOUT
 
 
@@ -295,4 +300,4 @@ class TestCache:
 
         assert repaired.available is True
         assert repaired.version is not None
-        assert repaired.version.version == "3.40-4165"
+        assert repaired.version.version == extract_version(CANONICAL_VERSION_LINE)
