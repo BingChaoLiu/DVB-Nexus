@@ -27,7 +27,10 @@ _EXPECTATIONS = (
 )
 
 #: Sanctioned L2 verification triple for tmp registrations (SPEC-506 §5 gate,
-#: ticket #38: every loadable registration carries an independent path).
+#: ticket #38: every loadable registration carries an independent path whose
+#: evidence file exists on disk — review fix A2 loader/validator parity).
+#: Tmp registrations carry an absolute evidence path into the test's own tmp
+#: tree; the loader resolves repo-relative refs against REPO_ROOT instead.
 _CROSS_VERIFICATION = {
     "path": "tsduck-cross",
     "direction": "self-generate→tsduck-analyze",
@@ -36,12 +39,22 @@ _CROSS_VERIFICATION = {
 
 
 @pytest.fixture
+def tmp_evidence(tmp_path: Path) -> str:
+    """An existing evidence file for tmp registrations (absolute path)."""
+    evidence = tmp_path / "evidence.md"
+    evidence.write_text("# measured independent verification evidence\n", encoding="utf-8")
+    return str(evidence)
+
+
+@pytest.fixture
 def tmp_golden_root(tmp_path: Path) -> Path:
     return tmp_path / "golden"
 
 
 class TestLoadRegisteredVector:
-    def test_three_piece_vector_loads_with_verified_sha(self, tmp_golden_root):
+    def test_three_piece_vector_loads_with_verified_sha(
+        self, tmp_golden_root, tmp_evidence
+    ):
         ts_bytes = seeded_ts_stream(77, 32)
         write_golden_vector(
             tmp_golden_root,
@@ -52,7 +65,7 @@ class TestLoadRegisteredVector:
             generator_version="tstabcomp (tstduck 3.40-4165)",
             packet_count=32,
             expectations=_EXPECTATIONS,
-            verification=_CROSS_VERIFICATION,
+            verification={**_CROSS_VERIFICATION, "evidence_ref": tmp_evidence},
         )
         vector = GoldenLoader(tmp_golden_root).load("pat-minimal")
         assert vector.vector_id == "pat-minimal"
@@ -67,14 +80,16 @@ class TestLoadRegisteredVector:
             )
         )["sha256"].removeprefix("sha256:")
 
-    def test_sha_prefix_and_bare_hex_both_accepted(self, tmp_golden_root):
+    def test_sha_prefix_and_bare_hex_both_accepted(
+        self, tmp_golden_root, tmp_evidence
+    ):
         ts_bytes = seeded_ts_stream(78, 8)
         write_golden_vector(
             tmp_golden_root,
             "cc-wrap",
             ts_bytes,
             kind="generated_ts",
-            verification=_CROSS_VERIFICATION,
+            verification={**_CROSS_VERIFICATION, "evidence_ref": tmp_evidence},
         )
         manifest_path = tmp_golden_root / "cc-wrap" / "manifest.json"
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -166,13 +181,15 @@ class TestPathSafety:
 
 
 class TestRegisteredEnumeration:
-    def test_registered_ids_lists_complete_trios_only(self, tmp_golden_root):
+    def test_registered_ids_lists_complete_trios_only(
+        self, tmp_golden_root, tmp_evidence
+    ):
         write_golden_vector(
             tmp_golden_root,
             "alpha",
             seeded_ts_stream(86, 8),
             kind="generated_ts",
-            verification=_CROSS_VERIFICATION,
+            verification={**_CROSS_VERIFICATION, "evidence_ref": tmp_evidence},
         )
         # beta has only a .ts — no manifest → not registered
         (tmp_golden_root / "beta").mkdir()
@@ -182,14 +199,16 @@ class TestRegisteredEnumeration:
         loader = GoldenLoader(tmp_golden_root)
         assert loader.registered_ids() == ["alpha"]
 
-    def test_load_all_returns_every_registered_vector(self, tmp_golden_root):
+    def test_load_all_returns_every_registered_vector(
+        self, tmp_golden_root, tmp_evidence
+    ):
         for index, name in enumerate(("alpha", "beta", "gamma")):
             write_golden_vector(
                 tmp_golden_root,
                 name,
                 seeded_ts_stream(90 + index, 8),
                 kind="generated_ts",
-                verification=_CROSS_VERIFICATION,
+                verification={**_CROSS_VERIFICATION, "evidence_ref": tmp_evidence},
             )
         loader = GoldenLoader(tmp_golden_root)
         assert [vector.vector_id for vector in loader.load_all()] == [
