@@ -1,7 +1,7 @@
 ---
 spec_id: TS-CORE-IC-001
 title: TS Core Cross-Module Integration Contract
-version: 0.5.0
+version: 0.5.1
 status: APPROVED
 phase: MVP
 owner: Architecture

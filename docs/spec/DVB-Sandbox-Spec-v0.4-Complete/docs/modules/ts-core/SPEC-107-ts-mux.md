@@ -1,7 +1,7 @@
 ---
 spec_id: SPEC-107
 title: MPEG-TS Multiplexer and CBR Scheduler
-version: 0.5.0
+version: 0.5.1
 status: APPROVED
 phase: MVP
 owner: TS Core
@@ -112,7 +112,7 @@ MVP 必须校验 `target_bitrate_bps > 0`、packet_count 为正数、PID 唯一�
 ### 5.2 表周期
 
 - PAT/PMT period 是仿真配置，不在本 Spec 声称为所有标准 profile 的统一固定值。
-- Generator 默认值应由已批准的 MVP profile 冻结；建议 PAT/PMT 均 100 ms 作为初始默认，但必须在配置/报告中可见。
+- Generator 默认值应由已批准的 MVP profile 冻结；初始默认为错相 PAT 101 ms / PMT 103 ms（#72 裁决：双表同相位重复格与常规 ES pull 会结构性违反 §5 的 deadline 窗），实际生效周期必须在配置/报告中可见。
 - 未来 DVB profile 应按相应规范更新 table repetition 约束，不能将 MPEG 默认配置直接宣称为 DVB 所有网络的合规值。
 
 ### 5.3 PCR 周期
