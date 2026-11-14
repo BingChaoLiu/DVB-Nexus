@@ -476,7 +476,7 @@ class TestPacketizerAdaptationStuffing:
         assert wire[3] >> 4 == 0b11  # AFC=11 adaptation + payload
         assert wire[4] == 182  # adaptation_field_length = 183 - 1
         assert wire[5] == 0x00  # flags: no fields requested
-        assert wire[6:187] == b"\xff" * 181  # stuffing bytes are all 0xFF (§7)
+        assert wire[6:187] == b"\xff" * 181  # testdata-ok: expected AF stuffing region hand-derived from SPEC-106 §7 arithmetic (183 - payload - flags byte); the framing parser under test needs the exact 0xFF fill as the independent wire truth
         assert wire[187] == second.payload[0]  # payload ends the frame
         # 4 + 1 + 182 + 1 = 188 (§7 capacity identity)
 
@@ -504,7 +504,7 @@ class TestPacketizerAdaptationStuffing:
         assert wire[4] == 183  # length byte + body = 184 post-header bytes
         assert wire[5] == 0x10  # PCR_flag set, no other field
         assert decode_pcr(wire[6:12]) == pcr  # 6-byte PCR slot decodes back
-        assert wire[12:] == b"\xff" * 176  # stuffing fills to the frame end
+        assert wire[12:] == b"\xff" * 176  # testdata-ok: expected adaptation-only stuffing region hand-derived from SPEC-106 §7 (184 - length byte - flags - 6 PCR bytes); exact 0xFF fill is the wire truth
 
         # --- first_packet_pcr: minimal AF, payload starts after the region ---
         pes100 = make_pes_bytes(100)
@@ -516,7 +516,7 @@ class TestPacketizerAdaptationStuffing:
         assert wire[4] == 83  # adaptation_field_length = 183 - 100
         assert wire[5] == 0x10  # PCR_flag
         assert decode_pcr(wire[6:12]) == pcr
-        assert wire[12:88] == b"\xff" * 76  # stuffing between PCR and payload
+        assert wire[12:88] == b"\xff" * 76  # testdata-ok: expected stuffing region between PCR field and payload, hand-derived from SPEC-106 §7 arithmetic (183 - 100 payload - 7 AF content); exact 0xFF fill is the wire truth
         assert wire[88:] == pes100  # payload offset: 4 + 1 + 83 = 88
         # 4 + 1 + 83 + 100 = 188 (§7 capacity identity)
 
@@ -543,7 +543,7 @@ class TestPacketizerAdaptationStuffing:
         second_wire = packets[1].to_bytes()
         assert second_wire[5] & 0x40 == 0x00  # continuation has no RAI
         assert second_wire[4] == 165  # 183 - 18 remainder bytes
-        assert second_wire[6:170] == b"\xff" * 164
+        assert second_wire[6:170] == b"\xff" * 164  # testdata-ok: expected last-packet stuffing region hand-derived from SPEC-106 §7 arithmetic (183 - 18 remainder - flags byte); exact 0xFF fill is the wire truth
         assert second_wire[170:] == pes200[182:]
 
         # --- PCR and random_access flags compose in one AF ---
