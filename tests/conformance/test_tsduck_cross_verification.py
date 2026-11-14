@@ -18,11 +18,12 @@ notes, not asserted here).
 from __future__ import annotations
 
 import json
-import shutil
 import subprocess
 from pathlib import Path
 
 import pytest
+
+from tests._support.tsduck_cli import resolve_tool
 
 pytestmark = [pytest.mark.conformance, pytest.mark.tsduck]
 
@@ -34,18 +35,6 @@ PCR_WRAP_TICKS = [
     300,
     600,
 ]
-
-
-def _tool(tsp_path: str, name: str) -> str:
-    """Resolve a TSDuck CLI sibling (case-insensitive disk names, #69)."""
-    directory = Path(tsp_path).parent
-    for entry in directory.iterdir():
-        if entry.name.lower() == f"{name}.exe" or entry.stem.lower() == name.lower():
-            return str(entry)
-    found = shutil.which(name)
-    if found is None:
-        pytest.fail(f"TSDuck CLI tool {name!r} not found next to {tsp_path!r}")
-    return found
 
 
 def _run(argv: list[str], timeout: int = 120) -> subprocess.CompletedProcess:
@@ -85,7 +74,7 @@ def test_tsduck_reassembles_registered_psi_tables(golden_loader, tsduck, vector_
     vector = golden_loader.load(vector_id)
     assert vector.kind == "generated_ts"
     result = _run(
-        [_tool(tsduck.executable, "tstables"), str(_golden_path(vector_id))]
+        [resolve_tool(tsduck.executable, "tstables"), str(_golden_path(vector_id))]
     )
     assert result.returncode == 0
     out = result.stdout.decode("utf-8", "replace")
@@ -139,7 +128,7 @@ def test_tsduck_sees_pat_stopping_at_activation_window(golden_loader, tsduck):
     for label, vector in (("baseline", baseline), ("faulted", faulted)):
         result = _run(
             [
-                _tool(tsduck.executable, "tsanalyze"),
+                resolve_tool(tsduck.executable, "tsanalyze"),
                 "--json",
                 str(_golden_path(vector.vector_id)),
             ]
@@ -162,7 +151,7 @@ def test_tsduck_rejects_crc_invalid_pmt(golden_loader, tsduck):
     ):
         result = _run(
             [
-                _tool(tsduck.executable, "tsanalyze"),
+                resolve_tool(tsduck.executable, "tsanalyze"),
                 "--json",
                 str(_golden_path(vector_id)),
             ]
@@ -192,7 +181,7 @@ def test_tsduck_flags_cc_discontinuity_at_landing_slot(golden_loader, tsduck):
 def test_tsduck_sees_repointed_pat_and_orphan_pmt(golden_loader, tsduck):
     golden_loader.load("pmt-pid-mismatch")  # registered
     result = _run(
-        [_tool(tsduck.executable, "tstables"), str(_golden_path("pmt-pid-mismatch"))]
+        [resolve_tool(tsduck.executable, "tstables"), str(_golden_path("pmt-pid-mismatch"))]
     )
     assert result.returncode == 0
     out = result.stdout.decode("utf-8", "replace")

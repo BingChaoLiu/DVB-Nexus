@@ -39,7 +39,7 @@ import pytest
 
 from tests._support.paths import GOLDEN_ROOT
 from tests._support.tsduck_probe import TSDuckProbe
-from tests.conformance.test_tsduck_cross_verification import _tool
+from tests._support.tsduck_cli import resolve_tool
 
 from adapters.tsduck.client import TSDuckClient
 from adapters.tsduck.process import TSDuckProcessRunner
@@ -317,7 +317,7 @@ def _generate_via_tsduck_toolchain(tsduck: TSDuckProbe, tmp_path: Path) -> Path:
     tools/make_golden_tsduck_vectors.py).  TSDuck failures fail loudly —
     no silent degradation (#3: exit codes are diagnostics, here a nonzero
     toolchain exit is a broken chain, not a data verdict)."""
-    tstabcomp = _tool(tsduck.executable, "tstabcomp")
+    tstabcomp = resolve_tool(tsduck.executable, "tstabcomp")
     xml_dir = tmp_path / "tsxml"
     xml_dir.mkdir()
     binaries = []
