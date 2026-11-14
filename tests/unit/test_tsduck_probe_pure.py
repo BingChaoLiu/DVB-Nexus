@@ -1,14 +1,17 @@
 """Unit-layer tests for TSDuck version-line extraction (pure functions).
 
-The sample line is the **measured asset** from ``docs/research/tsduck-env.md``
-(ticket #3 实测, SPEC-505 §6: TSDuck 输出样例以实测资产为基准，不凭记忆编造):
-``tsp --version`` → ``TSDuck - The MPEG Transport Stream Toolkit - version 3.40-4165``
-with extraction regex ``version (\\d+\\.\\d+-\\d+)``.
+Extraction surface = the PRODUCTION ``adapters.tsduck.version`` module
+(review-fix #3: the ``tsduck`` fixture and this test share the production
+implementation). The sample line is the **measured asset** from
+``docs/research/tsduck-env.md`` (ticket #3 实测, SPEC-505 §6: TSDuck 输出样例
+以实测资产为基准，不凭记忆编造): ``tsp --version`` → ``TSDuck - The MPEG
+Transport Stream Toolkit - version 3.40-4165`` with extraction regex
+``version (\\d+\\.\\d+-\\d+)``.
 """
 
 from __future__ import annotations
 
-from tests._support.tsduck_probe import extract_version
+from adapters.tsduck.version import extract_version
 
 #: Canonical version-line anchor (measured asset: docs/research/tsduck-env.md,
 #: ticket #3). The name describes the line shape, not a claim that TSDuck

@@ -1,45 +1,40 @@
-"""TSDuck CLI availability probe (SPEC-505 §4 ``tsduck`` fixture → SPEC-308).
+"""TSDuck CLI availability probe for the ``tsduck`` fixture (SPEC-505 §4 → SPEC-308).
 
-Behavior per SPEC-505 §5 + #14:
+Consolidation note (review-fix #3): the fixture probe is a thin delegate to
+the PRODUCTION probe (:mod:`adapters.tsduck.version`, ticket #25) — one
+implementation, one policy: PATH-first discovery with fallback roots, the
+two-tier version-line scan (canonical line first, loose regex on non-log
+lines), UTF-8→GBK decode, and both-streams search. The scaffold copy's
+divergent loose-regex/first-line behavior was deleted with its logic; the
+production validity gate (the version pattern, never the exit code —
+ticket #3) now governs the fixture too.
 
-- PATH-first executable discovery, optional explicit override via the
-  ``DVB_NEXUS_TSP_PATH`` environment variable (Windows-first: ``shutil.which``
-  resolves ``tsp.exe`` through PATHEXT natively);
-- ``tsp --version`` output parsed with the **measured** regex from
-  ``docs/research/tsduck-env.md`` (ticket #3 实测，SPEC-505 §6 禁编造 CLI 行为):
-  output line ``TSDuck - The MPEG Transport Stream Toolkit - version 3.40-4165``,
-  extraction ``version (\\d+\\.\\d+-\\d+)``;
-- stderr is the GBK-localized log channel (SPEC-308): decoded
-  ``errors="replace"``, surfaced for display only, never parsed;
-- probe results are frozen dataclasses — caching them is immutable sharing,
-  not mutable fixture state (SPEC-505 §4 隔离纪律).
+What remains here is the fixture seam only:
+
+- the ``DVB_NEXUS_TSP_PATH`` environment override (SPEC-505 §4/#14: tests
+  and non-PATH installs), forwarded to the production probe as the explicit
+  override (unresolvable override → structured unavailability, no PATH
+  fall-through — the caller configured a location explicitly);
+- the frozen fixture-shaped result (:class:`TSDuckProbe`) — frozen
+  dataclasses make per-executable caching immutable sharing, not mutable
+  fixture state (SPEC-505 §4 隔离纪律).
 """
 
 from __future__ import annotations
 
 import os
-import re
-import shutil
-import subprocess
 from dataclasses import dataclass
-from functools import lru_cache
+
+from adapters.tsduck.version import TSDuckProbeResult, TSDuckVersionProbe
 
 #: Env var for an explicit tsp executable override (tests / non-PATH installs).
 TSP_ENV_OVERRIDE = "DVB_NEXUS_TSP_PATH"
 
-#: Canonical version-line anchor (measured asset: docs/research/tsduck-env.md,
-#: ticket #3). The name describes the line shape, not a claim that TSDuck
-#: output is "measured" (CONTEXT.md bans that framing).
-CANONICAL_VERSION_LINE = (
-    "TSDuck - The MPEG Transport Stream Toolkit - version 3.40-4165"
-)
-
-#: Measured extraction regex (docs/research/tsduck-env.md:191).
-_VERSION_PATTERN = re.compile(r"version (\d+\.\d+-\d+)")
-
-#: Probe subprocess budget (version print is instantaneous; generous for
-#: cold-start antivirus scans on Windows).
-_PROBE_TIMEOUT_SECONDS = 30
+#: Dedicated fixture probe instance (production implementation). Successful
+#: probes are cached per resolved executable; failures are never cached —
+#: the production cache discipline (ADR-0005 decision 6), so a transient
+#: failure cannot poison the fixture for later tests.
+_FIXTURE_PROBE = TSDuckVersionProbe()
 
 
 @dataclass(frozen=True)
@@ -53,112 +48,31 @@ class TSDuckProbe:
     detail: str
 
 
-def extract_version(version_line: str) -> str | None:
-    """Extract the version token with the measured regex, else ``None``."""
-    match = _VERSION_PATTERN.search(version_line)
-    return match.group(1) if match else None
+def _to_fixture_shape(result: TSDuckProbeResult) -> TSDuckProbe:
+    """Project the production result onto the fixture's flat shape.
 
-
-@lru_cache(maxsize=8)
-def _run_version_probe(executable: str) -> tuple[bool, str | None, str | None, str]:
-    """Run ``<executable> --version``; cached per executable path.
-
-    Returns ``(ok, version, raw_line, detail)``.
-
-    Measured behavior (this repo's own probe runs, consistent with
-    docs/research/tsduck-env.md): ``tsp --version`` emits the version line on
-    **stderr** with an empty stdout (rc=0). The version token is therefore
-    searched on stdout first, then stderr. This is the dedicated probe
-    extraction; adapter-worker stderr remains display-only per SPEC-308.
+    ``version``/``executable``/``raw_version_line`` come from the found
+    payload only; unavailable results carry ``None`` and the production
+    ``detail`` (display-only diagnostics, GBK content never parsed).
     """
-    try:
-        completed = subprocess.run(
-            [executable, "--version"],
-            capture_output=True,
-            timeout=_PROBE_TIMEOUT_SECONDS,
-            check=False,
-        )
-    except (OSError, subprocess.TimeoutExpired) as error:
-        return (False, None, None, f"{executable!r} --version failed: {error!r}")
-
-    # Streams decoded explicitly; TSDuck stderr is GBK-localized and
-    # display-only (SPEC-308) — replacement chars instead of codepage lies.
-    stdout_text = completed.stdout.decode("utf-8", errors="replace")
-    stderr_text = completed.stderr.decode("utf-8", errors="replace")
-
-    def first_line(text: str) -> str | None:
-        return next(
-            (line.strip() for line in text.splitlines() if line.strip()), None
-        )
-
-    def version_line(text: str) -> str | None:
-        return next(
-            (line.strip() for line in text.splitlines() if _VERSION_PATTERN.search(line)),
-            None,
-        )
-
-    raw_line = version_line(stdout_text) or version_line(stderr_text)
-    if raw_line is None:
-        raw_line = first_line(stdout_text) or first_line(stderr_text)
-    version = extract_version(raw_line) if raw_line else None
-
-    if completed.returncode != 0:
-        return (
-            False,
-            None,
-            raw_line,
-            f"{executable!r} exited {completed.returncode}; stderr (display-only): "
-            f"{stderr_text.strip()[:200]!r}",
-        )
-    if version is None:
-        return (
-            True,
-            None,
-            raw_line,
-            f"executed but no measured version token found; first line: {raw_line!r}",
-        )
-    return (True, version, raw_line, f"version {version} via {executable}")
+    version = result.version
+    return TSDuckProbe(
+        available=result.available,
+        executable=str(version.executable) if version is not None else None,
+        version=version.version if version is not None else None,
+        raw_version_line=version.raw_version_line if version is not None else None,
+        detail=result.detail,
+    )
 
 
 def probe_tsp(override: str | None = None) -> TSDuckProbe:
-    """Probe TSDuck CLI availability (PATH first, then explicit override).
+    """Probe TSDuck CLI availability through the production probe.
 
     ``override`` defaults to the ``DVB_NEXUS_TSP_PATH`` environment value.
+    Production semantics apply unchanged: an explicit override that does not
+    resolve fails immediately with ``not_installed`` (no silent PATH
+    fall-through); a resolvable-but-unusable override falls through to
+    PATH/fallback candidates with most-informative-wins failure aggregation.
     """
     explicit = override if override is not None else os.environ.get(TSP_ENV_OVERRIDE)
-    if explicit:
-        executable = explicit if os.path.isfile(explicit) else shutil.which(explicit)
-        if executable is None:
-            return TSDuckProbe(
-                available=False,
-                executable=None,
-                version=None,
-                raw_version_line=None,
-                detail=(
-                    f"{TSP_ENV_OVERRIDE}={explicit!r} does not resolve to an "
-                    "executable (file missing and not on PATH)"
-                ),
-            )
-    else:
-        executable = shutil.which("tsp")
-        if executable is None:
-            return TSDuckProbe(
-                available=False,
-                executable=None,
-                version=None,
-                raw_version_line=None,
-                detail=(
-                    "TSDuck CLI 'tsp' not found on PATH "
-                    f"(set ${TSP_ENV_OVERRIDE} for non-PATH installs; "
-                    "CI windows job installs TSDuck.TSDuck via winget per #14)"
-                ),
-            )
-
-    ok, version, raw_line, detail = _run_version_probe(executable)
-    return TSDuckProbe(
-        available=ok,
-        executable=executable if ok else None,
-        version=version,
-        raw_version_line=raw_line,
-        detail=detail,
-    )
+    return _to_fixture_shape(_FIXTURE_PROBE.probe(override=explicit or None))

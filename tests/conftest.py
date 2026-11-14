@@ -124,12 +124,16 @@ def artifact_store(tmp_path: Path) -> ArtifactStoreHandle:
 def tsduck() -> "TSDuckProbe":
     """SPEC-505 §4 `tsduck`: availability probe (SPEC-308).
 
-    Missing/broken CLI → explicit ``pytest.skip`` with a summary-visible
-    reason (SPEC-505 §5 禁静默跳过; #14: 兜底 skip 仅限本地 — the Windows CI
-    job installs ``TSDuck.TSDuck`` via winget and an install failure fails
-    that job). Available → frozen probe result (executable, measured-format
-    version, raw line). Probe results are immutable and cached per
-    executable path, so sharing them crosses no mutable state.
+    The probe is the PRODUCTION implementation (``adapters.tsduck.version``
+    via the thin fixture delegate — review-fix #3): PATH-first discovery
+    with fallback roots, two-tier version-line scan, UTF-8→GBK decode,
+    both-streams search. Missing/broken CLI → explicit ``pytest.skip`` with
+    a summary-visible reason (SPEC-505 §5 禁静默跳过; #14: 兜底 skip 仅限
+    本地 — the Windows CI job installs ``TSDuck.TSDuck`` via winget and an
+    install failure fails that job). Available → frozen probe result
+    (executable, canonical version token, raw line). Probe results are
+    immutable and cached per executable path, so sharing them crosses no
+    mutable state.
     """
     from tests._support.tsduck_probe import TSDuckProbe
 
