@@ -16,6 +16,36 @@ dependencies = []
 [project.optional-dependencies]
 dev = [
     "import-linter>=2.0,<3",
+    # Test tooling (SPEC-505 Test Architecture, ticket #22). Runtime
+    # dependencies stay empty at the M0 skeleton stage.
+    "pytest>=8,<9",
+]
+
+# ---------------------------------------------------------------------------
+# Pytest configuration (SPEC-505 §3/§5: four-layer tree, strict markers,
+# explicit skip visibility). pytest.ini location from SPEC-505 §11 is a
+# "suggested file" note, not normative; pyproject stays the single config
+# home established by ticket #20.
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+# tests/_support is imported as a package (`tests._support.*`); rootdir on
+# sys.path keeps imports working without cwd assumptions (Windows-first,
+# ADR-0004).
+pythonpath = ["."]
+# --strict-markers: an unregistered marker is a hard collection failure
+# (SPEC-505 §8 "markers 声明完备性检查"). -ra: skip reasons always surface
+# in the summary (SPEC-505 §5 禁静默跳过).
+addopts = "--strict-markers --strict-config -ra"
+markers = [
+    "unit: 纯函数/编解码/CRC/时钟/状态转换层——无 I/O、无墙钟（SPEC-505 §3）",
+    "integration: Generator/TSRuntime、fault 过滤器、存储、TSDuck Adapter 真实子进程——真实/临时资源层（SPEC-505 §3）",
+    "conformance: 加载 SPEC-506 已登记向量断言——只读向量层（SPEC-505 §3）",
+    "e2e: 八步闭环 API 级全栈层 create→…→verify（SPEC-505 §3，ADR-0002）",
+    "slow: 慢测试——本地默认跑、CI 夜间跑（SPEC-505 §5）",
+    "tsduck: 需要 TSDuck CLI——缺失时 tsduck fixture 显式 skip，禁静默跳过（SPEC-505 §4/§5、#14）",
+    "windows_only: Windows-first 断言——非 Windows 显式 skip，Windows CI 必跑（SPEC-505 §5、ADR-0004）",
 ]
 
 [tool.setuptools]
