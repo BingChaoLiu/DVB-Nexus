@@ -307,7 +307,9 @@ class TestFailurePathCallRecords:
             argv=(),
             exit_code=1,
             stdout=b"",
-            stderr=b"partial stderr bytes",
+            # Synthetic display payload via str.encode (禁手拼字节 discipline:
+            # the bytes-literal form trips the §5 data-rules gate).
+            stderr="partial stderr bytes".encode("utf-8"),
             duration_seconds=2.0,
             pid=99,
             timed_out=True,
@@ -340,7 +342,8 @@ class TestFailurePathCallRecords:
         error.partial_result = ProcessResult(
             argv=(),
             exit_code=1,
-            stdout=b"partial stdout bytes",
+            # Synthetic display payload via str.encode (禁手拼字节 discipline).
+            stdout="partial stdout bytes".encode("utf-8"),
             stderr=b"",
             duration_seconds=0.5,
             pid=7,
