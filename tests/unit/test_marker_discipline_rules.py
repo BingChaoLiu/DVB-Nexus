@@ -7,8 +7,6 @@ Pure functions only — no I/O, no wall clock (unit layer discipline).
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from tests._support.markers import (
@@ -16,7 +14,7 @@ from tests._support.markers import (
     check_layer_markers,
     layer_for_path,
 )
-from tests._support.paths import TESTS_DIR
+from tests._support.paths import REPO_ROOT, TESTS_DIR
 
 
 class TestLayerForPath:
@@ -33,8 +31,14 @@ class TestLayerForPath:
     def test_root_conftest_is_not_a_layer(self):
         assert layer_for_path(TESTS_DIR / "conftest.py") is None
 
-    def test_path_outside_tests_is_not_a_layer(self, tmp_path: Path):
-        assert layer_for_path(tmp_path / "unit" / "test_x.py") is None
+    def test_path_outside_tests_is_not_a_layer(self):
+        # Purely constructed path outside tests/ (no tmp_path — requesting a
+        # resource-class fixture is I/O, a unit-layer structural violation
+        # per SPEC-505 §8 分层互斥; the gate is tests/integration/
+        # test_unit_io_rules.py, review-fix #6). The assertion is unchanged:
+        # any path outside tests/ resolves to no layer.
+        outside = REPO_ROOT.parent / "not-tests" / "unit" / "test_x.py"
+        assert layer_for_path(outside) is None
 
 
 class TestCheckLayerMarkers:

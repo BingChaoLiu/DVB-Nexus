@@ -20,6 +20,26 @@
 - unit 层出现 I/O 即结构违规：unit 测试不请求 `tmp_path` / `monkeypatch`
   等资源类 fixture，不落盘、不起子进程、不碰墙钟。
 
+**可执行强制**（SPEC-505 §8，review-fix #6）：`tests/_support/io_rules.py`
+AST 检测器（风格与 data_rules 一致：违规形态、`io-ok:` 逐行豁免、保守
+启发式边界），由 `tests/integration/test_unit_io_rules.py` 在必绿组合中
+扫描整个 `tests/unit/` 树执行。
+
+- 标记为违规的形态：资源类 fixture 形参（`tmp_path` / `tmp_path_factory`
+  / `tmpdir` / `monkeypatch`；`caplog`/`capsys` 捕获类不算资源 I/O）；
+  内建 `open()`；Path 式落盘/探测方法（`write_text`/`unlink`/`exists`
+  等；纯规范化 `resolve` 不算）；`os.<io>` 调用（文件增删改、列举、
+  `system`/`popen`/exec/spawn 族；`os.path` 纯运算不算）；I/O 模块导入
+  与裸名调用（subprocess/shutil/tempfile/socket/httpx/requests/urllib/
+  ftplib/smtplib）；首参为非 `:memory:` 字符串常量的 `connect(...)`。
+- 放行的既有姿态：内存态 SQLite（`:memory:`，无文件 I/O——unit 层
+  journal/repository 切片的既定形态）、Path 值对象构造、`importlib`
+  进程内导入。
+- 豁免机制：行尾注释 `# io-ok: <理由>` 逐行豁免（豁免面为零是常态目标，
+  出现即 review 关注点）。动态参数的 `connect(path)` 逃逸启发式（保守
+  边界，同 data_rules 阈值哲学）。
+- 墙钟断言归确定性纪律（§5/§8 确定性项），不在本检测器范围。
+
 ## 2. markers（SPEC-505 §5，全部 strict 注册于 pyproject）
 
 | marker | 语义 | CI 策略 |
