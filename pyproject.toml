@@ -1,0 +1,181 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dvb-nexus"
+version = "0.1.0"
+description = "DVB-Nexus sandbox backend: MPEG-TS semantic core, simulation runtime, observation and diagnosis pipeline."
+# No readme reference: repo README.md is currently UTF-16-encoded (pre-existing
+# defect, reported to the delegator); setuptools reads it as UTF-8 and fails.
+requires-python = ">=3.10"
+# Runtime dependencies intentionally empty at the M0 skeleton stage:
+# FastAPI/Pydantic etc. arrive with later tickets (ADR-0003 frozen stack).
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "import-linter>=2.0,<3",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# ---------------------------------------------------------------------------
+# Dependency boundaries (ADR-0005 decision 4 "模块划分 —— 11 包维持 + 目录融合版").
+# Layer names only in code and docs; L1~L5 architecture-layer numbering is
+# banned (CONTEXT.md). Boundaries live only here in the lint layer.
+#
+# Encoding rule: each ADR bullet's stated dependency edges are the allowed set;
+# everything else is forbidden (complement), plus the bullet's explicit bans.
+# ---------------------------------------------------------------------------
+[tool.importlinter]
+root_packages = [
+    "api",
+    "application",
+    "adapters",
+    "domain",
+    "ts",
+    "faults",
+    "simulation",
+    "knowledge",
+]
+include_external_packages = true
+
+# ADR-0005 D4-1: "ts 与 domain/* 纯净：不 import 任何上层包".
+# ts has no stated outgoing edges, so it imports nothing else in the project.
+[[tool.importlinter.contracts]]
+name = "ts purity: imports no other project package (ADR-0005 decision 4)"
+type = "forbidden"
+source_modules = ["ts"]
+forbidden_modules = [
+    "api",
+    "application",
+    "faults",
+    "simulation",
+    "knowledge",
+    "domain",
+    "domain.*",
+    "adapters",
+    "adapters.*",
+]
+
+# ADR-0005 D4-1: domain packages do not import the Application/API layer
+# (Presentation is the React frontend, not a Python package).
+[[tool.importlinter.contracts]]
+name = "domain purity: no Application/API imports (ADR-0005 decision 4)"
+type = "forbidden"
+source_modules = ["domain.*"]
+forbidden_modules = ["api", "application"]
+
+# ADR-0005 D4-2: "domain/* 不 import FastAPI/SQLite/文件系统/TSDuck CLI".
+# External bans are root-level names (import-linter requirement):
+#   FastAPI -> fastapi; SQLite -> sqlite3 + adapters.storage;
+#   filesystem -> stdlib I/O markers os/shutil/glob/tempfile/pathlib
+#   (os also covers os.path/os.environ);
+#   TSDuck CLI -> adapters.tsduck (plus the whole adapters container).
+[[tool.importlinter.contracts]]
+name = "domain purity: no FastAPI/SQLite/filesystem/TSDuck adapter imports (ADR-0005 decision 4)"
+type = "forbidden"
+source_modules = ["domain.*"]
+forbidden_modules = [
+    "fastapi",
+    "sqlite3",
+    "os",
+    "shutil",
+    "glob",
+    "tempfile",
+    "pathlib",
+    "adapters",
+    "adapters.*",
+]
+
+# ADR-0005 D4-1: "ts 不 import tsduck（生成兜底由 simulation/application 调用，
+# 防外部工具反向污染核心资产）". Encoded bidirectionally: the external tool
+# must not contaminate TS Core and TS Core must not depend on it.
+[[tool.importlinter.contracts]]
+name = "ts and adapters.tsduck are mutually independent (ADR-0005 decision 4)"
+type = "independence"
+modules = ["ts", "adapters.tsduck"]
+
+# ADR-0005 D4-3: "diagnosis 只消费 observation，不碰 TSDuck 进程、不解析原始 TS".
+# knowledge is allowed: ADR-0005 decision 4 scope note has knowledge as static
+# reference data "供诊断解释消费" (consumed by diagnosis explanations).
+[[tool.importlinter.contracts]]
+name = "diagnosis consumes only observation (plus knowledge reference data); never ts/faults/simulation/topology/adapters (ADR-0005 decision 4)"
+type = "forbidden"
+source_modules = ["domain.diagnosis"]
+forbidden_modules = [
+    "ts",
+    "faults",
+    "simulation",
+    "domain.topology",
+    "adapters",
+    "adapters.*",
+]
+
+# ADR-0005 D4-3/D4-4: "api 不含 TS 二进制编码细节" and "api -> application".
+# application is api's only stated dependency, so all other project packages
+# are forbidden (TS binary encoding details live in ts/adapters and are thus
+# unreachable from api).
+[[tool.importlinter.contracts]]
+name = "api depends only on application; no TS binary encoding details (ADR-0005 decision 4)"
+type = "forbidden"
+source_modules = ["api"]
+forbidden_modules = [
+    "ts",
+    "faults",
+    "simulation",
+    "knowledge",
+    "domain",
+    "domain.*",
+    "adapters",
+    "adapters.*",
+]
+
+# ADR-0005 D4-4: "faults -> ts（FaultDefinition 应用到包模型）+ tsduck 接口
+# （传输级路由）". Everything else is forbidden by complement; adapters.tsduck
+# stays allowed, adapters.storage does not.
+[[tool.importlinter.contracts]]
+name = "faults depends only on ts and the tsduck adapter interface (ADR-0005 decision 4)"
+type = "forbidden"
+source_modules = ["faults"]
+forbidden_modules = [
+    "api",
+    "application",
+    "simulation",
+    "knowledge",
+    "domain",
+    "domain.*",
+    "adapters",
+    "adapters.storage",
+]
+
+# ADR-0005 D4-4: "simulation -> ts/faults/adapters". Everything else is
+# forbidden by complement.
+[[tool.importlinter.contracts]]
+name = "simulation depends only on ts/faults/adapters (ADR-0005 decision 4)"
+type = "forbidden"
+source_modules = ["simulation"]
+forbidden_modules = [
+    "api",
+    "application",
+    "knowledge",
+    "domain",
+    "domain.*",
+]
+
+# ADR-0005 D4-4: "application -> 全部" read as all packages except api
+# (api -> application is the stated reverse edge; this closes the cycle).
+[[tool.importlinter.contracts]]
+name = "application never imports api (ADR-0005 decision 4 cycle guard)"
+type = "forbidden"
+source_modules = ["application"]
+forbidden_modules = ["api"]
+
+# ADR-0005 D4-5: "observation 为统一事件交换接口" — positive hub statement:
+# any package may import domain.observation, so no outgoing-edge contract is
+# added for it beyond the domain purity contracts above.

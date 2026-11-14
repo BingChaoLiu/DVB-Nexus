@@ -4,3 +4,10 @@
 
 # Local scratch
 .scratch/
+
+# Python virtualenv (local dev tooling, never shared)
+.venv/
+
+# Python build/import artifacts
+__pycache__/
+*.egg-info/
