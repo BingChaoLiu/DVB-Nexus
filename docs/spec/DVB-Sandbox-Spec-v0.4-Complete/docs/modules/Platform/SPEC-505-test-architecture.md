@@ -29,7 +29,7 @@ requirements: [REQ-TST-505-001, REQ-TST-505-002, REQ-TST-505-003, REQ-TST-505-00
 
 - 具体测试向量与 golden 内容（SPEC-506 / golden streams 票 [#14](https://github.com/BingChaoLiu/DVB-Nexus/issues/14)）。
 - 前端测试（SPEC-400 系批准时定义）。
-- 性能基准测试（SPEC-507，P1；OPEN-006 定档 [#16](https://github.com/BingChaoLiu/DVB-Nexus/issues/16) 提供口径）。
+- 性能基准测试（SPEC-507，P1；口径权威：[ADR-0008](../../../../adr/0008-mvp-performance-envelope.md)，随 OPEN-006 定档 [#16](https://github.com/BingChaoLiu/DVB-Nexus/issues/16) 冻结）。
 
 ## 3. 四层与目录
 

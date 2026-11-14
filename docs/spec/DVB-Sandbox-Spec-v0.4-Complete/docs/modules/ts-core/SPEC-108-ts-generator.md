@@ -92,7 +92,7 @@ class GeneratorConfig:
 - `schema_version` 必须受支持。
 - `profile` MVP 仅允许 `analysis_only`。
 - `output_packet_count > 0`。
-- `target_bitrate_bps > 0`；推荐 MVP 最小配置可运行在 1 Mbps 以上，实际允许范围需在 Performance Spec 冻结。
+- `target_bitrate_bps > 0`；允许范围冻结为 **1 ~ 100 Mbps**，超范围在配置校验拒绝（[ADR-0008](../../../../adr/0008-mvp-performance-envelope.md) 第 2 条）。
 - TSID、program_number、PID、stream_type、stream_id、bitrate 均按其字段位宽校验。
 - PMT PID、ES PID、PCR PID 不得互相冲突或使用项目禁止的保留 PID；PCR_PID 可以复用一个 ES PID。
 - `program_number != 0`。

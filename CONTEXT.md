@@ -42,6 +42,10 @@ _Avoid_: 用 TSDuck 注入语义级故障、在 TS Core 生成链路内置故障
 MVP 唯一验收的生成 Profile：TS 结构合规、可解析可分析，但负载为确定性合成数据，不承诺可播放。
 _Avoid_: playback_ready（MVP 不承诺）
 
+**性能包络（Performance Envelope）**:
+MVP 对性能与资源的承诺边界：支持的码率范围、默认生成档位、单 artifact 上限、生成耗时与内存上限；生成定位为离线批处理，不承诺实时。数值权威在 ADR-0008。
+_Avoid_: 把包络上限当实时能力承诺、凭直觉调整阈值（须走 ADR 裁决）
+
 **双解析器对照（Cross Validation）**:
 自研轻量解析器与 TSDuck 对同一 TS 分别分析并比对；不一致时产生 `ANALYZER_DISAGREEMENT` 而非采信单方。
 
