@@ -81,6 +81,8 @@ summary、run_id / scenario 版本标识、operational 验证时间戳
 - 选中 PID 在定义的包语义下 CC 有效（注意 SPEC-204 相对偏移持续性——修复后须从恢复点重新计算期望 CC）。
 - 故障非活跃（fault.cleared 已见且窗口后无复发）。
 
+**MVP 判据 kind 集合冻结**（closed enum，[v03 故障案例库 → MVP 靶场映射 #17](https://github.com/BingChaoLiu/DVB-Nexus/issues/17)）：`fault_inactive` / `psi_pat_valid` / `psi_pmt_valid` / `pat_pmt_mapping_valid` / `cc_continuous` / `no_unexpected_cc_error`——六种即上列示例与示例场景已用判据的 slug 化；新增 kind 走 spec 修订，`SIM_VERIF_CRITERION_INVALID` 按此集合判定。六种判据各自的证据语义（含 `fault_inactive` 在"修复 = 移除故障"路径下的跨 run 证据引用）随实现裁决，见 [#59](https://github.com/BingChaoLiu/DVB-Nexus/issues/59)。
+
 判据评估复用 Observation/诊断输出；本模块不重新解析码流。
 
 ## 8. 错误与诊断码

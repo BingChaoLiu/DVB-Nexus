@@ -53,6 +53,8 @@
 ## 4. v0.3 故障案例库（远期靶场素材）
 
 > 原文见 `docs/spec/provenance/v03.md` §7。以下条目已按标准核查报告（`docs/research/standards-audit.md` §8）**订正**——⚠️ 标注处为对 v0.3 原文的修正，实现知识卡片时以本节为准。
+>
+> **MVP 裁决（2026-11-14，[v03 故障案例库 → MVP 靶场映射 #17](https://github.com/BingChaoLiu/DVB-Nexus/issues/17)）**：八案例**全部不在 MVP**——A1/A2/B1/B2/C1/C2/D1 依赖 RF/T2MI/BISS/CA/FastScan 域（ADR-0002 划出），D2 是唯一 TS 层案例但需 MVP 外的新故障原语；MVP 靶场 = 四类故障原语（ADR-0007）直接构造的内置 Lab Pack v1 五景，不逐案对应 v03 案例（详见 #17 决议）。
 
 ### 领域 A：射频与前端供电链路（Phase 3）
 
@@ -67,12 +69,12 @@
 ### 领域 C：加扰与条件接收（Phase 2）
 
 - **C1 BISS 密钥错位**：⚠️ 订正——BISS **Mode 1** 密钥为 **12 位十六进制（48-bit）session word**（"16 字节密钥"的说法错误）；**Mode E** = 固定 Session Key 加密 SW 成 16 位十六进制 **ESW** 带外下发 + **静态 128-bit Injected/Buried ID 预置于接收端**（不在流中传输、不是动态数据）。BISS **无 ECM**（CA_PID 固定 0x1FFF，Tech 3292）；BISS2 的 CA_system_ID = 0x2602。底层算法：BISS1 = DVB-CSA1 + DES；BISS2 = DVB-CISSA（TS 103 127）+ AES-128。
-- **C2 PID 映射混淆（CA 字错配）**：PMT 中加扰 PID 动态变更而 Demux 过滤表未同步，ECM 与加密 PES 错位。⚠️ 该案例属 DVB-CA 语境（SPEC-612），混入 BISS 案例时注意区分（BISS 无 ECM）。
+- **C2 PID 映射混淆（CA 字错配）**：PMT 中加扰 PID 动态变更而 Demux 过滤表未同步，ECM 与加密 PES 错位。⚠️ 该案例属 DVB-CA 语境（SPEC-612），混入 BISS 案例时注意区分（BISS 无 ECM）。**MVP 交叉引用**（#17）：其"PID 树时间轴上定位声明与实际漂移"教学点由 MVP 靶场 PMT_PID_MISMATCH 场景（SC-04）部分覆盖，不阻塞 MVP。
 
 ### 领域 D：SI/PSI 与时序（Phase 2~4）
 
 - **D1 FastScan 后 NIT 版本不同步**：运营商更新 transponder 列表后终端命中陈旧缓存（table_id_extension 版本号未变 / TSID 未同步更新）。训练目标：FastScan 面板、LC 映射、NIT 版本比对。
-- **D2 PCR 抖动超标致 CC 异常**：⚠️ 订正数值——ISO/IEC 13818-1 §2.7.2 的 PCR **间隔规范限值是 100ms**（"Jitter > 500ms" 的原表述两头不靠）；**±500ns 是 TR 101 290 P2 的 PCR 准确度阈值**（另一个量）。教学叙事改为："PCR 间隔超过 100ms（ISO §2.7.2）或 PCR 抖动超出 ±500ns（TR 101 290 P2）"。
+- **D2 PCR 抖动超标致 CC 异常**：⚠️ 订正数值——ISO/IEC 13818-1 §2.7.2 的 PCR **间隔规范限值是 100ms**（"Jitter > 500ms" 的原表述两头不靠）；**±500ns 是 TR 101 290 P2 的 PCR 准确度阈值**（另一个量）。教学叙事改为："PCR 间隔超过 100ms（ISO §2.7.2）或 PCR 抖动超出 ±500ns（TR 101 290 P2）"。**MVP 裁决**（#17）：no-go——忠实症状链（PLL 失锁→丢包保护）依赖真实解码器硬件行为，仿真管线无法诚实复现（No fake evidence），且第五故障原语 = MVP 基线冻结不扩容；**TS 等价残留教学点 = PCR 间隔/抖动故障原语候选**（观测通路 `ts.pcr_jitter_ns` metric 与 `PCR_JITTER_HIGH` 告警已在 SPEC-302/304 注册、MVP 下惰性），原语参数语义留待后续 effort 裁决。
 
 ## 5. 技术事实备忘（远期实现必读）
 
