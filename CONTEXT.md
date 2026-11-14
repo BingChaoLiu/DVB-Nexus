@@ -64,7 +64,7 @@ MVP 故障只做等位改写（顶替/原位改字段），不增删包：CBR �
 _Avoid_: 删包注入、把 faulted 流的 index 当独立参照系
 
 **通关（Recovery Verification）**:
-以**新的观测结果**判定实验通过——修复动作本身、UI 变绿都不算证据。判定为 PASS / FAIL / INCONCLUSIVE 三态。
+以**修复后的新 Run 证据**（码流观测与结构化声明）判定实验通过——修复动作本身、UI 变绿都不算证据。判定为 PASS / FAIL / INCONCLUSIVE 三态。
 _Avoid_: 用 UI 状态判定通关、把"无告警"等同于"干净"
 
 **八步闭环（Closed Loop）**:
@@ -79,6 +79,10 @@ _Avoid_: 把 SIM_STATE 产物标为 parsed、把 TSDuck 输出标为 measured
 **证据（Evidence）**:
 可下钻的原始数据关联：观测 → PID + packet index + Artifact，从诊断结果可直达原始码流。
 _Avoid_: 无 Artifact 指引的裸日志
+
+**结构化证据（Structured Evidence）**:
+非观测类的合法通关证据种类：prepare 阶段绑定进 run 指纹的声明（如 prepared fault plan）与引擎生命周期事件（`fault.*`，无来源/置信度轴，故不是观测）。其"在/不在"是记录事实本身，不适用"无观测 ≠ 干净"的推断禁令。
+_Avoid_: 把观测缺失当作结构化证据、把 `fault.*` 事件混标为观测
 
 **Artifact**:
 带元数据的资产文件（生成 TS / 故障 TS / 报告 / 日志），以 SHA-256、配置哈希、故障档案 ID 保证可复现与可追溯。

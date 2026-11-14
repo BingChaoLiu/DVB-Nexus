@@ -14,7 +14,7 @@ requirements: [REQ-SIM-206-001, REQ-SIM-206-002, REQ-SIM-206-003, REQ-SIM-206-00
 
 ## 1. 目标
 
-以**新的观测结果**判定学习者是否真正修复了故障（CONTEXT.md「通关」）：修复动作本身、UI 变绿都不是证据；只有修复后的新 Run 证据支持判定。判定三态 PASS / FAIL / INCONCLUSIVE。
+以**修复后的新 Run 证据（码流观测与结构化声明）**判定学习者是否真正修复了故障（CONTEXT.md「通关」「结构化证据」）：修复动作本身、UI 变绿都不是证据；只有修复后的新 Run 证据支持判定。判定三态 PASS / FAIL / INCONCLUSIVE。
 
 ## 2. 范围
 
@@ -73,15 +73,21 @@ summary、run_id / scenario 版本标识、operational 验证时间戳
 | 缺失值 vs 零值 | 字段缺失 ≠ 数值为 0（SPEC-302 §5 同源纪律） |
 | 预期不连续 vs 意外 CC 错误 | 故障注入声明的不连续（expected_observations 覆盖）≠ 未声明的 CC 错误 |
 
+本节对偶约束**观测类**证据。prepare 声明（绑定进 run 指纹的 fault plan，SPEC-203 §5.1）与引擎生命周期事件（`fault.*`，无来源/置信度轴）不是观测，属**结构化证据**：其"在/不在"是记录事实本身，不适用本节禁令（`fault_inactive` 语义见 §7，[裁决 #59](https://github.com/BingChaoLiu/DVB-Nexus/issues/59)）。
+
 ## 7. 判据示例（非穷举）
 
 - PAT 存在 / CRC 有效。
 - PAT→PMT PID 映射有效（含 PMT_PID_MISMATCH 场景的 wrong_pid 消失复核）。
 - PMT CRC 有效。
 - 选中 PID 在定义的包语义下 CC 有效（注意 SPEC-204 相对偏移持续性——修复后须从恢复点重新计算期望 CC）。
-- 故障非活跃（fault.cleared 已见且窗口后无复发）。
+- 故障非活跃（`fault_inactive`，证据语义裁决见 [#59](https://github.com/BingChaoLiu/DVB-Nexus/issues/59)）：被植入故障 F（判据以 `fault_id` 引用场景 `fault_plan` 中的 FaultDefinition；SC-05 类双故障场景各建一条判据实例）在恢复 Run 上非活跃。PASS 证据链三段，全部为**结构化证据**（§6 指针句——非观测推断）：
+  1. **baseline 锚**：初始 faulted Run 上 F 生命周期闭合——`fault.injected` / `fault.activated` / `fault.cleared` 已见（`fault.applied` 为 L1 专用，状态级场景按 SPEC-204 §8.1 可省略），证明 F 真实植入，排除空判；
+  2. **恢复 Run prepare 声明**：恢复 Run 的 prepared fault plan（SPEC-203 §5.1，绑定进 run 指纹）不含该 `fault_id`——prepare 声明事实，结构化正向证据，本判据的主承重件；
+  3. **恢复 Run 无复发**：恢复 Run journal 无该 `fault_id` 的 `fault.activated` / `fault.applied`——审计位；未声明却出现即引擎违约，判 FAIL。
+- **`fault_inactive` 补充纪律**：修复 = 移除故障（四类故障无 benign 变体，SPEC-204 §6）时，恢复 Run 上不存在该故障的任何 `fault.*` 事件（含 `fault.cleared`）——构造性保证（SPEC-204 §5：过滤器只变换 plan 内声明的故障），**不是观测缺失**，不落入 §6 禁令。learner 换新 `fault_id` 重投同种故障：本判据 PASS 而症状判据（各场景 mandatory）FAIL → 总体 FAIL，症状兜底归症状判据、本判据不复制。`SIM_VERIF_EVIDENCE_MISSING` 在本判据的适用边界 = 仅 baseline 侧证据缺失（恢复侧 plan / journal 恒可得）。
 
-**MVP 判据 kind 集合冻结**（closed enum，[v03 故障案例库 → MVP 靶场映射 #17](https://github.com/BingChaoLiu/DVB-Nexus/issues/17)）：`fault_inactive` / `psi_pat_valid` / `psi_pmt_valid` / `pat_pmt_mapping_valid` / `cc_continuous` / `no_unexpected_cc_error`——六种即上列示例与示例场景已用判据的 slug 化；新增 kind 走 spec 修订，`SIM_VERIF_CRITERION_INVALID` 按此集合判定。六种判据各自的证据语义（含 `fault_inactive` 在"修复 = 移除故障"路径下的跨 run 证据引用）随实现裁决，见 [#59](https://github.com/BingChaoLiu/DVB-Nexus/issues/59)。
+**MVP 判据 kind 集合冻结**（closed enum，[v03 故障案例库 → MVP 靶场映射 #17](https://github.com/BingChaoLiu/DVB-Nexus/issues/17)）：`fault_inactive` / `psi_pat_valid` / `psi_pmt_valid` / `pat_pmt_mapping_valid` / `cc_continuous` / `no_unexpected_cc_error`——六种即上列示例与示例场景已用判据的 slug 化；新增 kind 走 spec 修订，`SIM_VERIF_CRITERION_INVALID` 按此集合判定。`fault_inactive` 为**声明+生命周期类**判据（证据链见上，[#59](https://github.com/BingChaoLiu/DVB-Nexus/issues/59) 裁决）；其余五种为**观测类**判据（证据 = 恢复 Run 的 normalized observations，证据缺失沿 §8 `SIM_VERIF_EVIDENCE_MISSING`）。
 
 判据评估复用 Observation/诊断输出；本模块不重新解析码流。
 
@@ -94,9 +100,12 @@ summary、run_id / scenario 版本标识、operational 验证时间戳
 | `SIM_VERIF_RUN_MISMATCH` | 候选 Run 与场景版本不匹配 | 拒绝 |
 | `SIM_VERIF_BASELINE_REUSED` | 候选 Run 即 baseline | INCONCLUSIVE |
 
+`SIM_VERIF_EVIDENCE_MISSING` 适用边界（[#59](https://github.com/BingChaoLiu/DVB-Nexus/issues/59)）：对 `fault_inactive`，证据缺失仅可能发生在 baseline 侧（生命周期证据缺失 → NOT_EVALUATED → 总体 INCONCLUSIVE）；恢复侧 prepared plan 与 journal 恒可得，不存在缺失情形（候选恢复 Run 未完成走 §4 mandatory 证据缺失既有规则）。其余五种观测类判据的缺失语义不变。
+
 ## 9. 测试规格
 
 - 全 mandatory PASS ⇒ PASS；单 mandatory FAIL ⇒ FAIL；证据缺失 ⇒ INCONCLUSIVE（三态矩阵）。
+- `fault_inactive` 三段证据链（[#59](https://github.com/BingChaoLiu/DVB-Nexus/issues/59)）：baseline 生命周期证据缺失 → NOT_EVALUATED → INCONCLUSIVE；恢复 Run plan 含该 `fault_id` → FAIL；恢复 Run 无声明无 `fault.*` 事件 → PASS（构造性无事件 ≠ 观测缺失，与 §6 禁令区分测试）。
 - 第 6 节四个对偶逐一的区分测试（构造"无观测但判据 mandatory"等场景）。
 - 确定性：同输入重放判定结果一致（排除 operational 时间戳）。
 - UI 状态不可作为证据：仅注入 UI 状态、无观测证据的输入 ⇒ INCONCLUSIVE（AC-206-01）。

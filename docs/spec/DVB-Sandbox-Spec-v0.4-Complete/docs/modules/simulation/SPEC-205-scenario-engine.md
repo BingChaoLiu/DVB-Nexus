@@ -50,6 +50,7 @@ requirements: [REQ-SIM-205-001, REQ-SIM-205-002, REQ-SIM-205-003, REQ-SIM-205-00
 ## 4. 安全与校验
 
 - **schema 校验强制**：不通过 schema 的场景文档拒绝加载，错误 path-addressed。
+- **pass_criteria 引用完整性（加载期）**：判据 kind 须在 MVP 判据 kind 集合（SPEC-206 §7 closed enum）内；`fault_inactive` 引用的 `fault_id` 须在本场景 `fault_plan` 中。违规拒绝加载，path-addressed（`SIM_SCENARIO_CRITERION_INVALID`）。
 - **永不执行场景包中的 Python 或任意代码**；导入/导出内容不得含可执行体（脚本、宏、动态表达式）。
 - **学习者动作白名单**：查看拓扑/证据、修改批准的 config 字段、更换允许的故障、重新生成/分析、提交验证。白名单之外的任何动作拒绝。
 - 禁止任意 shell 命令与任意文件系统路径；场景引用的 artifact 经 SPEC-503 受控访问。
@@ -73,6 +74,7 @@ requirements: [REQ-SIM-205-001, REQ-SIM-205-002, REQ-SIM-205-003, REQ-SIM-205-00
 | Code | 条件 | 处理 |
 |---|---|---|
 | `SIM_SCENARIO_SCHEMA_INVALID` | 场景文档不过 schema | 拒绝，附 path |
+| `SIM_SCENARIO_CRITERION_INVALID` | pass_criteria 引用完整性失败（kind 不在 SPEC-206 §7 集合 / `fault_inactive` 的 `fault_id` 不在本场景 fault_plan） | 拒绝加载，path-addressed |
 | `SIM_SCENARIO_FAULT_PLAN_INVALID` | fault plan/expected_observations 校验失败 | 拒绝（SPEC-204 错误码透传） |
 | `SIM_SCENARIO_ACTION_FORBIDDEN` | 学习者动作不在白名单 | 拒绝 |
 | `SIM_SCENARIO_VERSION_CONFLICT` | 对运行中 session 应用新版本 | 拒绝，要求新 session |
@@ -81,6 +83,7 @@ requirements: [REQ-SIM-205-001, REQ-SIM-205-002, REQ-SIM-205-003, REQ-SIM-205-00
 ## 8. 测试规格
 
 - 畸形 schema 负向样例全拒绝（缺字段/类型错/未知 fault_type/缺 expected_observations）。
+- pass_criteria 引用完整性负向样例全拒绝（kind 不在 SPEC-206 §7 集合 / `fault_inactive` 引用不在 fault_plan 的 `fault_id`）。
 - 场景不可变：加载后对文档对象的任何修改不影响已建 session。
 - 参考解保护：reveal 政策外的全部读取路径（API/导出/日志）断言为空。
 - 确定性初始 Run：同版本场景重复加载生成 SHA-256 一致的 baseline。
