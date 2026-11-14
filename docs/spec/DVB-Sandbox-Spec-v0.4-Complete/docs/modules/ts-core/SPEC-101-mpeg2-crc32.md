@@ -1,7 +1,7 @@
 ---
 spec_id: SPEC-101
 title: MPEG-2 CRC-32 Core
-version: 0.5.0
+version: 0.5.1
 status: APPROVED
 phase: MVP
 owner: TS Core

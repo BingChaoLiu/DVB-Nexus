@@ -84,7 +84,9 @@ class GeneratorConfig:
     target_bitrate_bps: int
     output_packet_count: int
     program: ProgramConfig
-    pat_period_ms: int = 100
-    pmt_period_ms: int = 100
+    # Out-of-phase defaults (ruling #72): same-phase PAT/PMT grids plus a
+    # routine ES pull structurally violate the SPEC-107 §5 deadline window.
+    pat_period_ms: int = 101
+    pmt_period_ms: int = 103
     pcr_interval_ms: int = 40
     pcr_insertion_policy: str = "payload_packet_first"

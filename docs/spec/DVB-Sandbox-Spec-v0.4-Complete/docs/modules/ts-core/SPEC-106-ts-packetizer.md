@@ -1,7 +1,7 @@
 ---
 spec_id: SPEC-106
 title: PSI and PES to TS Packetization
-version: 0.5.0
+version: 0.5.1
 status: APPROVED
 phase: MVP
 owner: TS Core

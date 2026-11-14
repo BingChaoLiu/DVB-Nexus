@@ -131,6 +131,35 @@ function scope，探测结果为不可变缓存）。
   锁定基线）只属于单测/fake 的合成 fixture——那里它们是输入数据，不是环境
   假设。
 
+**可执行强制**（`tests/_support/env_rules.py`，由
+`tests/integration/test_real_env_rules.py` 在必绿组合中扫描整个 `tests/`
+树执行，ticket #70）：
+
+- 扫描面：静态携带真环境 marker（`tsduck` / `windows_only`，模块级
+  `pytestmark` 或函数级装饰器均可判读）的测试文件；`tests/_support/`
+  本身不参与扫描（获准的构造器区，同 §5 纪律）。
+- 标记为违规的形态（仅编译期 str 常量，docstring 豁免）：
+  - `env_version_literal`——版本 token 形状（`\d+\.\d+-\d+`）出现在
+    `==`/`!=`/`in`/`not in` 比较中（长文本包含也算：#69 噪声行类）；
+  - `env_drive_path_literal`——盘符绝对路径（`[A-Za-z]:[\/]`）出现在
+    任意上下文（fixture 都在 `tmp_path`，盘符字面必是钉扎）；
+  - `env_executable_name_comparison`——可执行后缀文件名字面（
+    `.exe`/`.cmd`/`.bat`/`.ps1`/`.dll`/`.com`）做大小写敏感比较；比较双
+    方任一侧调用 `lower()`/`upper()`/`casefold()` 即为 §6 形状断言形态，
+    豁免；字面-字面比较（两侧均为常量的合成自洽）亦豁免。数据文件后缀
+    （golden/资产名）是合成 fixture 锚点，不扫。
+- 注意：带 marker 的 fake/合成文件（如 `test_probe_fakes.py`，模块级
+  `windows_only`）**同样入扫**——其中的裸版本字面也须改用派生/named
+  常量承载（§6「字面钉扎只属于合成 fixture」的合成锚点在扫面内以
+  派生形式表达，见 fakes 的 `extract_version(CANONICAL_VERSION_LINE)`
+  先例）。
+- 豁免机制：行尾/邻行注释 `# env-ok: <理由>` 逐行豁免（同 §5 窗口纪律）；
+  **豁免面为零是常态目标**——零豁免本身有机械审计（同 gate 文件），
+  出现即 review 关注点。
+- 形状为保守启发式常量（模块顶部可调）；收紧/放宽须在 PR 中说明。已
+  知保守边界：f-string 内嵌常量、命名常量比较、整数组件钉扎、赋值位
+  字面不在扫描形状内（review 可见性靠人读，机械面故意保守）。
+
 ## 7. 常用命令
 
 ```bash
