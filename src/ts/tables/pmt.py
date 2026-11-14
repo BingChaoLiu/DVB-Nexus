@@ -72,9 +72,9 @@ from ts.section import (
 )
 from ts.tables.pat import (
     PAT_PMT_PROGRAM_MISMATCH,
+    TABLE_SECTION_MISSING,
     TABLE_SECTION_TOO_LARGE,
     TABLE_VERSION_MISMATCH,
-    _check_int,
 )
 
 # --- SPEC-103 §9 error codes owned by this module ---
@@ -111,6 +111,20 @@ _PID_MAX = 0x1FFF
 _VERSION_MAX = 0x1F
 
 _BYTES_LIKE = (bytes, bytearray, memoryview)
+
+
+def _check_int(value: object, name: str, lo: int, hi: int) -> int:
+    """Programming-error guard: strict int in range, bool excluded.
+
+    Same contract as the per-module guard in :mod:`ts.section` /
+    :mod:`ts.tables.pat` (each module owns its private helpers, mirroring
+    the upstream precedent).
+    """
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise TypeError(f"{name} must be int, got {type(value).__name__}")
+    if not lo <= value <= hi:
+        raise ValueError(f"{name} must be in {lo}..{hi}, got {value}")
+    return value
 
 
 def _coerce_bytes(value: object, name: str) -> bytes:
@@ -421,11 +435,130 @@ def parse_pmt(section: PSISection) -> PMTSection:
     )
 
 
-def parse_pmt_sections(sections: Sequence[PSISection]) -> PMTTable:
-    """Aggregate one PMT version set from its sections (§6/§7)."""
-    raise NotImplementedError  # slice 6 (test_table_version_aggregation)
-
-
 @dataclass(frozen=True)
 class PMTTable:
-    """Aggregated PMT version set (§6 logical aggregate)."""
+    """Aggregated PMT version set (§6 logical aggregate).
+
+    ``sections`` is ordered by ``section_number``; ``streams`` concatenates
+    every section's ES entries in that order. ``pcr_pid`` and
+    ``program_descriptors`` are program-level properties carried by the
+    lowest-numbered section (H.222.0 places the program descriptors in the
+    first section); they are not part of the version-set identity, so a
+    cross-section disagreement is preserved verbatim rather than rejected.
+    """
+
+    program_number: int
+    version_number: int
+    current_next_indicator: bool
+    last_section_number: int
+    pcr_pid: int
+    program_descriptors: bytes
+    sections: tuple[PMTSection, ...]
+    streams: tuple[ElementaryStream, ...]
+
+    def __post_init__(self) -> None:
+        sections = tuple(self.sections)
+        for section in sections:
+            if not isinstance(section, PMTSection):
+                raise TypeError(
+                    "sections entries must be PMTSection, got "
+                    f"{type(section).__name__}"
+                )
+        object.__setattr__(self, "sections", sections)
+        streams = tuple(self.streams)
+        for stream in streams:
+            if not isinstance(stream, ElementaryStream):
+                raise TypeError(
+                    "streams entries must be ElementaryStream, got "
+                    f"{type(stream).__name__}"
+                )
+        object.__setattr__(self, "streams", streams)
+
+
+def parse_pmt_sections(sections: Sequence[PSISection]) -> PMTTable:
+    """Aggregate one PMT version set from its sections (§6/§7).
+
+    Each member goes through the full :func:`parse_pmt` gates first. The
+    same-version set is identified by ``program_number`` (the
+    table_id_extension) + ``version_number`` + ``current_next_indicator`` +
+    ``last_section_number`` (§7); any disagreement raises
+    ``TABLE_VERSION_MISMATCH`` — sections of different versions are never
+    merged into one table. ``section_number`` values must cover
+    ``0..last_section_number`` exactly: absent numbers raise
+    ``TABLE_SECTION_MISSING``.
+
+    Section order in the input is irrelevant; the aggregate is ordered by
+    ``section_number``, takes ``pcr_pid``/``program_descriptors`` from the
+    lowest-numbered section, and concatenates the ES loops in section
+    order. Duplicate ``section_number`` values and an empty input list are
+    caller bookkeeping errors (ValueError), not wire problems.
+
+    Raises:
+        TypeError: a member is not a PSISection.
+        ValueError: empty input or duplicate ``section_number``.
+        InvalidSectionError: any per-section parse problem,
+            ``TABLE_VERSION_MISMATCH`` on identity disagreement, or
+            ``TABLE_SECTION_MISSING`` on incomplete coverage.
+    """
+    parsed: dict[int, PMTSection] = {}
+    for item in sections:
+        if not isinstance(item, PSISection):
+            raise TypeError(
+                f"sections entries must be PSISection, got {type(item).__name__}"
+            )
+        table = parse_pmt(item)
+        if table.section_number in parsed:
+            raise ValueError(
+                f"duplicate section_number {table.section_number} in the "
+                "input; each section of one version set must appear at "
+                "most once (retransmissions are the caller's dedup)"
+            )
+        parsed[table.section_number] = table
+    if not parsed:
+        raise ValueError("at least one PSISection is required to aggregate a PMT")
+
+    ordered = [parsed[number] for number in sorted(parsed)]
+    reference = ordered[0]
+    identity = (
+        reference.program_number,
+        reference.version_number,
+        reference.current_next_indicator,
+        reference.last_section_number,
+    )
+    for member in ordered[1:]:
+        member_identity = (
+            member.program_number,
+            member.version_number,
+            member.current_next_indicator,
+            member.last_section_number,
+        )
+        if member_identity != identity:
+            raise InvalidSectionError(
+                f"{TABLE_VERSION_MISMATCH}: section_number "
+                f"{member.section_number} belongs to a different version "
+                f"set (program/version/current_next/last = "
+                f"{member_identity}) than the reference section "
+                f"{reference.section_number} ({identity}); sections of "
+                "different versions are never merged (§7)"
+            )
+
+    expected = range(0, reference.last_section_number + 1)
+    missing = [number for number in expected if number not in parsed]
+    if missing:
+        raise InvalidSectionError(
+            f"{TABLE_SECTION_MISSING}: the PMT declares "
+            f"last_section_number {reference.last_section_number} but "
+            f"section_number(s) {missing} are absent"
+        )
+
+    streams = tuple(stream for member in ordered for stream in member.streams)
+    return PMTTable(
+        program_number=reference.program_number,
+        version_number=reference.version_number,
+        current_next_indicator=reference.current_next_indicator,
+        last_section_number=reference.last_section_number,
+        pcr_pid=reference.pcr_pid,
+        program_descriptors=reference.program_descriptors,
+        sections=tuple(ordered),
+        streams=streams,
+    )

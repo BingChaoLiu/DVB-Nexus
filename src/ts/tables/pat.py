@@ -350,11 +350,125 @@ def parse_pat(section: PSISection) -> PATSection:
     )
 
 
-def parse_pat_sections(sections: Sequence[PSISection]) -> PATTable:
-    """Aggregate one PAT version set from its sections (§6/§7)."""
-    raise NotImplementedError  # slice 6 (test_table_version_aggregation)
-
-
 @dataclass(frozen=True)
 class PATTable:
-    """Aggregated PAT version set (§6 logical aggregate)."""
+    """Aggregated PAT version set (§6 logical aggregate).
+
+    ``sections`` is ordered by ``section_number``; ``programs`` concatenates
+    every section's entries in that order. The identity fields
+    (``transport_stream_id`` / ``version_number`` /
+    ``current_next_indicator`` / ``last_section_number``) are retained on
+    both the aggregate and every member section so callers can audit
+    completeness and detect version mixing (§6).
+    """
+
+    transport_stream_id: int
+    version_number: int
+    current_next_indicator: bool
+    last_section_number: int
+    sections: tuple[PATSection, ...]
+    programs: tuple[PATProgram, ...]
+
+    def __post_init__(self) -> None:
+        sections = tuple(self.sections)
+        for section in sections:
+            if not isinstance(section, PATSection):
+                raise TypeError(
+                    "sections entries must be PATSection, got "
+                    f"{type(section).__name__}"
+                )
+        object.__setattr__(self, "sections", sections)
+        programs = tuple(self.programs)
+        for program in programs:
+            if not isinstance(program, PATProgram):
+                raise TypeError(
+                    "programs entries must be PATProgram, got "
+                    f"{type(program).__name__}"
+                )
+        object.__setattr__(self, "programs", programs)
+
+
+def parse_pat_sections(sections: Sequence[PSISection]) -> PATTable:
+    """Aggregate one PAT version set from its sections (§6/§7).
+
+    Each member goes through the full :func:`parse_pat` gates first. The
+    same-version set is identified by ``transport_stream_id`` +
+    ``version_number`` + ``current_next_indicator`` +
+    ``last_section_number`` (§7); any disagreement raises
+    ``TABLE_VERSION_MISMATCH`` — sections of different versions are never
+    merged into one table. ``section_number`` values must cover
+    ``0..last_section_number`` exactly: absent numbers raise
+    ``TABLE_SECTION_MISSING``.
+
+    Section order in the input is irrelevant; the aggregate is ordered by
+    ``section_number``. Duplicate ``section_number`` values and an empty
+    input list are caller bookkeeping errors (ValueError), not wire
+    problems.
+
+    Raises:
+        TypeError: a member is not a PSISection.
+        ValueError: empty input or duplicate ``section_number``.
+        InvalidSectionError: any per-section parse problem,
+            ``TABLE_VERSION_MISMATCH`` on identity disagreement, or
+            ``TABLE_SECTION_MISSING`` on incomplete coverage.
+    """
+    parsed: dict[int, PATSection] = {}
+    for item in sections:
+        if not isinstance(item, PSISection):
+            raise TypeError(
+                f"sections entries must be PSISection, got {type(item).__name__}"
+            )
+        table = parse_pat(item)
+        if table.section_number in parsed:
+            raise ValueError(
+                f"duplicate section_number {table.section_number} in the "
+                "input; each section of one version set must appear at "
+                "most once (retransmissions are the caller's dedup)"
+            )
+        parsed[table.section_number] = table
+    if not parsed:
+        raise ValueError("at least one PSISection is required to aggregate a PAT")
+
+    ordered = [parsed[number] for number in sorted(parsed)]
+    reference = ordered[0]
+    identity = (
+        reference.transport_stream_id,
+        reference.version_number,
+        reference.current_next_indicator,
+        reference.last_section_number,
+    )
+    for member in ordered[1:]:
+        member_identity = (
+            member.transport_stream_id,
+            member.version_number,
+            member.current_next_indicator,
+            member.last_section_number,
+        )
+        if member_identity != identity:
+            raise InvalidSectionError(
+                f"{TABLE_VERSION_MISMATCH}: section_number "
+                f"{member.section_number} belongs to a different version "
+                f"set (tsid/version/current_next/last = {member_identity}) "
+                f"than the reference section {reference.section_number} "
+                f"({identity}); sections of different versions are never "
+                "merged (§7)"
+            )
+
+    expected = range(0, reference.last_section_number + 1)
+    missing = [number for number in expected if number not in parsed]
+    if missing:
+        raise InvalidSectionError(
+            f"{TABLE_SECTION_MISSING}: the PAT declares "
+            f"last_section_number {reference.last_section_number} but "
+            f"section_number(s) {missing} are absent"
+        )
+
+    programs = tuple(program for member in ordered for program in member.programs)
+    return PATTable(
+        transport_stream_id=reference.transport_stream_id,
+        version_number=reference.version_number,
+        current_next_indicator=reference.current_next_indicator,
+        last_section_number=reference.last_section_number,
+        sections=tuple(ordered),
+        programs=programs,
+    )

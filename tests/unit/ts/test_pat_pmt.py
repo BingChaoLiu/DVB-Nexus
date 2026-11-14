@@ -655,3 +655,143 @@ class TestTableLoopBounds:
         assert parsed.streams == (ElementaryStream(0x1B, 0x0100, b"\x52"),)
         assert parsed.program_descriptors == b""
         assert parsed.pcr_pid == 0x1000
+
+
+class TestTableVersionAggregation:
+    """REQ-TS-103-006 — multi-section aggregation, no version mixing (primary)."""
+
+    def test_table_version_aggregation(self) -> None:
+        from ts.errors import InvalidSectionError
+        from ts.crc import mpeg2_crc32
+        from ts.section import PSISection, parse_section
+        from ts.tables.pat import (
+            PAT_SECTION_POLICY,
+            PATBuilder,
+            PATProgram,
+            PATSection,
+            parse_pat,
+            parse_pat_sections,
+        )
+        from ts.tables.pmt import (
+            PMT_SECTION_POLICY,
+            PMTBuilder,
+            PMTSection,
+            ElementaryStream,
+            parse_pmt_sections,
+        )
+
+        def pat_section(number: int, last: int, version: int = 5,
+                        tsid: int = 1, current_next: bool = True,
+                        programs=()) -> PSISection:
+            return PATBuilder().build(
+                PATSection(tsid, version, current_next, number, last, programs)
+            )
+
+        s0 = pat_section(0, 2, programs=(PATProgram(1, 0x1000),))
+        s1 = pat_section(1, 2, programs=(PATProgram(2, 0x1001), PATProgram(0, 0x0010)))
+        s2 = pat_section(2, 2, programs=(PATProgram(3, 0x1002),))
+
+        # Order-insensitive aggregation; identity + per-section retention.
+        table = parse_pat_sections([s2, s0, s1])
+        assert table.transport_stream_id == 1
+        assert table.version_number == 5
+        assert table.current_next_indicator is True
+        assert table.last_section_number == 2
+        assert [sec.section_number for sec in table.sections] == [0, 1, 2]
+        assert table.programs == (
+            PATProgram(1, 0x1000),
+            PATProgram(2, 0x1001),
+            PATProgram(0, 0x0010),  # NIT entry rides its own section
+            PATProgram(3, 0x1002),
+        )
+        assert all(sec.version_number == 5 for sec in table.sections)
+
+        # Declared-but-absent section -> TABLE_SECTION_MISSING.
+        with pytest.raises(InvalidSectionError) as excinfo:
+            parse_pat_sections([s0, s2])
+        assert "TABLE_SECTION_MISSING" in str(excinfo.value)
+        assert "1" in str(excinfo.value)  # the missing number is named
+
+        # Duplicate section_number is caller bookkeeping, not wire data.
+        with pytest.raises(ValueError):
+            parse_pat_sections([s0, s0, s1, s2])
+
+        # Empty input is a caller error.
+        with pytest.raises(ValueError):
+            parse_pat_sections([])
+
+        # Same-version-set identity (§7): extension/version/current_next/
+        # last_section_number must agree across sections.
+        s1_other_version = pat_section(1, 2, version=6, programs=(PATProgram(2, 0x1001),))
+        with pytest.raises(InvalidSectionError) as excinfo:
+            parse_pat_sections([s0, s1_other_version, s2])
+        assert "TABLE_VERSION_MISMATCH" in str(excinfo.value)
+        s1_other_tsid = pat_section(1, 2, tsid=9, programs=(PATProgram(2, 0x1001),))
+        with pytest.raises(InvalidSectionError) as excinfo:
+            parse_pat_sections([s0, s1_other_tsid, s2])
+        assert "TABLE_VERSION_MISMATCH" in str(excinfo.value)
+        s1_other_next = pat_section(
+            1, 2, current_next=False, programs=(PATProgram(2, 0x1001),)
+        )
+        with pytest.raises(InvalidSectionError) as excinfo:
+            parse_pat_sections([s0, s1_other_next, s2])
+        assert "TABLE_VERSION_MISMATCH" in str(excinfo.value)
+        s1_other_last = pat_section(1, 3, programs=(PATProgram(2, 0x1001),))
+        with pytest.raises(InvalidSectionError) as excinfo:
+            parse_pat_sections([s0, s1_other_last, s2])
+        assert "TABLE_VERSION_MISMATCH" in str(excinfo.value)
+
+        # Wire section_number > last_section_number is rejected per-section.
+        bad_meta = bytearray(pat_section(0, 0).raw_bytes)
+        bad_meta[6] = 5  # section_number 5 > last_section_number 0
+        bad_meta[-4:] = mpeg2_crc32(bytes(bad_meta[:-4])).to_bytes(4, "big")
+        with pytest.raises(InvalidSectionError) as excinfo:
+            parse_pat(
+                parse_section(bytes(bad_meta), PAT_SECTION_POLICY)
+            )
+        assert "TABLE_VERSION_MISMATCH" in str(excinfo.value)
+
+        # Non-PSISection input.
+        with pytest.raises(TypeError):
+            parse_pat_sections([s0.raw_bytes])  # type: ignore[list-item]
+
+        # PMT multi-section: streams concatenate in section order, program
+        # descriptors come from the lowest section number.
+        pmt0 = PMTBuilder().build(PMTSection(
+            program_number=1, version_number=3, current_next_indicator=True,
+            section_number=0, last_section_number=1, pcr_pid=0x1000,
+            program_descriptors=b"\x42\x80\x01\x02",
+            streams=(ElementaryStream(0x1B, 0x0100),),
+        ))
+        pmt1 = PMTBuilder().build(PMTSection(
+            program_number=1, version_number=3, current_next_indicator=True,
+            section_number=1, last_section_number=1, pcr_pid=0x1000,
+            program_descriptors=b"",
+            streams=(ElementaryStream(0x0F, 0x0101), ElementaryStream(0x11, 0x0102)),
+        ))
+        pmt_table = parse_pmt_sections([pmt1, pmt0])
+        assert pmt_table.program_number == 1
+        assert pmt_table.version_number == 3
+        assert pmt_table.last_section_number == 1
+        assert pmt_table.pcr_pid == 0x1000
+        assert pmt_table.program_descriptors == b"\x42\x80\x01\x02"
+        assert pmt_table.streams == (
+            ElementaryStream(0x1B, 0x0100),
+            ElementaryStream(0x0F, 0x0101),
+            ElementaryStream(0x11, 0x0102),
+        )
+        assert [sec.section_number for sec in pmt_table.sections] == [0, 1]
+
+        # PMT version mixing across sections is rejected as well.
+        pmt1_v4 = PMTBuilder().build(PMTSection(
+            program_number=1, version_number=4, current_next_indicator=True,
+            section_number=1, last_section_number=1, pcr_pid=0x1000,
+            program_descriptors=b"",
+            streams=(ElementaryStream(0x0F, 0x0101),),
+        ))
+        with pytest.raises(InvalidSectionError) as excinfo:
+            parse_pmt_sections([pmt0, pmt1_v4])
+        assert "TABLE_VERSION_MISMATCH" in str(excinfo.value)
+        with pytest.raises(InvalidSectionError) as excinfo:
+            parse_pmt_sections([pmt0])  # last_section_number=1, missing 1
+        assert "TABLE_SECTION_MISSING" in str(excinfo.value)
