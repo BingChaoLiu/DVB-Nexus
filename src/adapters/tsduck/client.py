@@ -223,16 +223,27 @@ class TSDuckClient:
             )
 
         argv = command_builder.build_analyze_argv(input_path)
-        result = await self._runner.run_async(argv, timeout=timeout)
 
+        # §7 sha field, hashed BEFORE the spawn (review fix B9): every analyze
+        # attempt's record must carry the input digest even when the runner
+        # raises (timeout/cancel/spawn failure) — a post-run hash would never
+        # happen on those paths. Residual race, documented: the file can still
+        # change between this hash and tsanalyze's own read of the path, in
+        # which case the record names the pre-spawn bytes rather than the
+        # bytes actually analyzed (the input face stays a bare path until M3
+        # wires SPEC-503 artifact IDs; a content-addressed artifact removes
+        # the race structurally).
         input_sha256: str | None
         try:
             input_sha256 = _file_sha256(Path(input_path))
         except OSError:
-            # Unreadable input (e.g. deleted between spawn and hash): the
-            # §7 sha field carries None and the gate still governs validity
-            # — tsanalyze has already failed on the same file (exit 1, #3).
+            # Unreadable input (never existed / no permission): the §7 sha
+            # field carries None and the gate still governs validity —
+            # tsanalyze fails on the same file (exit 1, #3 §4.4).
             input_sha256 = None
+
+        result = await self._runner.run_async(argv, timeout=timeout)
+
         record = self._call_record(
             version=version,
             executable=executable,
