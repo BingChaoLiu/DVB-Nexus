@@ -1,0 +1,31 @@
+{
+  "expectations": [
+    {
+      "event_type": "ts.psi_section_observed",
+      "locator": {
+        "pid": 0
+      },
+      "detail": {
+        "table_id": 0,
+        "crc_valid": true,
+        "programs": [
+          {
+            "program_number": 1,
+            "pmt_pid": 4100
+          }
+        ],
+        "note": "PMT_PID_MISMATCH: valid PAT repointed to the wrong PMT PID (SPEC-204 §6.4)"
+      }
+    },
+    {
+      "event_type": "ts.psi_section_observed",
+      "locator": {
+        "pid": 4096
+      },
+      "detail": {
+        "orphan_pmt": true,
+        "note": "PMT remains on the real PID — orphaned by the repointed PAT"
+      }
+    }
+  ]
+}

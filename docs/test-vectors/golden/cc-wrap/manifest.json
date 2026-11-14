@@ -1,0 +1,17 @@
+{
+  "vector_id": "cc-wrap",
+  "kind": "generated_ts",
+  "related_specs": [
+    "SPEC-100"
+  ],
+  "generator_version": "tools/make_golden_ts_vectors.py v1 (script-construct; no src/ts involvement)",
+  "config_hash": null,
+  "sha256": "sha256:5b707c72edf7739c567ddf659a58e00a03a27992c6697421f634a118baacbbbf",
+  "packet_count": 18,
+  "fault_plan_ref": null,
+  "verification": {
+    "path": "tsduck-cross",
+    "direction": "script-construct→tsduck-analyze",
+    "evidence_ref": "docs/test-vectors/golden/cc-wrap/cc-wrap.verification.md"
+  }
+}

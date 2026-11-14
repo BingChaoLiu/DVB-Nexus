@@ -1,0 +1,18 @@
+{
+  "vector_id": "pmt-invalid-crc-baseline",
+  "kind": "generated_ts",
+  "related_specs": [
+    "SPEC-108",
+    "SPEC-204"
+  ],
+  "generator_version": "dvb-nexus-ts-generator/0.5.0 (SPEC-108)",
+  "config_hash": "sha256:fcaffa5c13218b77884498cc71f56d11807fd154f943b429c03fc6c99dc9fa74",
+  "sha256": "sha256:b0afe1ef6068b9f1f0d3ed788cbaaf95d48f4f23bc1c7f8623895de6888a8f4c",
+  "packet_count": 600,
+  "fault_plan_ref": null,
+  "verification": {
+    "path": "tsduck-cross",
+    "direction": "self-generate→tsduck-analyze",
+    "evidence_ref": "docs/test-vectors/golden/pmt-invalid-crc-baseline/pmt-invalid-crc-baseline.verification.md"
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "expectations": [
+    {
+      "event_type": "ts.packet_batch_observed",
+      "locator": {
+        "pid": 291,
+        "packet_index": 0
+      },
+      "detail": {
+        "cc": 0,
+        "note": "sequence start"
+      }
+    },
+    {
+      "event_type": "ts.packet_batch_observed",
+      "locator": {
+        "pid": 291,
+        "packet_index": 15
+      },
+      "detail": {
+        "cc": 15,
+        "note": "CC upper edge"
+      }
+    },
+    {
+      "event_type": "ts.packet_batch_observed",
+      "locator": {
+        "pid": 291,
+        "packet_index": 16
+      },
+      "detail": {
+        "cc": 0,
+        "note": "modulo-16 wrap 15→0 (SPEC-100 §5.4)"
+      }
+    }
+  ]
+}

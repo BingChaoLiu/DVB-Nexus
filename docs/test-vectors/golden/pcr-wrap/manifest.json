@@ -1,0 +1,17 @@
+{
+  "vector_id": "pcr-wrap",
+  "kind": "generated_ts",
+  "related_specs": [
+    "SPEC-105"
+  ],
+  "generator_version": "tools/make_golden_ts_vectors.py v1 (script-construct; no src/ts involvement)",
+  "config_hash": null,
+  "sha256": "sha256:009eacdfa5f6d1b5a8da745cc69ab10a1cb0e38a3505a4c1f1ad854127e5c1f6",
+  "packet_count": 6,
+  "fault_plan_ref": null,
+  "verification": {
+    "path": "tsduck-cross",
+    "direction": "script-construct→tsduck-analyze",
+    "evidence_ref": "docs/test-vectors/golden/pcr-wrap/pcr-wrap.verification.md"
+  }
+}

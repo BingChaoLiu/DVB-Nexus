@@ -1,6 +1,6 @@
 # TS Core Test Vector Index
 
-位级向量与 golden 向量的权威索引（仓库级 `docs/test-vectors/`，SPEC-506 0.6.0 起）。golden 目录布局、登记格式、独立验证规则与 CI 门见 SPEC-506（Conformance Suite）；本索引每行指向一个向量文档或 `golden/<vector_id>/` 三件套目录。
+位级向量与 golden 向量的权威索引（仓库级 `docs/test-vectors/`，SPEC-506 0.6.0 起）。golden 目录布局、登记格式、独立验证规则与 CI 门见 SPEC-506（Conformance Suite）；本索引每行指向一个向量文档或 `golden/<vector_id>/` 三件套目录（`<id>.ts` + `manifest.json` + `expectations.json`，另附 `<id>.verification.md` 实测证据注记）。
 
 ## 位级向量文档（L1 外部独立向量）
 
@@ -8,29 +8,42 @@
 |---|---|---|---|
 | `CRC32-MPEG2.md` | SPEC-101/102/103 | MPEG-2 CRC algorithm/check/remainder | Initial vector |
 | `PCR-PTS.md` | SPEC-105/104 | PCR/PTS bit packing, boundary and wrap | Initial vector |
+| `PACKET-HEADER-SET.md` | SPEC-100 | TS packet header wire-table derivation for `golden/packet-header-set/` | Initial vector |
 
-## golden 向量（SPEC-506 §7 首批清单，#14 决议）
+## golden 向量（SPEC-506 §7 首批清单，#14 决议——全部 registered）
 
 | vector_id | Kind | Purpose | 独立验证路径 | Status |
 |---|---|---|---|---|
-| `packet-header-set` | bit_level | 188-byte 包头样本集（TEI/PUSI/优先级/CC 边沿，SPEC-100） | L1：spec 表推导脚本 + 人工评审 | planned |
-| `pat-minimal` | generated_ts | 最小合法 TS（PAT+PMT 单节目，SPEC-103/108） | L2：tstabcomp 生成→自研解析 | planned |
-| `pat-pmt-multi` | generated_ts | PAT/PMT 变体：双节目、多流类型（SPEC-103/108） | L2：tstabcomp 生成→自研解析 | planned |
-| `cc-wrap` | generated_ts | CC 15→0 回绕序列（SPEC-100 §5.4） | L2：脚本构造→TSDuck analyze | planned |
-| `pcr-wrap` | generated_ts | PCR 回绕边界 + modular_delta 半周期窗口（SPEC-105） | L2：脚本构造→TSDuck analyze | planned |
-| `section-fragmentation` | generated_ts | PUSI/pointer、section 跨 3 包（SPEC-102/106） | L2：脚本构造→TSDuck analyze | planned |
-| `pat-missing`（baseline/faulted 对） | faulted_ts | PAT_MISSING（Null 顶替窗口，SPEC-204 §6.1） | L2：独立变换脚本→TSDuck 复核 | planned |
-| `pmt-invalid-crc`（对） | faulted_ts | PMT_INVALID_CRC（persistent/invert，SPEC-204 §6.2） | 同上 | planned |
-| `cc-discontinuity`（对） | faulted_ts | CC_DISCONTINUITY（相对偏移持续，SPEC-204 §6.3） | 同上 | planned |
-| `pmt-pid-mismatch`（对） | faulted_ts | PMT_PID_MISMATCH（PAT CRC 重算，SPEC-204 §6.4） | 同上 | planned |
+| `packet-header-set` | bit_level | 188-byte 包头样本集 ×10（TEI/PUSI/优先级/PID 边界/scrambling/AFC/CC 边沿，SPEC-100） | L1：spec 表推导脚本 + 人工评审（`PACKET-HEADER-SET.md`） | registered |
+| `pat-minimal` | generated_ts | 最小合法 TS：PAT+PMT 单节目，50 包（SPEC-103/108） | L2：tsduck-generate→self-parse（tsxml→tstabcomp→inject） | registered |
+| `pat-pmt-multi` | generated_ts | PAT/PMT 变体：双节目、4 种流类型，60 包（SPEC-103/108） | L2：tsduck-generate→self-parse | registered |
+| `cc-wrap` | generated_ts | CC 15→0 回绕序列：单 PID 18 payload 包（SPEC-100 §5.4） | L2：script-construct→tsduck-analyze（continuity 静默） | registered |
+| `pcr-wrap` | generated_ts | PCR 回绕边界：2³³−δ 手工置值 ×6，modular_delta 半周期窗口（SPEC-105） | L2：script-construct→tsduck-analyze（pcrextract 读回） | registered |
+| `section-fragmentation` | generated_ts | PUSI/pointer、section 跨 3 包：100 程序 PAT（412 字节）（SPEC-102/106） | L2：script-construct→tsduck-analyze（tstables 重组） | registered |
+| `pat-missing-baseline` | generated_ts | PAT_MISSING 对的 baseline：SPEC-108 pull-safe 几何 600 包 | L2：self-generate→tsduck-analyze | registered |
+| `pat-missing` | faulted_ts | PAT_MISSING：activation=202 起窗内 PID 0 → Null 顶替（SPEC-204 §6.1），`fault_plan_ref=pat-missing-baseline` | L2：独立变换脚本→tsduck-analyze（PID 0 包数 3→1） | registered |
+| `pmt-invalid-crc-baseline` | generated_ts | PMT_INVALID_CRC 对的 baseline（同上几何） | L2：self-generate→tsduck-analyze | registered |
+| `pmt-invalid-crc` | faulted_ts | PMT_INVALID_CRC：persistent + invert，3 个 PMT 实例 CRC 反转（SPEC-204 §6.2），ref 同上 | L2：独立变换脚本→tsduck-analyze（PMT 被独立 demuxer 拒收） | registered |
+| `cc-discontinuity-baseline` | generated_ts | CC_DISCONTINUITY 对的 baseline（同上几何） | L2：self-generate→tsduck-analyze | registered |
+| `cc-discontinuity` | faulted_ts | CC_DISCONTINUITY：相对偏移 delta=3，落点 slot 50，偏移持续（SPEC-204 §6.3），ref 同上 | L2：独立变换脚本→tsduck-analyze（continuity 报 slot 50 missing 3） | registered |
+| `pmt-pid-mismatch-baseline` | generated_ts | PMT_PID_MISMATCH 对的 baseline（同上几何） | L2：self-generate→tsduck-analyze | registered |
+| `pmt-pid-mismatch` | faulted_ts | PMT_PID_MISMATCH：PAT `program_map_PID` 4096→4100 + CRC 重算（SPEC-204 §6.4），ref 同上 | L2：独立变换脚本→tsduck-analyze（tstables 见 PAT 指向 4100、PMT 孤儿在 4096） | registered |
 
-- Status 取值：`planned`（本票批准、待产出）→ `registered`（三件套入库，sha256 门生效）→ `deprecated`（失效保留，provenance 纪律）。
-- faulted 向量由 tools/ **独立变换脚本**从 baseline 生成（变换语义照 SPEC-204 §6/§7 冻结条款），不经自研 Generator、不经过滤器——并兼任过滤器集成测试的字节级 oracle（输出 SHA 与 golden faulted 一致断言）。
-- 自研 Generator（SPEC-108）实现后，对同配置流断言**同一 expectations 可观测**，不做字节比对。
+### #14 Q3 三 TODO 落实路径（已闭环）
+
+1. **packet-header.bin → `golden/packet-header-set/`**（SPEC-100 已批准即做）：位级手造三件套，字节由 `tools/make_golden_packet_header_set.py` 从 SPEC-100 §3 wire 表逐位推导；L1 验证（推导脚本 + 评审 + 自解析器逐字段对拍），无需 TSDuck。
+2. **pat-minimal.ts → tsxml→tstabcomp 链路生成**：tsxml 源在 `tools/tsduck-tsxml/pat-minimal-*.xml`，经 `tstabcomp --output` + `tsp -I null -P inject --stuffing -O file` 产出 50 包（#3 实测链路）；Generator（SPEC-108）对同配置流断言同一 expectations 可观测、不做字节比对（#14 Q3 原文）。
+3. **section-fragmentation.json → 标准 golden 三件套**：`golden/section-fragmentation/`（"json"意图由 expectations.json 承载），字节由 `tools/make_golden_ts_vectors.py section-fragmentation` 构造（独立 CRC 实现，对拍 CRC32-MPEG2.md check value），tstables 跨 3 包重组 100 程序。
+
+- Status 取值：`planned`（批准、待产出）→ `registered`（三件套入库，sha256 门生效）→ `deprecated`（失效保留，provenance 纪律）。首批 10 条目经 #14 决议打包预批准，全部 registered（14 trios，digest 冻结表见 `tests/conformance/test_first_batch_registry.py`）。
+- faulted 向量由 tools/ **独立变换脚本**（`tools/golden_fault_transform.py`，无 src/ts 参与）从 baseline 生成（变换语义照 SPEC-204 §6/§7 冻结条款），不经自研 Generator、不经过滤器——并兼任过滤器集成测试的字节级 oracle（输出 SHA 与 golden faulted 一致断言）。
+- 自研 Generator（SPEC-108）实现后，对同配置流断言**同一 expectations 可观测**，不做字节比对（四 baseline 即 SPEC-108 pull-safe 几何产物，同时承担该对照的 baseline 形态）。
 - 负向畸形输入集不入 golden（expectations 机制只承载正向观测断言）：落 `tests/data/malformed/`，unit 层测试（SPEC-102 错误码、SPEC-308 JSON 内容门）。
+- 构造/变换脚本（`tools/make_golden_packet_header_set.py`、`tools/make_golden_ts_vectors.py`、`tools/make_golden_tsduck_vectors.py`、`tools/make_golden_baseline.py`、`tools/golden_fault_transform.py`）确定性可重跑（同脚本 + 同版本 + 同参数 ⇒ 同字节，有 conformance 断言）；CI 只验 sha，永不重新生成覆盖（SPEC-506 §6）。
+- 登记校验器：`tools/validate_golden_registration.py`（三件套/sha/事件类型合法性/pair 链接/索引一致性，conformance 门断言其 PASS）。
 
 ## 独立验证红线（升格条款，SPEC-506 §5）
 
 Golden files generated by implementation Agent must not be accepted solely because the same implementation parses its own output. At least one independent validation path (TSDuck analysis in either direction, or independently-reviewed bit-level vector) is required.
 
-三层验收地位：**L1 外部位级向量 = 权威基准；L2 TSDuck 双向交叉 = 合格独立验证路径；L3 自研 round-trip = 仅回归覆盖**，永不构成独立验收证据。
+三层验收地位：**L1 外部位级向量 = 权威基准；L2 TSDuck 双向交叉 = 合格独立验证路径；L3 自研 round-trip = 仅回归覆盖**，永不构成独立验收证据。每向量方向与证据锚点登记于 manifest `verification` 字段与 `golden/<id>/<id>.verification.md`（TSDuck 3.40-4165 实测）。

@@ -1,0 +1,18 @@
+{
+  "vector_id": "pat-pmt-multi",
+  "kind": "generated_ts",
+  "related_specs": [
+    "SPEC-103",
+    "SPEC-108"
+  ],
+  "generator_version": "tsduck unknown (tstabcomp+tsp inject)",
+  "config_hash": "sha256:150b47eec37ab2cc89db785bd0c354dc9046cdeb76f3b00004730f0202882cea",
+  "sha256": "sha256:4f790a74c8b020d203d98e03aa7e0f907a26a98f66d938626584e9c59a631ff5",
+  "packet_count": 60,
+  "fault_plan_ref": null,
+  "verification": {
+    "path": "tsduck-cross",
+    "direction": "tsduck-generate→self-parse",
+    "evidence_ref": "docs/test-vectors/golden/pat-pmt-multi/pat-pmt-multi.verification.md"
+  }
+}

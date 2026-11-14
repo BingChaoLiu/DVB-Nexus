@@ -1,0 +1,37 @@
+{
+  "expectations": [
+    {
+      "event_type": "ts.psi_section_observed",
+      "locator": {
+        "pid": 0
+      },
+      "detail": {
+        "table_id": 0,
+        "transport_stream_id": 1,
+        "program_count": 100,
+        "section_total_size": 412,
+        "spans_packets": 3,
+        "first_program": {
+          "program_number": 1,
+          "pmt_pid": 257
+        },
+        "last_program": {
+          "program_number": 100,
+          "pmt_pid": 356
+        }
+      }
+    },
+    {
+      "event_type": "ts.packet_batch_observed",
+      "locator": {
+        "pid": 0,
+        "packet_index": 0
+      },
+      "detail": {
+        "pusi": 1,
+        "pointer_field": 0,
+        "cc": 0
+      }
+    }
+  ]
+}
