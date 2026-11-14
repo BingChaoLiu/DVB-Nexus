@@ -1,0 +1,18 @@
+{
+  "vector_id": "pat-minimal",
+  "kind": "generated_ts",
+  "related_specs": [
+    "SPEC-103",
+    "SPEC-108"
+  ],
+  "generator_version": "tsduck unknown (tstabcomp+tsp inject)",
+  "config_hash": "sha256:91a49d7f4f921081a00dfc0db133c7936b2edc30098d1d1934ff6c3642e77760",
+  "sha256": "sha256:4c812bb2ef712b4190c9aaa8561b4fd72d2edb60bb6fe4e61ac90336bbe7481d",
+  "packet_count": 50,
+  "fault_plan_ref": null,
+  "verification": {
+    "path": "tsduck-cross",
+    "direction": "tsduck-generate→self-parse",
+    "evidence_ref": "docs/test-vectors/golden/pat-minimal/pat-minimal.verification.md"
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "expectations": [
+    {
+      "event_type": "ts.packet_batch_observed",
+      "locator": {
+        "pid": 8191,
+        "packet_index": 202
+      },
+      "detail": {
+        "substitutes_pid": 0,
+        "note": "PAT_MISSING: Null packet replaces the PAT slot (SPEC-204 §6.1, 等位替换)"
+      }
+    },
+    {
+      "event_type": "ts.packet_batch_observed",
+      "locator": {
+        "pid": 8191,
+        "packet_index": 404
+      },
+      "detail": {
+        "substitutes_pid": 0,
+        "note": "PAT_MISSING: Null packet replaces the PAT slot"
+      }
+    }
+  ]
+}
