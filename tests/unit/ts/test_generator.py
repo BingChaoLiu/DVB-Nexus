@@ -733,6 +733,13 @@ def test_tsduck_integration():
     the packet-size invariants, a JSON-mappable config (SPEC-500 DTO seam)
     and a JSON-serializable self-parse evidence shape for the analyzer
     comparison.
+
+    Cross-reference (REQ-TS-108-008): the real-machine ``tsanalyze --json``
+    evidence lives in ``tests/integration/ts/test_cbr_end_to_end.py`` — this
+    unit-layer test is the interface / self-parse evidence (repo-side note
+    for the TRACEABILITY primary-name mapping; the real-run obligation was
+    absorbed by the integration ticket #35 evidence, so no permanent skip
+    placeholder is kept here per SPEC-506 §6).
     """
     from ts.generator.generator import GENERATOR_VERSION
     from ts.generator.json_map import (
@@ -798,27 +805,6 @@ def test_tsduck_integration():
     rendered = json.dumps(evidence)
     assert json.loads(rendered)["pmt"]["pcr_pid"] == 256
     assert evidence["pes"]["reassembled_count"] >= 1
-
-
-@pytest.mark.tsduck
-@pytest.mark.windows_only
-def test_tsduck_real_run_blocked_until_ticket_35(tsduck):
-    """Real TSDuck evidence: explicitly NOT RUN here, owned by ticket #35.
-
-    The ``tsduck`` fixture skips explicitly when the CLI is missing
-    (SPEC-505 §5 禁静默跳过).  When the CLI IS present, this test still
-    skips the real ``tsanalyze --json`` run with an explicit reason: the
-    command/exit-code/report evidence belongs to the integration ticket
-    #35 (dispatch ruling for REQ-TS-108-008) — never faked green.
-    """
-    assert tsduck.available is True
-    assert tsduck.executable
-    assert tsduck.version
-    pytest.skip(
-        "REQ-TS-108-008: real `tsanalyze --json` evidence is ticket #35 "
-        "scope (integration owner); generator interface verified in "
-        "test_tsduck_integration — NOT RUN here (SPEC-005 §11 discipline)"
-    )
 
 
 # --- JSON↔DTO mapping table conformance (ruling #11 / SPEC-108 §4) ------------
