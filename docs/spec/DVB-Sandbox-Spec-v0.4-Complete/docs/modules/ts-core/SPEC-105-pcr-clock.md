@@ -98,7 +98,7 @@ def modular_delta(current: int, previous: int, modulus: int) -> int: ...
 
 - 本模块负责 PCR 值本身的编码/解码与时间转换。
 - PCR 的插入位置、重复周期和是否创建 adaptation-only Packet 由 SPEC-107。
-- PCR repetition/accuracy 的测量和诊断属于后续 SPEC-301/304 / Conformance Profile。
+- PCR repetition/accuracy 的测量和诊断属于后续 SPEC-302/306/307 / Conformance Profile。
 - 不在 `encode_pcr()` 中硬编码 DVB TR 101 290 的检测阈值。
 
 ## 9. 错误码

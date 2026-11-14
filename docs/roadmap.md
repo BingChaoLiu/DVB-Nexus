@@ -48,6 +48,8 @@
 | SPEC-640 | Time Machine | Ring Buffer、事件触发、冻结与回放 | P2 |
 | SPEC-641 | TS Differential Analyzer | 双码流结构与指标差异分析 | P2 |
 
+前端远期行 **SPEC-407 Timeline & Replay UI**（P2，依赖 SPEC-640/501）自规格包 `REGISTRY.md` §D 移入本目录（[编号体系重建 #10](https://github.com/BingChaoLiu/DVB-Nexus/issues/10)）：随 Time Machine（SPEC-640，Later Phase）另启 effort，规格文本未编写。
+
 ## 4. v0.3 故障案例库（远期靶场素材）
 
 > 原文见 `docs/spec/provenance/v03.md` §7。以下条目已按标准核查报告（`docs/research/standards-audit.md` §8）**订正**——⚠️ 标注处为对 v0.3 原文的修正，实现知识卡片时以本节为准。

@@ -35,7 +35,7 @@
 |---|---|---|
 | TS Core | SPEC-100～108 | Packet、CRC、Section、PAT/PMT、PES、PCR、Packetizer、Mux、Generator |
 | Simulation / Fault Lab | SPEC-200～206 | Runtime、Clock、State、TS Runtime、Fault、Scenario、Recovery |
-| Observation / Diagnosis / TSDuck | SPEC-300～306 | Observation、Metrics、Evidence、Diagnosis、Rules、TSDuck、Comparator |
+| Observation / Diagnosis / TSDuck | SPEC-300～309 | Observation 架构、事件信封、Metrics、Timeline、Health/Alerts、Query API、Diagnosis、Rules、TSDuck Adapter、Comparator（Evidence Manager 分摊至 503/305/303/206，见 REGISTRY §C） |
 | Frontend | SPEC-400～407 | 前端架构、Topology、Inspector、Monitor、Packet、CLI、Lab、Replay |
 | API / Storage / Quality | SPEC-500～507 | REST、WebSocket、Persistence、Artifact、Session、测试、Conformance、性能 |
 | Future DVB domains | SPEC-600+ | T2MI、BBFrame、PLP、BISS、CA、RF、DiSEqC、Unicable、Live DVB |
@@ -62,10 +62,12 @@ SPEC-100 Packet ──┬── SPEC-102 PSI Section ── SPEC-103 PAT/PMT
                  SPEC-108 Generator
 
 Runtime / Validation:
-SPEC-201 Clock ── SPEC-203 TS Runtime ── SPEC-305 TSDuck Adapter
-SPEC-204 Fault Injector ── SPEC-205 Scenario Engine
-SPEC-300 Observation ── SPEC-303 Diagnosis ── SPEC-304 Rules
-SPEC-302 Evidence Manager ← TS artifacts / analyzer reports
+SPEC-201 Clock ── SPEC-203 TS Runtime ── SPEC-308 TSDuck Adapter
+SPEC-204 Fault Injector ── SPEC-205 Scenario Engine ── SPEC-206 Recovery Verification
+SPEC-300 Observation ── SPEC-302 Metrics ── SPEC-304 Health & Alerts
+SPEC-306 Diagnosis ── SPEC-307 Rules（事件走 SPEC-301 信封）
+SPEC-303 Timeline / SPEC-305 Query API ← 事件流水与工件
+SPEC-503 Artifact Storage ← TS artifacts / analyzer reports
 ```
 
 详细依赖以各模块 Spec 的 `depends_on` 为准。

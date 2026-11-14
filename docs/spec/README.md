@@ -21,5 +21,5 @@ docs/spec/
 
 1. **引用规格包内容时注明路径**（如 `docs/spec/DVB-Sandbox-Spec-v0.4-Complete/docs/modules/ts-core/SPEC-100-ts-packet.md`）。
 2. 发现底稿缺陷**不要直接改底稿**——在对应 ticket 里提出，修订落到本仓库自己的文档（`docs/adr/`、新规格文件、roadmap）。
-3. 底稿中的编号体系有已知双轨缺陷（SPEC-300~305），引用时以 [#10 编号体系重建](https://github.com/BingChaoLiu/DVB-Nexus/issues/10) 的裁决为准。
+3. 底稿中的编号双轨缺陷（SPEC-300~305）已按 [#10 编号体系重建](https://github.com/BingChaoLiu/DVB-Nexus/issues/10) 裁决消除：REGISTRY/SPEC-INDEX 对齐实际文件（300~305 实存 + 新增 306~309 待写）；底稿修订一律经批准 ticket 落地（ADR-0005/0007 机制），禁止绕票私改；原始 ChatGPT 态见 git tag `chatgpt-v04-pristine`（291e423）。
 4. 独立调研报告在 `docs/research/`（TSDuck 环境、生态对比、Python 性能、标准核查）。

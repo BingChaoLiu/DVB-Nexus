@@ -32,7 +32,7 @@ requirements: [REQ-TS-100-001, REQ-TS-100-002, REQ-TS-100-003, REQ-TS-100-004, R
 
 - 204-byte RS204/FEC trailer。
 - 对输入文件进行 188/192/204 自动同步和重同步扫描（归 SPEC-631/Analyzer）。
-- 输入码流全局 CC 统计和根因诊断（归 SPEC-301/304）。
+- 输入码流全局 CC 统计和根因诊断（统计归 SPEC-302，诊断归 SPEC-306/307）。
 - T2MI、BISS、DVB-CA 或 RF 层解析。
 - 自行纠正 TEI、错误 PID 或错误 CC。
 

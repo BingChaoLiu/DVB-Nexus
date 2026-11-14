@@ -31,19 +31,26 @@ TS Core 的完整模块级规格已收录于 [`ts-core/`](ts-core/SPEC-INDEX-TS-
 | SPEC-203 | TS Runtime | SIM_TS 编排、Generator 与 Artifact 关联 | SPEC-108/200/201 | P0 |
 | SPEC-204 | Fault Injection | 触发器、Mutation、注入记录、撤销/重建策略 | SPEC-100/102/106/203 | P0 |
 | SPEC-205 | Scenario Engine | 实验包格式、初始状态、提示、步骤和任务 | SPEC-204/300 | P0 |
-| SPEC-206 | Recovery Verification | 恢复验证、通关规则、前后结果对比 | SPEC-205/303/305 | P0 |
+| SPEC-206 | Recovery Verification | 恢复验证、通关规则、前后结果对比 | SPEC-205/306/308 | P0 |
 
 ## C. Observation / Diagnosis / TSDuck
 
+编号对齐实际文件（[#10 编号体系重建](https://github.com/BingChaoLiu/DVB-Nexus/issues/10) 裁决）；SPEC-306～309 为旧注册语义的重新分配，规格文本随 [补写 MVP P0 缺失契约](https://github.com/BingChaoLiu/DVB-Nexus/issues/13) 编写。
+
 | Spec ID | 名称 | 范围 | 建议依赖 | 优先级 |
 |---|---|---|---|---|
-| SPEC-300 | Observation Model | Observation/Event schema、来源和置信类型 | SPEC-003 | P0 |
-| SPEC-301 | Metrics Engine | PID/Bitrate/CC/PCR 统计、窗口、聚合 | SPEC-100/105/300 | P0 |
-| SPEC-302 | Evidence Manager | Artifact、Packet 定位、报告和日志关联 | SPEC-003/503 | P0 |
-| SPEC-303 | Diagnosis Engine | 观察关联、根因候选、严重度和建议 | SPEC-300/301/302 | P0 |
-| SPEC-304 | Diagnostic Rules | 规则定义、注册、匹配、抑制和版本 | SPEC-303 | P0 |
-| SPEC-305 | TSDuck Adapter | Worker、命令构建、超时、报告和日志 | SPEC-302/500 | P0 |
-| SPEC-306 | Analyzer Comparator | 自研解析器与 TSDuck 结果对比和分歧记录 | SPEC-300/305 | P1 |
+| SPEC-300 | Observation & Metrics Architecture | 模块边界、架构、生命周期、数据流、事件摄入 | SPEC-003 | P0 |
+| SPEC-301 | Canonical Event Contract | 权威事件信封、journal_seq 全序、交付与去重（ADR-0006） | SPEC-003 | P0 |
+| SPEC-302 | Metrics Engine | 指标定义、聚合、标签与保留 | SPEC-100/105/300/301 | P0 |
+| SPEC-303 | Timeline Recorder | 时间轴、检查点、回放与导出 | SPEC-300/301 | P0 |
+| SPEC-304 | Health & Alert Engine | 健康规则、告警生命周期与证据 | SPEC-302/303 | P0 |
+| SPEC-305 | Observation Query API | 内部服务 API 与查询语义 | SPEC-300/303 | P0 |
+| SPEC-306 | Diagnosis Engine | 观察关联、根因候选、严重度和建议 | SPEC-300/301/302 | P0 |
+| SPEC-307 | Diagnostic Rules | 规则定义、注册、匹配、抑制和版本 | SPEC-306 | P0 |
+| SPEC-308 | TSDuck Adapter | Worker、命令构建、超时、报告和日志（ADR-0005 三操作） | SPEC-503/500 | P0 |
+| SPEC-309 | Analyzer Comparator | 自研解析器与 TSDuck 结果对比和分歧记录 | SPEC-300/308 | P1 |
+
+> 旧注册的 Evidence Manager（原 SPEC-302）不设独立规格：Artifact/报告关联由 SPEC-503 Artifact Storage 承载，Packet 定位与查询由 SPEC-305 承载，timeline/evidence 导出由 SPEC-303 承载，通关证据引用由 SPEC-206 承载。
 
 ## D. Frontend
 
@@ -52,45 +59,27 @@ TS Core 的完整模块级规格已收录于 [`ts-core/`](ts-core/SPEC-INDEX-TS-
 | SPEC-400 | Frontend Architecture | 页面结构、状态、DTO、路由和构建 | SPEC-001/003 | P0 |
 | SPEC-401 | Topology Editor | 节点/端口/连线/拖拽/校验展示 | SPEC-003/500 | P0 |
 | SPEC-402 | Node Inspector | 节点属性、配置表单和校验提示 | SPEC-401/500 | P0 |
-| SPEC-403 | Stream Monitor | 概览、PID、Bitrate、CC/PCR 聚合指标 | SPEC-301/501 | P0 |
-| SPEC-404 | Packet Inspector | Packet 列表、Header/Hex/字段下钻 | SPEC-100/302/503 | P1 |
-| SPEC-405 | CLI Console | 真实 TSDuck 输出、模拟日志的来源标识 | SPEC-305/501 | P0 |
+| SPEC-403 | Stream Monitor | 概览、PID、Bitrate、CC/PCR 聚合指标 | SPEC-302/501 | P0 |
+| SPEC-404 | Packet Inspector | Packet 列表、Header/Hex/字段下钻 | SPEC-100/305/503 | P1 |
+| SPEC-405 | CLI Console | 真实 TSDuck 输出、模拟日志的来源标识 | SPEC-308/501 | P0 |
 | SPEC-406 | Training Lab UI | 实验目标、提示、步骤、通关结果 | SPEC-205/206 | P0 |
-| SPEC-407 | Timeline & Replay UI | 时间轴、冻结证据、回放控制 | SPEC-640/501 | P2 |
 
 ## E. API / Storage / Quality
 
 | Spec ID | 名称 | 范围 | 建议依赖 | 优先级 |
 |---|---|---|---|---|
 | SPEC-500 | REST API | 路由、DTO、错误响应、版本策略 | SPEC-001/003 | P0 |
-| SPEC-501 | WebSocket | Event envelope、重连、序号、背压 | SPEC-003/300 | P0 |
+| SPEC-501 | WebSocket | Event envelope、重连、序号、背压 | SPEC-003/301 | P0 |
 | SPEC-502 | Persistence | SQLite Schema、Repository、迁移 | SPEC-003 | P0 |
 | SPEC-503 | Artifact Storage | TS/报告/证据文件、哈希、路径安全 | SPEC-003/502 | P0 |
 | SPEC-504 | Session Persistence | Session/Run 保存、恢复和过期 | SPEC-200/502 | P1 |
 | SPEC-505 | Test Architecture | Pytest 分层、Fixture、测试数据组织 | SPEC-004 | P0 |
 | SPEC-506 | Conformance Suite | MPEG-TS 标准测试向量、Golden Streams | SPEC-100～108 | P0 |
-| SPEC-507 | Performance & Resource Limits | 码率、文件大小、内存、任务并发和背压 | SPEC-107/200/305 | P1 |
+| SPEC-507 | Performance & Resource Limits | 码率、文件大小、内存、任务并发和背压 | SPEC-107/200/308 | P1 |
 
 ## F. Future DVB Domains
 
-| Spec ID | 名称 | 范围 | 优先级 |
-|---|---|---|---|
-| SPEC-600 | T2MI Parser | T2-MI Packet 基础解析 | P2 |
-| SPEC-601 | BBFrame Parser | BBHEADER、BBFrame 边界和 CRC | P2 |
-| SPEC-602 | PLP Extractor | T2-MI PLP ID 过滤与提取 | P2 |
-| SPEC-603 | Inner TS Reconstruction | BBFrame 解封装和 Inner TS 输出 | P2 |
-| SPEC-610 | BISS Mode 1 | BISS-1 参数、解扰接口和证据 | P2 |
-| SPEC-611 | BISS Mode E | ESW/Injected ID 计算和验证 | P2 |
-| SPEC-612 | DVB-CA | PMT CA Descriptor、ECM/EMM 关系 | P3 |
-| SPEC-620 | RF Simulation | RF 参数和质量状态模型 | P2 |
-| SPEC-621 | LNB Model | 本振、极化、电压和频段状态 | P2 |
-| SPEC-622 | DiSEqC Controller | 命令模型、端口和控制状态 | P2 |
-| SPEC-623 | Unicable | EN 50494/EN 50607 槽位与调谐模型 | P2 |
-| SPEC-630 | Linux DVB Frontend Adapter | Linux DVB API 接入 | P3 |
-| SPEC-631 | Live TS Input | 文件/网络/硬件输入统一接口 | P2 |
-| SPEC-632 | Live Monitoring | 实况指标与告警 | P2 |
-| SPEC-640 | Time Machine | Ring Buffer、事件触发、冻结与回放 | P2 |
-| SPEC-641 | TS Differential Analyzer | 双码流结构与指标差异分析 | P2 |
+SPEC-600+ 未来模块目录不在本表维护：`docs/roadmap.md` §3 是唯一权威索引（ADR-0002）。原 §F 16 行（SPEC-600～641）已由 roadmap 承载，编号原样保留。前端远期行 SPEC-407 Timeline & Replay UI（P2）同步移入 roadmap。
 
 ## G. 模块 Spec 完成条件
 
