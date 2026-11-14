@@ -45,6 +45,10 @@ _Avoid_: playback_ready（MVP 不承诺）
 **双解析器对照（Cross Validation）**:
 自研轻量解析器与 TSDuck 对同一 TS 分别分析并比对；不一致时产生 `ANALYZER_DISAGREEMENT` 而非采信单方。
 
+**独立验证（Independent Verification）**:
+golden 向量的验收纪律：同源实现解析自身输出不构成验收证据，至少一条独立验证路径——外部位级向量（权威基准）或 TSDuck 双向交叉（合格独立验证）；自研 round-trip 仅作回归覆盖。
+_Avoid_: 自生成自解析算验证、把回归通过当验收证据
+
 ### 实验
 
 **故障靶场（Fault Lab）**:
