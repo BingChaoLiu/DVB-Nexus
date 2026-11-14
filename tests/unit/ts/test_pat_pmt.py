@@ -41,6 +41,16 @@ MINIMAL_PAT = bytes(  # testdata-ok: hand-packed golden wire literal per SPEC-10
 )
 MINIMAL_PAT_CRC = 0x2AB104B2
 
+# Minimal PMT, zero streams: table_id=0x02, SSI=1, section_length=13
+# (5 public + 2 PCR_PID + 2 program_info_length + 4 CRC), program_number
+# 0x0001, version byte 0xC1, section 0/0, PCR_PID 0x1000 (reserved 111),
+# program_info_length=0 (reserved 1111), CRC 4E 8C A8 23.
+MINIMAL_PMT = bytes(  # testdata-ok: hand-packed golden wire literal per SPEC-103 section 4 bit table; independent source pinning the PMT wire format (CRC frozen via the SPEC-101-verified primitive)
+    (0x02, 0xB0, 0x0D, 0x00, 0x01, 0xC1, 0x00, 0x00, 0xF0, 0x00, 0xF0, 0x00,
+     0x4E, 0x8C, 0xA8, 0x23)
+)
+MINIMAL_PMT_CRC = 0x4E8CA823
+
 
 class TestPatRoundTrip:
     """REQ-TS-103-001 — PAT encode/decode per H.222.0 (primary)."""
@@ -114,3 +124,78 @@ class TestPatRoundTrip:
         psi_next = PATBuilder().build(nxt)
         assert parse_section(psi_next.raw_bytes, PAT_SECTION_POLICY) == psi_next
         assert parse_pat(parse_section(psi_next.raw_bytes, PAT_SECTION_POLICY)) == nxt
+
+
+class TestPmtRoundTrip:
+    """REQ-TS-103-002 — PMT encode/decode per H.222.0 (primary)."""
+
+    def test_pmt_round_trip(self) -> None:
+        from ts.section import PSISection, parse_section
+        from ts.tables.pmt import (
+            PMT_SECTION_POLICY,
+            PMTBuilder,
+            PMTSection,
+            ElementaryStream,
+            parse_pmt,
+        )
+
+        # Golden literal -> PSISection -> PMTSection.
+        psi = parse_section(MINIMAL_PMT, PMT_SECTION_POLICY)
+        assert isinstance(psi, PSISection)
+        assert psi.crc_value == MINIMAL_PMT_CRC
+
+        pmt = parse_pmt(psi)
+        assert pmt.program_number == 0x0001
+        assert pmt.version_number == 0
+        assert pmt.current_next_indicator is True
+        assert pmt.section_number == 0
+        assert pmt.last_section_number == 0
+        assert pmt.pcr_pid == 0x1000
+        assert pmt.program_descriptors == b""
+        assert pmt.streams == ()
+
+        # Builder -> byte-exact echo of the hand-packed literal.
+        built = PMTBuilder().build(pmt)
+        assert isinstance(built, PSISection)
+        assert built.raw_bytes == MINIMAL_PMT
+        assert built.table_id == 0x02
+        assert built.section_syntax_indicator is True
+        assert built.private_indicator is False
+        assert built.section_length == 13  # 5+2+2+4, no descriptors/streams
+        assert built.table_id_extension == 0x0001
+        assert built.crc_value == MINIMAL_PMT_CRC
+
+        # Rich round-trip: program descriptors + two ES entries with
+        # descriptors, one of them carrying the PCR (legal, §8.6).
+        rich = PMTSection(
+            program_number=0x0042,
+            version_number=7,
+            current_next_indicator=True,
+            section_number=0,
+            last_section_number=0,
+            pcr_pid=0x0100,
+            program_descriptors=b"\x42\x80\x01\x02",  # 4 descriptor bytes
+            streams=(
+                ElementaryStream(
+                    stream_type=0x1B, elementary_pid=0x0100,
+                    descriptors=b"\x52\x01\xAB",
+                ),
+                ElementaryStream(
+                    stream_type=0x0F, elementary_pid=0x0101,
+                    descriptors=b"",
+                ),
+            ),
+        )
+        psi_rich = PMTBuilder().build(rich)
+        expected_length = 13 + len(rich.program_descriptors) + sum(
+            5 + len(stream.descriptors) for stream in rich.streams
+        )
+        assert psi_rich.section_length == expected_length
+        reparsed = parse_pmt(parse_section(psi_rich.raw_bytes, PMT_SECTION_POLICY))
+        assert reparsed == rich
+        # Descriptor bytes survive verbatim (§4: parser must keep them).
+        assert reparsed.program_descriptors == b"\x42\x80\x01\x02"
+        assert reparsed.streams[0].descriptors == b"\x52\x01\xAB"
+        assert reparsed.streams[1].descriptors == b""
+        assert reparsed.streams[0].stream_type == 0x1B
+        assert reparsed.streams[1].stream_type == 0x0F

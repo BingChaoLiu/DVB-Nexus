@@ -49,12 +49,15 @@ fields so callers can audit completeness.
 Error codes owned here (SPEC-103 §9, module-owned per contract §7 归属约定;
 all raised as ``InvalidSectionError``):
 ``PAT_TABLE_ID_INVALID``, ``PAT_PROGRAM_ENTRY_TRUNCATED``,
-``TABLE_VERSION_MISMATCH``, ``TABLE_SECTION_MISSING``,
-``TABLE_SECTION_TOO_LARGE``. The ``TABLE_*`` codes are the table-family
-share between PAT and PMT and are owned here to keep the import graph
-acyclic (``pmt`` / ``table_validation`` import them from this module).
-``PAT_PID_INVALID`` / ``PAT_PMTPID_INVALID`` / ``PAT_PROGRAM_NUMBER_INVALID``
-are ValidationIssue codes owned by :mod:`ts.tables.table_validation`.
+``PAT_PID_INVALID``, ``PAT_PMTPID_INVALID``, ``PAT_PROGRAM_NUMBER_INVALID``,
+``PAT_PMT_PROGRAM_MISMATCH``, ``TABLE_VERSION_MISMATCH``,
+``TABLE_SECTION_MISSING``, ``TABLE_SECTION_TOO_LARGE``. The ``TABLE_*``
+codes are the table-family share between PAT and PMT, and the association
+codes are shared with :mod:`ts.tables.table_validation` (which reports
+``PAT_*``/``PMT_*`` findings as ValidationIssue diagnostics); both module
+sets are owned here to keep the import graph acyclic (``pmt`` /
+``table_validation`` import from this module). ``PMT_PID_INVALID`` is owned
+by :mod:`ts.tables.pmt`.
 """
 
 from __future__ import annotations
@@ -81,6 +84,10 @@ from ts.section import (
 
 PAT_TABLE_ID_INVALID = "PAT_TABLE_ID_INVALID"
 PAT_PROGRAM_ENTRY_TRUNCATED = "PAT_PROGRAM_ENTRY_TRUNCATED"
+PAT_PID_INVALID = "PAT_PID_INVALID"
+PAT_PMTPID_INVALID = "PAT_PMTPID_INVALID"
+PAT_PROGRAM_NUMBER_INVALID = "PAT_PROGRAM_NUMBER_INVALID"
+PAT_PMT_PROGRAM_MISMATCH = "PAT_PMT_PROGRAM_MISMATCH"
 TABLE_VERSION_MISMATCH = "TABLE_VERSION_MISMATCH"
 TABLE_SECTION_MISSING = "TABLE_SECTION_MISSING"
 TABLE_SECTION_TOO_LARGE = "TABLE_SECTION_TOO_LARGE"
