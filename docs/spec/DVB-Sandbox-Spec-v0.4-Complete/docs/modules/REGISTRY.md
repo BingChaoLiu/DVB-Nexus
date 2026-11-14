@@ -23,19 +23,21 @@ TS Core 的完整模块级规格已收录于 [`ts-core/`](ts-core/SPEC-INDEX-TS-
 
 ## B. Simulation / Fault Lab
 
+SPEC-200～206 已于 2026-11-14 批准为 MVP 基线（APPROVED 0.5.0，[ticket #12](https://github.com/BingChaoLiu/DVB-Nexus/issues/12) 缝合批准）；权威状态以各文件 front-matter 为准，此处不重复。依赖列为统一后的建议依赖（以各 spec 自身职责推导，[缝合批准 #12] Q5 裁决；包级事件信封义务由 SIMULATION-INTEGRATION-CONTRACT 承载，不单列 SPEC-301）。
+
 | Spec ID | 名称 | 范围 | 建议依赖 | 优先级 |
 |---|---|---|---|---|
-| SPEC-200 | Simulation Runtime | Runtime 接口、生命周期、取消、错误状态 | SPEC-001/003 | P0 |
-| SPEC-201 | Simulation Clock | 可控虚拟时间、暂停/步进/加速、确定性 | SPEC-105/200 | P0 |
-| SPEC-202 | State Engine | 拓扑状态求值、依赖传播和 L0 结果 | SPEC-200/Topology | P0 |
-| SPEC-203 | TS Runtime | SIM_TS 编排、Generator 与 Artifact 关联 | SPEC-108/200/201 | P0 |
-| SPEC-204 | Fault Injection | 触发器、Mutation、注入记录、撤销/重建策略 | SPEC-100/102/106/203 | P0 |
-| SPEC-205 | Scenario Engine | 实验包格式、初始状态、提示、步骤和任务 | SPEC-204/300 | P0 |
+| SPEC-200 | Simulation Runtime | Runtime 接口、生命周期、取消、错误状态 | SPEC-003/201/202/203 | P0 |
+| SPEC-201 | Simulation Clock | 可控虚拟时间、暂停/步进/加速、确定性 | SPEC-003/105 | P0 |
+| SPEC-202 | State Engine | 拓扑状态求值、依赖传播和 L0 结果 | SPEC-003 | P0 |
+| SPEC-203 | TS Runtime | SIM_TS 编排、Generator 与 Artifact 关联 | SPEC-003/100..108/201/204 | P0 |
+| SPEC-204 | Fault Injection | 触发器、Mutation、注入记录、撤销/重建策略 | SPEC-003/100/102/103/106 | P0 |
+| SPEC-205 | Scenario Engine | 实验包格式、初始状态、提示、步骤和任务 | SPEC-003/200/204 | P0 |
 | SPEC-206 | Recovery Verification | 恢复验证、通关规则、前后结果对比 | SPEC-205/306/308 | P0 |
 
 ## C. Observation / Diagnosis / TSDuck
 
-编号对齐实际文件（[#10 编号体系重建](https://github.com/BingChaoLiu/DVB-Nexus/issues/10) 裁决）；SPEC-306～309 为旧注册语义的重新分配，规格文本随 [补写 MVP P0 缺失契约](https://github.com/BingChaoLiu/DVB-Nexus/issues/13) 编写。
+编号对齐实际文件（[#10 编号体系重建](https://github.com/BingChaoLiu/DVB-Nexus/issues/10) 裁决）；SPEC-306～309 为旧注册语义的重新分配，规格文本随 [补写 MVP P0 缺失契约](https://github.com/BingChaoLiu/DVB-Nexus/issues/13) 编写。SPEC-300～305 已于 2026-11-14 批准为 MVP 基线（APPROVED 0.5.0，[ticket #12](https://github.com/BingChaoLiu/DVB-Nexus/issues/12) 缝合批准）；权威状态以各文件 front-matter 为准，此处不重复。
 
 | Spec ID | 名称 | 范围 | 建议依赖 | 优先级 |
 |---|---|---|---|---|

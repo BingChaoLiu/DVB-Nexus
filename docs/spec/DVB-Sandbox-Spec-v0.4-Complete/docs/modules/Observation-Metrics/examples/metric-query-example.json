@@ -3,15 +3,10 @@
     "ts.continuity_error_total",
     "ts.pcr_jitter_ns"
   ],
-  "start": {
-    "value_ns": 0,
-    "clock_domain": "sim:sess-demo-001"
-  },
-  "end": {
-    "value_ns": 10000000000,
-    "clock_domain": "sim:sess-demo-001"
-  },
+  "start_ns": 0,
+  "end_ns": 10000000000,
   "step_ns": 1000000000,
+  "clock_domain": "sim:0f0e8d1c-2b3a-4c5d-8e9f-0a1b2c3d4e5f",
   "filters": {
     "service_id": "service-100",
     "pid": 256

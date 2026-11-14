@@ -1,9 +1,10 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://example.invalid/dvb-sandbox/observation/event-envelope-1.0.schema.json",
+  "$comment": "多 schema 文档版本策略（SPEC-301 §8 / ADR-0006 第 4 条）：本文档描述且仅描述 schema_version 1.0（const）。minor 演进 = 新增新 $id 的 schema 文档（additive optional only）；major 才是破坏性变更。信封松、负载紧：payload 由 per-event-type schema 独立版本化并严格校验，本信封只要求其为 object。",
   "title": "DVB Sandbox Canonical Event Envelope v1.0",
   "type": "object",
-  "additionalProperties": false,
+  "additionalProperties": true,
   "required": [
     "schema_version",
     "event_id",
@@ -22,7 +23,8 @@
     "event_id": {
       "type": "string",
       "minLength": 8,
-      "maxLength": 128
+      "maxLength": 128,
+      "$comment": "uuid4 opaque（ADR-0006 第 3 条，ULID 废弃）；重试稳定，去重键 (producer_id, event_id) 之一半"
     },
     "event_type": {
       "type": "string",
@@ -30,7 +32,7 @@
     },
     "producer": {
       "type": "object",
-      "additionalProperties": false,
+      "additionalProperties": true,
       "required": [
         "producer_id",
         "producer_version",
@@ -55,13 +57,14 @@
             "integer",
             "null"
           ],
-          "minimum": 0
+          "minimum": 0,
+          "$comment": "生产者内部序，optional（ADR-0006 第 2 条：MVP 可不填；非全序凭据）"
         }
       }
     },
     "scope": {
       "type": "object",
-      "additionalProperties": false,
+      "additionalProperties": true,
       "required": [
         "tenant_id",
         "session_id"
@@ -70,14 +73,24 @@
         "tenant_id": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 128
+          "maxLength": 128,
+          "$comment": "MVP 恒为 local（ADR-0006 第 1 条）"
         },
         "session_id": {
           "type": [
             "string",
             "null"
           ],
-          "maxLength": 128
+          "maxLength": 128,
+          "$comment": "nullable 仅限 system-level 事件"
+        },
+        "run_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 128,
+          "$comment": "Run 是八步闭环（ADR-0002）的事件归属单位；session 级事件为 null（ADR-0006 第 1 条嫁接项）"
         },
         "scenario_id": {
           "type": [
@@ -90,7 +103,7 @@
     },
     "time": {
       "type": "object",
-      "additionalProperties": false,
+      "additionalProperties": true,
       "required": [
         "source",
         "observed"
@@ -106,7 +119,7 @@
     },
     "correlation": {
       "type": "object",
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "trace_id": {
           "type": [
@@ -136,7 +149,15 @@
           "type": [
             "string",
             "null"
-          ]
+          ],
+          "$comment": "拓扑内语义 slug（ADR-0006 第 3 条）；node_id 单独 = 节点级寻址，node_id+pid = 流级"
+        },
+        "port_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "$comment": "端口级寻址（ADR-0005 决策 5 多端口 Mux；ADR-0006 第 3 条）"
         },
         "service_id": {
           "type": [
@@ -154,6 +175,11 @@
         }
       }
     },
+    "journal_seq": {
+      "type": "integer",
+      "minimum": 0,
+      "$comment": "唯一全序凭据（int64，per session 单调）；gateway durable append 时盖章，生产者永不填（ADR-0006 第 2 条）。发布视图中缺省，落库记录视图中存在"
+    },
     "severity": {
       "enum": [
         "debug",
@@ -165,7 +191,8 @@
       ]
     },
     "payload": {
-      "type": "object"
+      "type": "object",
+      "$comment": "负载紧：per-event-type payload schema 独立版本化并严格校验（SPEC-301 §7/§8），本层不放宽也不定义业务字段（如 confidence 属 payload 层）"
     },
     "tags": {
       "type": "array",
@@ -179,7 +206,7 @@
   "$defs": {
     "timepoint": {
       "type": "object",
-      "additionalProperties": false,
+      "additionalProperties": true,
       "required": [
         "value_ns",
         "clock_domain",
@@ -187,18 +214,22 @@
       ],
       "properties": {
         "value_ns": {
-          "type": "integer"
+          "type": "integer",
+          "$comment": "有符号 64 位整数纳秒"
         },
         "clock_domain": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 128
+          "maxLength": 128,
+          "$comment": "如 sim:<session_id> 或 wall:utc"
         },
         "clock_epoch": {
           "type": "integer",
-          "minimum": 0
+          "minimum": 0,
+          "$comment": "生产者时钟重启时递增（SPEC-300 §6 规则 5）"
         }
-      }
+      },
+      "$comment": "信封 timepoint 不设 semantics 字段——source/observed 字段名即语义（SPEC-301 §6）；独立记录的 timepoint 须显式 semantics（SPEC-300 §6）"
     }
   }
 }

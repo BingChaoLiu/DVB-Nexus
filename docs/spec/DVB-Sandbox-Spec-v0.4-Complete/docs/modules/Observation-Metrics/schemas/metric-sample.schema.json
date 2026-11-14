@@ -1,8 +1,10 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/dvb-sandbox/observation/metric-sample-1.0.schema.json",
+  "$comment": "指标样本（SPEC-302 §3）：timepoint 显式语义；revision/is_final 承载迟到样本重聚合语义（SPEC-302 §6.2）。",
   "title": "Observation Metric Sample",
   "type": "object",
-  "additionalProperties": false,
+  "additionalProperties": true,
   "required": [
     "metric_name",
     "value_type",
@@ -29,7 +31,8 @@
         "number",
         "object",
         "null"
-      ]
+      ],
+      "$comment": "缺口默认不补零：null + quality missing（SPEC-302 §6.3）"
     },
     "unit": {
       "type": "string"
@@ -38,7 +41,9 @@
       "type": "object",
       "required": [
         "value_ns",
-        "clock_domain"
+        "clock_domain",
+        "clock_epoch",
+        "semantics"
       ],
       "properties": {
         "value_ns": {
@@ -46,6 +51,18 @@
         },
         "clock_domain": {
           "type": "string"
+        },
+        "clock_epoch": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "semantics": {
+          "enum": [
+            "source",
+            "observed",
+            "derived"
+          ],
+          "$comment": "独立记录 timepoint 显式语义（SPEC-300 §6；[缝合批准 #12] Q6 裁决）"
         }
       }
     },
@@ -57,7 +74,19 @@
           "integer",
           "boolean"
         ]
-      }
+      },
+      "$comment": "仅允许 SPEC-302 §5 维度白名单内的键（strict 默认拒绝未知维度）；session 域指标必含 session_id 维度"
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 0,
+      "$comment": "回填重聚合必须递增（SPEC-302 §6.2；[缝合批准 #12] Q6 裁决）"
+    },
+    "is_final": {
+      "type": "boolean",
+      "default": true,
+      "$comment": "回填修订期间为 false，直至重新定稿（SPEC-302 §6.2）"
     },
     "quality": {
       "type": "array",
@@ -91,7 +120,8 @@
             "null"
           ]
         }
-      }
+      },
+      "$comment": "每个聚合值可解释（来源事件 ID 或派生水位）"
     }
   }
 }

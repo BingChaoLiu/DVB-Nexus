@@ -1,152 +1,172 @@
-# SPEC-300 — Observation & Metrics Architecture
+---
+spec_id: SPEC-300
+title: Observation and Metrics Architecture
+version: 0.5.0
+status: APPROVED
+phase: MVP
+owner: Observation
+priority: P0
+depends_on: [SPEC-003]
+requirements: [REQ-OBS-300-001, REQ-OBS-300-002, REQ-OBS-300-003, REQ-OBS-300-004, REQ-OBS-300-005, REQ-OBS-300-006, REQ-OBS-300-007]
+---
 
-## 1. Goal
+# SPEC-300 — Observation & Metrics 架构
 
-Provide one coherent observation plane for the DVB Sandbox. It ingests normalized events and state snapshots, derives metrics and health signals, persists a searchable timeline, and exposes read-only query interfaces to the UI, diagnosis modules, and training reports.
+## 1. 目标
 
-## 2. Scope
+为 DVB Sandbox 提供统一的观测平面：摄入规范化事件与状态快照，派生指标与健康信号，持久化可检索时间轴，并向 UI、诊断模块与训练报告暴露只读查询接口。Observation 是事实记录者，不是根因判定者（CONTEXT.md「观测」）。
 
-### In scope
-- Event ingestion, validation, normalization and deduplication.
-- Correlation across session, topology node, TS service/PID and fault identifiers.
-- Metric derivation and time-window aggregation.
-- Timeline persistence, checkpoints, export and deterministic-time support.
-- Health rules and alert lifecycle.
-- Read-only query service for timeline, metrics, alerts and health summaries.
-- Provenance, data-quality indicators and retention controls.
+## 2. 范围
 
-### Explicitly out of scope
-- Creating or mutating simulation sessions.
-- Advancing virtual time or scheduling tasks.
-- Mutating topology or L0/L1 state.
-- Injecting or removing faults.
-- Parsing raw TS packets as a primary parser. TS Core owns parsing and emits normalized observations.
-- Making root-cause decisions. Diagnosis Engine consumes observation data.
-- Frontend rendering and user interaction.
-- Live device acquisition. Live adapters publish through the same event contract.
+### 2.1 In Scope
 
-## 3. Architectural position
+- 事件摄入、校验、规范化与去重。
+- 跨 session / 拓扑节点 / TS service/PID / fault 的关联。
+- 指标派生与时间窗聚合。
+- 时间轴持久化、检查点、导出与确定性时间支持。
+- 健康规则与告警生命周期（记录权威，见 SPEC-304）。
+- 时间轴、指标、告警与健康摘要的只读查询服务。
+- 来源溯源（provenance）、数据质量标志与保留控制。
+
+### 2.2 明确不做
+
+- 创建或突变 simulation session；推进虚拟时间；调度任务。
+- 突变拓扑或 L0/L1 状态；注入或移除故障。
+- 作为主解析器解析原始 TS 包——TS Core 拥有解析并发规范化观测（OBSERVATION-INTEGRATION-CONTRACT §3）。
+- 根因判定——Diagnosis Engine（SPEC-306/307）消费观测数据。
+- 前端渲染与交互。
+- 实况设备接入；Live adapter 未来经同一事件契约发布。
+
+## 3. 架构位置
 
 ```text
  TS Core ─────────────┐
  Simulation Engine ───┼──> Event Gateway ──> Event Journal ──┬──> Metrics Engine
- Live Adapter (later) ┘                                      ├──> Timeline Recorder
+ Live Adapter (远期) ─┘                                      ├──> Timeline Recorder
                                                              ├──> Health/Alert Engine
                                                              └──> Read Query API
                                                                       │
                                                          UI / Diagnosis / Reports
 ```
 
-The Observation module is downstream of producers. It MUST NOT call producer mutation APIs during ingestion or evaluation.
+Observation 位于生产者下游。**摄入与求值期间绝不调用生产者的突变 API**（观察者边界纪律，OBSERVATION-INTEGRATION-CONTRACT §8 非协商边界）。
 
-## 4. Components
+## 4. 组件
 
 ### 4.1 Event Gateway
-Responsibilities:
-- Validate schema version and required fields.
-- Enforce payload size and supported event types.
-- Assign `observed_at` if the producer did not provide it.
-- Preserve source timestamp and clock-domain metadata.
-- Deduplicate by `(producer_id, event_id)`.
-- Route accepted events to the journal and subscribers.
 
-It MUST reject malformed events with a structured error and MUST NOT silently repair semantically invalid payloads.
+职责：
+- 校验 schema 版本与必填字段（信封校验 = SPEC-301 + `event-envelope.schema.json`）。
+- 强制 payload 大小与支持的事件类型（注册表见 SPEC-301 §4）。
+- 生产者未提供 `time.observed` 时补填（wall:utc）。
+- 保留来源时间戳与时钟域元数据。
+- 按 `(producer_id, event_id)` 去重。
+- 将接受的事件路由至 journal 与订阅者。
+
+必须以结构化错误拒绝畸形事件，**不得静默修复语义非法的 payload**（无隐式修复原则）。
 
 ### 4.2 Event Journal
-Responsibilities:
-- Append accepted events in ingestion order.
-- Support cursor-based reads.
-- Retain immutable event records for configured retention.
-- Store a monotonic journal sequence independent of source timestamp.
-- Record ingestion failures in a separate diagnostic stream, without recursively publishing them as ordinary domain events.
+
+职责：
+- 按摄入序追加已接受事件。
+- 支持 cursor 读取。
+- 按配置保留不可变事件记录。
+- 维护独立于来源时间戳的单调 **journal_seq**（全序权威，ADR-0006 第 2 条；journal 在 durable append 时盖章，信封可见、生产者永不填）。
+- 摄入失败记入独立诊断流，**不得**递归发布为普通领域事件。
 
 ### 4.3 Metrics Engine
-Consumes events and periodic state snapshots, updates metric series and aggregate windows. It MUST retain the source event IDs or derivation watermark needed to explain each aggregate.
+
+消费事件与周期性状态快照，更新指标序列与聚合窗口。必须保留来源事件 ID 或派生水位（watermark）以解释每个聚合值（SPEC-302）。
 
 ### 4.4 Timeline Recorder
-Builds a unified timeline across events, state snapshots, fault lifecycle, and checkpoints. It supports query and export, not simulation replay execution.
+
+构建跨事件、状态快照、故障生命周期与检查点的统一时间轴。支持查询与导出，**不支持**仿真重放执行（SPEC-303）。
 
 ### 4.5 Health & Alert Engine
-Evaluates configured rules over event/metric inputs and manages alert lifecycle. It does not determine root cause or automatically repair the simulated system.
+
+对事件/指标输入执行配置规则并管理告警生命周期。它不做根因判定，也不自动修复系统。**告警状态迁移以 alert record 持久化为权威，经 SPEC-305 WebSocket 通知提示 + REST 拉取暴露；MVP 不产生信封事件**（`observation.*` 事件命名空间留给未来观测面阈值告警的信封化，ADR-0006 第 5 条 + [缝合批准 #12] 裁决；SPEC-304 §8）。
 
 ### 4.6 Query API
-Read-only interface for UI and downstream analysis. It supports filters, bounded time ranges, pagination, and explicit time domains.
 
-## 5. Data ownership
+面向 UI 与下游分析的只读接口（SPEC-305）：过滤器、有界时间范围、分页、显式时钟域。
 
-| Data | Authoritative owner | Observation behavior |
+## 5. 数据所有权
+
+| 数据 | 权威归属 | Observation 行为 |
 |---|---|---|
-| Session lifecycle | Simulation Runtime | Mirror as events |
-| Virtual clock | Virtual Clock | Preserve clock domain/time |
-| Topology state | L0 State Engine | Store snapshots/events |
-| TS syntax/continuity facts | TS Core | Ingest normalized facts |
-| Fault lifecycle | Fault Injection | Record events |
-| Scenario progress | Scenario Engine | Record progress events |
-| Recovery verdict | Recovery Verification | Record verdict/evidence |
-| Metrics and timeline | Observation | Authoritative derived records |
-| Alert lifecycle | Observation | Authoritative alert records |
+| Session 生命周期 | Simulation Runtime | 镜像为事件 |
+| 虚拟时钟 | Simulation Clock | 保留时钟域/时间 |
+| 拓扑状态 | L0 State Engine | 存快照/事件 |
+| TS 语法/连续性事实 | TS Core | 摄入规范化事实 |
+| 故障生命周期 | Fault Injection | 记录事件 |
+| 场景进度 | Scenario Engine | 记录进度事件 |
+| 通关判定 | Recovery Verification | 记录 verdict/证据 |
+| 指标与时间轴 | Observation | **权威**派生记录 |
+| 告警生命周期 | Observation | **权威**告警记录 |
 
-## 6. Clock model
+## 6. 时钟模型
 
-Every timestamp MUST carry:
-- `value_ns`: signed 64-bit integer.
-- `clock_domain`: stable identifier, e.g. `sim:<session_id>` or `wall:utc`.
-- `semantics`: `source`, `observed`, or `derived`.
+每个时间戳必须携带：
 
-Rules:
-1. `sim:<session_id>` values are comparable only within the same session and clock epoch.
-2. Wall-clock UTC is represented separately and MUST NOT be used to order simulation events.
-3. Cross-domain correlation uses explicit mapping metadata, never implicit arithmetic.
-4. Event journal sequence is the canonical ingestion order.
-5. If a producer restarts its clock, it MUST increment `clock_epoch`.
+- `value_ns`：有符号 64 位整数纳秒。
+- `clock_domain`：稳定标识，如 `sim:<session_id>` 或 `wall:utc`。
+- `semantics`：`source` / `observed` / `derived`（**信封 timepoint 例外**：SPEC-301 信封的 `time.source`/`time.observed` 语义由字段名承载，schema 不另加 semantics 字段；独立记录的 timepoint——告警、指标样本、检查点——必须显式携带，[缝合批准 #12] 裁决）。
 
-## 7. Data flow
+规则：
 
-1. Producer emits an event conforming to SPEC-301.
-2. Gateway validates envelope and event-specific payload.
-3. Gateway checks idempotency key.
-4. Journal appends event and returns `journal_seq`.
-5. Internal consumers receive the committed event.
-6. Metrics, timeline and alert components update idempotently.
-7. Query API exposes committed records only.
+1. `sim:<session_id>` 值仅在同 session 同 clock epoch 内可比较。
+2. 墙钟 UTC 独立表达，**不得**用于仿真事件定序。
+3. 跨域关联用显式映射元数据，禁止隐式算术。
+4. journal 序列是权威摄入序。
+5. 生产者时钟重启必须递增 `clock_epoch`。
 
-A consumer MUST checkpoint its last fully processed journal sequence. Restart recovery MUST resume from that sequence and safely tolerate duplicate delivery.
+## 7. 数据流
 
-## 8. Reliability and backpressure
+1. 生产者发布符合 SPEC-301 的事件。
+2. Gateway 校验信封与事件 payload。
+3. Gateway 检查幂等键 `(producer_id, event_id)`。
+4. Journal 追加事件并盖章 `journal_seq`。
+5. 内部消费者接收已提交事件。
+6. 指标、时间轴与告警组件幂等更新。
+7. Query API 只暴露已提交记录。
 
-- Event ingestion MUST be bounded by configurable queue and payload limits.
-- When downstream consumers lag, the journal remains the source of truth.
-- A consumer may be paused and replayed from its checkpoint.
-- The gateway MUST expose queue depth, rejected count, duplicate count and consumer lag.
-- No event may be dropped silently.
-- If the journal cannot commit, ingestion returns `OBS_STORAGE_UNAVAILABLE`; producer retry policy is defined by producer integration contract.
-- Backpressure MUST be explicit to callers; do not block the simulation clock thread on slow UI/query clients.
+消费者必须对其最后完整处理的 journal_seq 做检查点；重启恢复从该序号继续并安全容忍重复投递。
 
-## 9. Security and isolation
+## 8. 可靠性与背压
 
-- Every record is scoped by `tenant_id` and `session_id` where applicable.
-- Query filters MUST enforce scope before returning records.
-- Raw payloads are size-limited and must not contain credentials, private keys or decryption keys.
-- Secrets such as BISS keys MUST never be recorded in events, labels, logs or metric dimensions.
-- Export must support redaction policy hooks.
+- 摄入由可配置的队列与 payload 上限约束（背压/合并限流细则归 SPEC-301 §5，权威信封条款）。
+- 下游消费者滞后时，journal 仍是事实源。
+- 消费者可暂停并从检查点重放。
+- Gateway 必须暴露队列深度、拒绝数、重复数与消费者滞后。
+- **任何事件不得被静默丢弃**；fault/lifecycle/terminal run/verification 类事件禁合并限流（SPEC-301 §5）。
+- journal 无法提交时摄入返回 `OBS_STORAGE_UNAVAILABLE`；生产者重试策略由 OBSERVATION-INTEGRATION-CONTRACT §5 定义。
+- 背压必须显式暴露给调用方；**不得让仿真时钟线程阻塞在慢 UI/查询客户端上**。
 
-## 10. Performance targets (initial, subject to benchmark)
+## 9. 安全与隔离
 
-| Workload | Target |
+- 每条记录按 `tenant_id`（MVP 恒为 `"local"`，ADR-0006）与 `session_id` 划界。
+- 查询过滤器在返回前强制 scope。
+- 原始 payload 有大小上限，不得含凭证、私钥或解密密钥。
+- BISS 密钥等机密**永不**进入事件、标签、日志或指标维度。
+- 导出支持脱敏策略钩子。
+
+## 10. 性能目标（初始值，随基准实测修订）
+
+| 工作负载 | 目标 |
 |---|---:|
-| Event gateway sustained ingest | 20,000 events/s per process |
-| Event gateway burst | 50,000 events/s for 10 s |
-| p95 accepted-event append latency | <= 20 ms |
-| Metric query, 1 h / <= 20 series | <= 300 ms |
-| Timeline page, <= 500 records | <= 250 ms |
-| Alert evaluation lag | <= 2 s wall time or 1 virtual-time tick batch |
-| Memory bound | Configurable; no unbounded in-memory event history |
+| Gateway 持续摄入 | 20,000 events/s per process |
+| Gateway 突发 | 50,000 events/s 持续 10 s |
+| 接受事件追加 p95 延迟 | ≤ 20 ms |
+| 指标查询（1 h / ≤ 20 序列） | ≤ 300 ms |
+| 时间轴页（≤ 500 记录） | ≤ 250 ms |
+| 告警评估滞后 | ≤ 2 s 墙钟或 1 个虚拟时间 tick 批 |
+| 内存上界 | 可配置；无无界内存事件历史 |
 
-These are engineering targets, not guarantees. Benchmark on the target deployment profile and record hardware/software details.
+这些是**工程目标而非保证**；须在目标部署档位上基准实测并记录软硬件细节。取值口径与 OPEN-006 定档（[OPEN-006 定档：MVP 性能目标与文件大小上限](https://github.com/BingChaoLiu/DVB-Nexus/issues/16)）联动复核——若定档的码率/文件上限显著低于本表假设，本表随之修订而非硬守。
 
-## 11. Configuration
+## 11. 配置
 
-All configuration is validated at startup. Unknown keys MUST fail in strict mode.
+全部配置启动时校验；strict 模式下未知键必须失败。
 
 ```yaml
 observation:
@@ -172,11 +192,12 @@ observation:
     evaluation_batch_size: 1000
 ```
 
-The concrete persistence backend is a replaceable implementation detail; the logical contracts MUST remain backend-neutral.
+具体持久化后端是可替换实现细节；逻辑契约保持后端中立。
 
-## 12. Required interfaces
+## 12. 必需接口
 
-The Python package MUST expose protocol-level interfaces equivalent to:
+Python 包必须暴露协议级接口（名称经批准的 Change Request 才可偏离）：
+
 - `EventPublisher.publish(event) -> PublishReceipt`
 - `EventGateway.accept(event) -> IngestResult`
 - `EventJournal.append(event) -> JournalRecord`
@@ -186,34 +207,39 @@ The Python package MUST expose protocol-level interfaces equivalent to:
 - `AlertService.list(request) -> AlertPage`
 - `ObservationQueryService.get_session_summary(session_id) -> SessionObservationSummary`
 
-Exact Python names may differ only through an approved Change Request.
+## 13. 失败模型
 
-## 13. Failure model
+错误统一 `error_code` / `message` / `retryable` / `details`。最低集合：
 
-Errors MUST use stable `error_code`, `message`, `retryable`, and `details` fields. At minimum:
-- `OBS_INVALID_ENVELOPE`
-- `OBS_UNSUPPORTED_SCHEMA`
-- `OBS_UNSUPPORTED_EVENT_TYPE`
-- `OBS_PAYLOAD_TOO_LARGE`
-- `OBS_DUPLICATE_EVENT`
-- `OBS_STORAGE_UNAVAILABLE`
-- `OBS_QUERY_RANGE_TOO_LARGE`
-- `OBS_CURSOR_EXPIRED`
-- `OBS_SCOPE_FORBIDDEN`
-- `OBS_CONSUMER_LAGGING`
-- `OBS_METRIC_NOT_FOUND`
-- `OBS_INVALID_TIME_DOMAIN`
+- `OBS_INVALID_ENVELOPE` / `OBS_UNSUPPORTED_SCHEMA` / `OBS_UNSUPPORTED_EVENT_TYPE`
+- `OBS_PAYLOAD_TOO_LARGE` / `OBS_DUPLICATE_EVENT` / `OBS_STORAGE_UNAVAILABLE`
+- `OBS_QUERY_RANGE_TOO_LARGE` / `OBS_CURSOR_EXPIRED` / `OBS_SCOPE_FORBIDDEN`
+- `OBS_CONSUMER_LAGGING` / `OBS_METRIC_NOT_FOUND` / `OBS_INVALID_TIME_DOMAIN`
 
-Duplicate event submission is idempotent success at the API boundary and MUST return the original journal sequence.
+重复提交在 API 边界是幂等成功，必须返回原 `journal_seq`。
 
-## 14. Acceptance criteria
+## 14. 验收标准
 
-- All producers can publish events without importing Observation implementation internals.
-- Events retain source and observation timestamps plus clock domain.
-- Duplicate submission does not create a second journal record.
-- Consumer restart and catch-up are deterministic and idempotent.
-- Virtual time and wall time cannot be accidentally compared.
-- Metrics expose provenance and data-quality flags.
-- Timeline export is stable and redaction-aware.
-- Read APIs enforce tenant/session scope and bounded queries.
-- No Observation component mutates simulation or TS Core state.
+- `REQ-OBS-300-001`：所有生产者不经 Observation 内部实现即可发布事件。
+- `REQ-OBS-300-002`：事件保留来源/观测双时间戳与时钟域；重复提交不产生第二条 journal 记录且返回原 journal_seq。
+- `REQ-OBS-300-003`：消费者重启与追赶确定性且幂等（检查点语义）。
+- `REQ-OBS-300-004`：虚拟时间与墙钟不可被意外比较（跨域比较显式拒绝）。
+- `REQ-OBS-300-005`：指标暴露 provenance 与质量标志。
+- `REQ-OBS-300-006`：时间轴导出稳定且脱敏感知。
+- `REQ-OBS-300-007`：读 API 强制 tenant/session scope 与有界查询；任何 Observation 组件不突变 simulation/TS Core 状态。
+
+## 15. 非目标与风险
+
+- 不做根因判定与自动修复。
+- 不做实时流渲染（前端经 SPEC-305 拉取 + WS 通知提示）。
+- 风险：SQLite journal 在突发摄入下的写入放大——性能目标表随基准复核；不达标时先调 batch/queue 参数，不轻言换后端（后端可替换但契约不变）。
+
+## 16. 交付要求
+
+建议文件：`app/observation/`（gateway.py / journal.py / consumers/）；schema 文件位于本包 `schemas/`。契约测试与生产者（simulation/ts-core 包）共享 fixture。
+
+## 17. 参考
+
+- SPEC-301（权威信封）、SPEC-302~305（派生组件）。
+- ADR-0006（信封统一、journal_seq、ID 策略）。
+- OBSERVATION-INTEGRATION-CONTRACT（生产者义务、映射表、非协商边界）。

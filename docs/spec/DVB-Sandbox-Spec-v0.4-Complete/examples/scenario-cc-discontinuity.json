@@ -1,9 +1,46 @@
 {
   "schema_version": 1,
-  "scenario_id": "lab.ts.cc-discontinuity",
+  "scenario_id": "c2a9e0f1-7b34-4d58-9a12-6f8e5d3c2b10",
   "version": "1.0.0",
   "title": "Locate a continuity-counter discontinuity",
   "difficulty": "beginner",
+  "required_engine_versions": {
+    "generator": "0.5.0"
+  },
+  "initial_topology": {
+    "topology_id": "topo-cc-lab-v1",
+    "revision": 1,
+    "nodes": [
+      {
+        "nodeId": "mux-0",
+        "nodeType": "ts_mux",
+        "config": {
+          "cbr_bps": 3750000,
+          "pcr_insertion_policy": "pes_first_packet"
+        },
+        "ports": [
+          {"portId": "in-0", "direction": "input", "plane": "MPEG_TS", "maxConnections": 8},
+          {"portId": "out", "direction": "output", "plane": "MPEG_TS", "maxConnections": 1}
+        ]
+      },
+      {
+        "nodeId": "sink-0",
+        "nodeType": "analyzer_sink",
+        "config": {},
+        "ports": [
+          {"portId": "in", "direction": "input", "plane": "MPEG_TS", "maxConnections": 1}
+        ]
+      }
+    ],
+    "connections": [
+      {
+        "connectionId": "conn-1",
+        "from": {"nodeId": "mux-0", "portId": "out"},
+        "to": {"nodeId": "sink-0", "portId": "in"},
+        "plane": "MPEG_TS"
+      }
+    ]
+  },
   "simulation_config": {
     "mode": "deterministic",
     "seed": 123456,
@@ -16,18 +53,24 @@
   },
   "fault_plan": [
     {
-      "fault_id": "fault-cc-001",
+      "fault_id": "9d3b7c2e-51a8-4e6f-b0d4-8c7a6f5e4d31",
       "fault_type": "CC_DISCONTINUITY",
-      "target_id": "pid:0x0100",
-      "injection_point": "after_packet_index",
+      "target_id": "mux-0:pid:0x0100",
       "activation": {
+        "kind": "packet_index",
         "packet_index": 120
       },
       "parameters": {
         "delta": 3
-      }
+      },
+      "expected_observations": ["ts.continuity_error"]
     }
   ],
+  "objectives": [
+    "Locate the CC discontinuity on PID 0x0100 in the faulted stream",
+    "Repair CC continuity and pass verification with new evidence"
+  ],
+  "hints": [],
   "pass_criteria": [
     {
       "criterion_id": "PASS-1",

@@ -1,8 +1,10 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/dvb-sandbox/observation/alert-record-1.0.schema.json",
+  "$comment": "告警记录（SPEC-304 §5）：告警生命周期以记录持久化为权威，MVP 不产生信封事件；状态变化经 WS 通知提示 + REST 拉取暴露。",
   "title": "Observation Alert Record",
   "type": "object",
-  "additionalProperties": false,
+  "additionalProperties": true,
   "required": [
     "alert_id",
     "fingerprint",
@@ -15,10 +17,12 @@
   ],
   "properties": {
     "alert_id": {
-      "type": "string"
+      "type": "string",
+      "$comment": "告警实例 ID，uuid4；resolved 后重触发（无 reopen）创建新实例"
     },
     "fingerprint": {
-      "type": "string"
+      "type": "string",
+      "$comment": "规则 ID + 稳定维度派生；不含易变值或原始 payload 文本（SPEC-304 §6）"
     },
     "rule_id": {
       "type": "string"
@@ -28,12 +32,14 @@
     },
     "state": {
       "enum": [
+        "inactive",
         "pending",
         "firing",
         "resolving",
         "resolved",
         "suppressed"
-      ]
+      ],
+      "$comment": "inactive = 预实例状态（指纹槽位存在，记录可不在库）；suppressed 是修饰态而非生命周期迁移——记录带 suppression 元数据、保持可查询，解抑制恢复先前生命周期态（SPEC-304 §5）"
     },
     "severity": {
       "enum": [
@@ -51,10 +57,12 @@
       ],
       "properties": {
         "tenant_id": {
-          "type": "string"
+          "type": "string",
+          "$comment": "MVP 恒为 local"
         },
         "session_id": {
-          "type": "string"
+          "type": "string",
+          "$comment": "告警必属 session（非 system-level），必填非空（与信封 session_id 的 nullable 语义不同源，SPEC-301 §3）"
         }
       }
     },
@@ -62,7 +70,9 @@
       "type": "object",
       "required": [
         "value_ns",
-        "clock_domain"
+        "clock_domain",
+        "clock_epoch",
+        "semantics"
       ],
       "properties": {
         "value_ns": {
@@ -70,18 +80,32 @@
         },
         "clock_domain": {
           "type": "string"
+        },
+        "clock_epoch": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "semantics": {
+          "enum": [
+            "source",
+            "observed",
+            "derived"
+          ],
+          "$comment": "独立记录 timepoint 显式语义（SPEC-300 §6；[缝合批准 #12] Q6 裁决）"
         }
       }
     },
     "summary": {
       "type": "string",
-      "maxLength": 512
+      "maxLength": 512,
+      "$comment": "必须区分测得事实与推断解释（SPEC-304 §9）"
     },
     "evidence_refs": {
       "type": "array",
       "items": {
         "type": "string"
-      }
+      },
+      "$comment": "须可解析到不可变源记录（journal_seq / metric 样本 / artifact）"
     },
     "suppression": {
       "type": [

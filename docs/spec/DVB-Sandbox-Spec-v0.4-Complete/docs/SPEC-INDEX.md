@@ -29,7 +29,7 @@
 
 ## 3. 模块规格注册表
 
-详见 [modules/REGISTRY.md](modules/REGISTRY.md)。TS Core 完整规格见 [modules/ts-core/SPEC-INDEX-TS-CORE.md](modules/ts-core/SPEC-INDEX-TS-CORE.md)。登记不代表规格已批准。
+详见 [modules/REGISTRY.md](modules/REGISTRY.md)。已批准包的完整规格：TS Core [SPEC-INDEX-TS-CORE.md](modules/ts-core/SPEC-INDEX-TS-CORE.md)、Simulation [SPEC-INDEX-SIMULATION.md](modules/simulation/SPEC-INDEX-SIMULATION.md)、Observation [SPEC-INDEX-OBSERVATION-METRICS.md](modules/Observation-Metrics/SPEC-INDEX-OBSERVATION-METRICS.md)。登记不代表规格已批准；已批准包（ts-core / simulation / observation 300~305）权威状态以各文件 front-matter 为准。
 
 | 范围 | ID 区间 | 内容 |
 |---|---|---|
@@ -61,12 +61,15 @@ SPEC-100 Packet ──┬── SPEC-102 PSI Section ── SPEC-103 PAT/PMT
                        ↓
                  SPEC-108 Generator
 
-Runtime / Validation:
-SPEC-201 Clock ── SPEC-203 TS Runtime ── SPEC-308 TSDuck Adapter
-SPEC-204 Fault Injector ── SPEC-205 Scenario Engine ── SPEC-206 Recovery Verification
-SPEC-300 Observation ── SPEC-302 Metrics ── SPEC-304 Health & Alerts
-SPEC-306 Diagnosis ── SPEC-307 Rules（事件走 SPEC-301 信封）
+Simulation / Observation（[缝合批准 #12] 统一依赖方向，详见 REGISTRY §B/§C 与各包索引）:
+SPEC-200 Runtime ──┬── SPEC-201 Clock ── SPEC-105（PCR 换算）
+                   ├── SPEC-202 L0 State Engine
+                   └── SPEC-203 TS Runtime ── SPEC-100..108
+                         └── SPEC-204 Fault Injection（faults → ts）
+SPEC-205 Scenario Engine ── SPEC-206 Recovery Verification ── SPEC-205/306/308
+SPEC-300 Observation ── SPEC-301 Event Contract（权威信封）── SPEC-302 Metrics ── SPEC-304 Health & Alerts
 SPEC-303 Timeline / SPEC-305 Query API ← 事件流水与工件
+SPEC-306 Diagnosis ── SPEC-307 Rules（事件走 SPEC-301 信封）
 SPEC-503 Artifact Storage ← TS artifacts / analyzer reports
 ```
 

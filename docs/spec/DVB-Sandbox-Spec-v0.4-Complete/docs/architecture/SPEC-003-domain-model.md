@@ -80,22 +80,24 @@ interface RunContext {
 - `startedAtUtcMs` 是 UTC Unix epoch 毫秒；协议仿真时间另行表达，不混用墙钟。
 - `LIVE` 是未来模式，MVP 不要求实现。
 
-### 2.3 RuntimeEvent Envelope
+### 2.3 RuntimeEvent Envelope（一致性指针）
 
-```typescript
-interface RuntimeEvent<T = unknown> {
-  eventId: string;
-  runId: string;
-  sequenceNumber: number;
-  eventType: string;
-  emittedAtUtcMs: number;
-  simulationTimeTicks?: number;
-  schemaVersion: number;
-  payload: T;
-}
-```
+全平台唯一事件信封的**权威契约是 SPEC-301 + `schemas/event-envelope.schema.json`**（[ADR-0006](../../adr/0006-canonical-event-envelope.md) 第 1 条裁决：不制造第四方信封）。本节原 `RuntimeEvent` 接口废除，各模块不得再按旧形态实现事件；跨 WebSocket/持久化边界的字段兼容性由 SPEC-501 定义。
 
-所有事件带 Schema Version。跨 WebSocket/持久化边界的字段兼容性由 SPEC-501 定义。
+原甲方字段与乙方（SIMULATION-INTEGRATION-CONTRACT）、丙方（SPEC-301）的映射：
+
+| 甲方 RuntimeEvent（废除） | 乙方旧信封（废除） | 丙方 SPEC-301（权威） |
+|---|---|---|
+| `eventId` | `event_id` | `event_id`（uuid4 opaque，重试稳定） |
+| `runId` | `run_id` | `scope.run_id`（nullable，session 级事件为 null） |
+| `sequenceNumber`（per Run） | `sequence`（per session） | **废除**；全序 = `journal_seq`（gateway 盖章，per session 单调，生产者永不填） |
+| `eventType` | `event_type` | `event_type`（注册表 = SPEC-301 §4） |
+| `emittedAtUtcMs` | `wall_time`（operational-only） | `time.observed`（wall:utc，gateway 补填） |
+| `simulationTimeTicks` | `virtual_time_ns` | `time.source`（`sim:<session_id>` 时钟域） |
+| `schemaVersion`（number） | `schema_version`（per event/scenario） | `schema_version`（"1.0" 字符串，多 schema 文档族） |
+| `payload` | `payload` | `payload`（信封松、负载紧：per-event-type schema 严格校验） |
+
+`RunContext`（§2.2）**保留不动**；其 `sequenceNumber` 是 Run 自身的序（非事件全序），`startedAtUtcMs` 是 operational 元数据——两者均不参与事件定序。
 
 ### 2.4 Observation
 

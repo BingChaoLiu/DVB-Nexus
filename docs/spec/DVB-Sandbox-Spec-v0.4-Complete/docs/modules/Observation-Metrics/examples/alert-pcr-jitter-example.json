@@ -7,11 +7,13 @@
   "severity": "warning",
   "scope": {
     "tenant_id": "local",
-    "session_id": "sess-demo-001"
+    "session_id": "0f0e8d1c-2b3a-4c5d-8e9f-0a1b2c3d4e5f"
   },
   "time": {
     "value_ns": 8000000000,
-    "clock_domain": "sim:sess-demo-001"
+    "clock_domain": "sim:0f0e8d1c-2b3a-4c5d-8e9f-0a1b2c3d4e5f",
+    "clock_epoch": 0,
+    "semantics": "derived"
   },
   "summary": "PCR jitter exceeded the configured training-profile threshold",
   "evidence_refs": [
