@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 from tests._support.deterministic import seeded_ts_stream
-from tests._support.golden import (
+from tests.conformance.golden_loader import (
     GoldenRegistrationError,
     GoldenLoader,
     write_golden_vector,

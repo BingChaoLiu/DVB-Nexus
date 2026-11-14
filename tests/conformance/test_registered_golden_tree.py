@@ -13,7 +13,7 @@ and the loader fixture wiring exercised.
 
 from __future__ import annotations
 
-from tests._support.golden import GoldenLoader
+from tests.conformance.golden_loader import GoldenLoader
 from tests._support.paths import GOLDEN_ROOT
 
 

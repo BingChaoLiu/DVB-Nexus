@@ -6,7 +6,7 @@ golden root (docs/test-vectors/golden, #14 Q4) and loads read-only.
 
 from __future__ import annotations
 
-from tests._support.golden import GoldenLoader
+from tests.conformance.golden_loader import GoldenLoader
 from tests._support.paths import GOLDEN_ROOT
 
 
