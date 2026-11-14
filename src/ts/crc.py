@@ -8,8 +8,9 @@ implemented as a pure, incremental, standard-library-only module:
   contract §5).
 - Check vector: ``b"123456789"`` -> ``0x0376E6E7``.
 - The bitwise MSB-first (left-shift) loop is the reference implementation;
-  a 256-entry lookup-table variant (``_mpeg2_crc32_table``) exists for
-  cross-verification and optional optimization (SPEC-101 §5).
+  a 256-entry lookup-table variant (``_mpeg2_crc32_table``) exists as the
+  independent second implementation for the §7.7 cross-implementation
+  test — the public API never switches implementations.
 - CRC fields are 4-byte big-endian; a section that already carries its CRC
   verifies when the CRC computed over the whole byte string is zero.
 
@@ -92,9 +93,12 @@ def _mpeg2_crc32_table(
 ) -> int:
     """Table-driven CRC-32/MPEG-2; cross-verified against the bitwise core.
 
-    Private helper kept for the SPEC-101 §7.7 cross-implementation test and
-    as an opt-in optimization path; the public API uses the bitwise
-    reference implementation.
+    Private helper that exists solely as the independent second
+    implementation of the SPEC-101 §7.7 cross-implementation test: bitwise
+    and table-driven must agree on a large fixed-seed vector set, so a
+    coding fault in either cannot pass unnoticed.  The public API always
+    uses the bitwise reference implementation; this variant is never an
+    opt-in fast path.
     """
     return _advance_table(
         _validate_initial(initial), _coerce_bytes(data, param="data")
