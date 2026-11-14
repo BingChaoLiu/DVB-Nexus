@@ -11,13 +11,20 @@ the fixture seeds a parent session row with raw SQL — tests may touch SQL
 directly; the API/Application layers may not (REQ-PLT-502-006).
 """
 
+import json
 import sqlite3
 
 import pytest
 
 from adapters.storage import db
 from adapters.storage.errors import StorageConflictError
-from adapters.storage.repositories import SqliteRunRepository
+from adapters.storage.repositories import (
+    ArtifactMeta,
+    ArtifactRow,
+    SqliteArtifactRepository,
+    SqliteRunRepository,
+)
+from domain.observation.artifact import ArtifactKind, TSArtifact
 from domain.observation.run_context import Fidelity, RunContext, RunMode
 
 
@@ -122,5 +129,126 @@ def test_finish_unknown_run_raises_lookup_error() -> None:
         repo = SqliteRunRepository(conn)
         with pytest.raises(LookupError):
             repo.finish("ghost-run", status="completed", ended_at_utc_ms=1)
+    finally:
+        conn.close()
+
+
+# --- ArtifactRepository (SPEC-502 §5 artifacts protocol) ---------------------
+
+
+def _ts_artifact(artifact_id: str = "art-1", run_id: str = "run-1") -> TSArtifact:
+    return TSArtifact(
+        artifact_id=artifact_id,
+        run_id=run_id,
+        kind=ArtifactKind.GENERATED_TS,
+        relative_path="runs/run-1/stream.ts",
+        packet_size=188,
+        packet_count=1000,
+        byte_size=188_000,
+        sha256="deadbeef",
+        generator_version="ts-core-0.1.0",
+        config_hash="abc123",
+        fault_profile_ids=["fault-1", "fault-2"],
+        created_at_utc_ms=1_700_000_000_000,
+    )
+
+
+def _artifact_repo(conn: sqlite3.Connection) -> SqliteArtifactRepository:
+    return SqliteArtifactRepository(conn)
+
+
+def test_register_stores_artifact_with_session_id() -> None:
+    """§4 stores run_id / session_id; ArtifactMeta composes TSArtifact (no
+    session_id on the domain model) with the owning session."""
+    conn = _migrated_conn()
+    try:
+        repo = _artifact_repo(conn)
+        repo.register(ArtifactMeta(artifact=_ts_artifact(), session_id="sess-1"))
+        row = conn.execute("SELECT * FROM artifacts WHERE artifact_id = 'art-1'").fetchone()
+        assert row["artifact_id"] == "art-1"
+        assert row["sha256"] == "deadbeef"
+        assert row["kind"] == "generated_ts"
+        assert row["relative_path"] == "runs/run-1/stream.ts"
+        assert row["byte_size"] == 188_000
+        assert row["packet_size"] == 188
+        assert row["packet_count"] == 1000
+        assert row["generator_version"] == "ts-core-0.1.0"
+        assert row["config_hash"] == "abc123"
+        assert json.loads(row["fault_profile_ids_json"]) == ["fault-1", "fault-2"]
+        assert row["run_id"] == "run-1"
+        assert row["session_id"] == "sess-1"
+        assert row["created_at_utc_ms"] == 1_700_000_000_000
+    finally:
+        conn.close()
+
+
+def test_register_optional_fields_stay_null() -> None:
+    conn = _migrated_conn()
+    try:
+        repo = _artifact_repo(conn)
+        minimal = TSArtifact(
+            artifact_id="art-min",
+            run_id="run-1",
+            kind=ArtifactKind.REPORT,
+            relative_path="runs/run-1/report.md",
+            byte_size=10,
+            sha256="cafebabe",
+            created_at_utc_ms=1,
+        )
+        repo.register(ArtifactMeta(artifact=minimal, session_id="sess-1"))
+        row = conn.execute("SELECT * FROM artifacts WHERE artifact_id = 'art-min'").fetchone()
+        assert row["packet_size"] is None
+        assert row["packet_count"] is None
+        assert row["generator_version"] is None
+        assert row["config_hash"] is None
+        assert row["fault_profile_ids_json"] is None
+    finally:
+        conn.close()
+
+
+def test_get_returns_row_or_none() -> None:
+    conn = _migrated_conn()
+    try:
+        repo = _artifact_repo(conn)
+        repo.register(ArtifactMeta(artifact=_ts_artifact(), session_id="sess-1"))
+        row = repo.get("art-1")
+        assert isinstance(row, ArtifactRow)
+        assert (row.artifact_id, row.sha256, row.kind, row.run_id, row.session_id) == (
+            "art-1",
+            "deadbeef",
+            "generated_ts",
+            "run-1",
+            "sess-1",
+        )
+        assert row.fault_profile_ids == ["fault-1", "fault-2"]
+        assert repo.get("ghost") is None
+    finally:
+        conn.close()
+
+
+def test_find_by_sha256_returns_all_content_matches() -> None:
+    """§4: sha256 非唯一 — 同内容可被多个 run 引用."""
+    conn = _migrated_conn()
+    try:
+        repo = _artifact_repo(conn)
+        repo.register(ArtifactMeta(artifact=_ts_artifact(artifact_id="art-1"), session_id="sess-1"))
+        repo.register(ArtifactMeta(artifact=_ts_artifact(artifact_id="art-2"), session_id="sess-1"))
+        repo.register(
+            ArtifactMeta(
+                artifact=TSArtifact(
+                    artifact_id="art-3",
+                    run_id="run-1",
+                    kind=ArtifactKind.FAULTED_TS,
+                    relative_path="runs/run-1/faulted.ts",
+                    byte_size=5,
+                    sha256="different",
+                    created_at_utc_ms=3,
+                ),
+                session_id="sess-1",
+            )
+        )
+        matches = repo.find_by_sha256("deadbeef")
+        assert [row.artifact_id for row in matches] == ["art-1", "art-2"]
+        assert repo.find_by_sha256("no-such-hash") == []
     finally:
         conn.close()

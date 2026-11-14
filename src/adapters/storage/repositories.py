@@ -118,10 +118,85 @@ class SqliteRunRepository:
             raise LookupError(f"run {run_id!r} does not exist")
 
 
+class SqliteArtifactRepository:
+    """SQLite implementation of :class:`ArtifactRepository`."""
+
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        self._conn = conn
+
+    def register(self, meta: ArtifactMeta) -> None:
+        artifact = meta.artifact
+        fault_profile_ids_json = (
+            None
+            if artifact.fault_profile_ids is None
+            else json.dumps(artifact.fault_profile_ids, ensure_ascii=False)
+        )
+        try:
+            self._conn.execute(
+                "INSERT INTO artifacts (artifact_id, sha256, kind, relative_path, byte_size,"
+                " packet_size, packet_count, generator_version, config_hash,"
+                " fault_profile_ids_json, run_id, session_id, created_at_utc_ms)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    artifact.artifact_id,
+                    artifact.sha256,
+                    artifact.kind.value,
+                    artifact.relative_path,
+                    artifact.byte_size,
+                    artifact.packet_size,
+                    artifact.packet_count,
+                    artifact.generator_version,
+                    artifact.config_hash,
+                    fault_profile_ids_json,
+                    artifact.run_id,
+                    meta.session_id,
+                    artifact.created_at_utc_ms,
+                ),
+            )
+        except sqlite3.IntegrityError as exc:
+            raise StorageConflictError(
+                f"artifact {artifact.artifact_id!r} violates an artifacts constraint"
+            ) from exc
+
+    def get(self, artifact_id: str) -> Optional[ArtifactRow]:
+        row = self._conn.execute(
+            "SELECT * FROM artifacts WHERE artifact_id = ?", (artifact_id,)
+        ).fetchone()
+        return None if row is None else _artifact_row(row)
+
+    def find_by_sha256(self, sha256: str) -> list[ArtifactRow]:
+        rows = self._conn.execute(
+            "SELECT * FROM artifacts WHERE sha256 = ? ORDER BY created_at_utc_ms, artifact_id",
+            (sha256,),
+        ).fetchall()
+        return [_artifact_row(row) for row in rows]
+
+
+def _artifact_row(row: sqlite3.Row) -> ArtifactRow:
+    return ArtifactRow(
+        artifact_id=row["artifact_id"],
+        sha256=row["sha256"],
+        kind=row["kind"],
+        relative_path=row["relative_path"],
+        byte_size=row["byte_size"],
+        packet_size=row["packet_size"],
+        packet_count=row["packet_count"],
+        generator_version=row["generator_version"],
+        config_hash=row["config_hash"],
+        fault_profile_ids=(
+            None if row["fault_profile_ids_json"] is None else json.loads(row["fault_profile_ids_json"])
+        ),
+        run_id=row["run_id"],
+        session_id=row["session_id"],
+        created_at_utc_ms=row["created_at_utc_ms"],
+    )
+
+
 __all__ = [
     "ArtifactMeta",
     "ArtifactRepository",
     "ArtifactRow",
     "RunRepository",
+    "SqliteArtifactRepository",
     "SqliteRunRepository",
 ]
