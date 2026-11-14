@@ -24,7 +24,7 @@
 
 | marker | 语义 | CI 策略 |
 |---|---|---|
-| `unit` / `integration` / `conformance` / `e2e` | 四层（目录注入 + 矛盾硬失败） | **必绿组合**：CI PR 门 `pytest -m "(unit or integration or conformance or e2e) and not tsduck"` |
+| `unit` / `integration` / `conformance` / `e2e` | 四层（目录注入 + 矛盾硬失败） | **必绿组合**：CI PR 门 `pytest -m "(unit or integration or conformance or e2e) and not (tsduck or slow)"` |
 | `slow` | 慢测试 | 本地默认跑；CI 夜间 workflow `pytest -m slow` |
 | `tsduck` | 需要 TSDuck CLI（SPEC-308） | CI 主路径 Windows runner 安装 TSDuck 后全量跑（安装失败 = CI 失败，#14）；ubuntu PR 门排除；本地缺失 → `tsduck` fixture 显式 skip（理由可见，禁静默跳过） |
 | `windows_only` | Windows-first 断言（ADR-0004：路径分隔、GBK stderr、进程树清理） | 非 Windows 平台显式 skip（守卫 fixture 给出理由）；Windows CI 必跑 |
@@ -109,8 +109,8 @@ function scope，探测结果为不可变缓存）。
 ```bash
 # 全量（本地默认，含 slow）
 pytest
-# CI 必绿组合（同 ubuntu PR 门）
-pytest -m "(unit or integration or conformance or e2e) and not tsduck"
+# CI 必绿组合（同 ubuntu PR 门；slow 归夜间、tsduck 归 Windows TSDuck job）
+pytest -m "(unit or integration or conformance or e2e) and not (tsduck or slow)"
 # Windows-first + TSDuck（Windows runner 形态）
 pytest -m "windows_only or tsduck"
 # 夜间（slow）
