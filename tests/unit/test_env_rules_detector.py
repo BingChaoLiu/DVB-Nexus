@@ -104,6 +104,17 @@ class TestScopeDetection:
         )
         assert violations_of(source) == []
 
+    def test_unrelated_list_assignment_is_out_of_scope(self):
+        # The string-entry form requires the assignment target to be
+        # ``pytestmark`` — an unrelated named list is a fixture constant
+        # (review round #70: scope promise vs implementation).
+        marker_name = next(iter(REAL_ENV_MARKERS))
+        source = (
+            f'EXPECTED = ["{marker_name}"]\n'
+            f'assert probe.version == "{INCIDENT_VERSION}"\n'
+        )
+        assert violations_of(source) == []
+
     def test_has_real_env_marker_detection(self):
         assert has_real_env_marker(marked("x = 1\n")) is True
         assert has_real_env_marker(

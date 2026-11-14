@@ -83,6 +83,10 @@ EXECUTABLE_SUFFIXES: frozenset[str] = frozenset(
     {".exe", ".cmd", ".bat", ".ps1", ".dll", ".com"}
 )
 
+#: Bare-filename length bound for the executable-name heuristic: real
+#: tool/asset names are short; longer strings are prose, not names
+#: (review round #70: magic number named per the §6 constants promise).
+
 #: Comparison operators that count as pinning (identity ``is`` is not:
 #: it never appears in value assertions).
 PINNING_OPS: tuple[type[ast.cmpop], ...] = (ast.Eq, ast.NotEq, ast.In, ast.NotIn)
@@ -91,7 +95,15 @@ PINNING_OPS: tuple[type[ast.cmpop], ...] = (ast.Eq, ast.NotEq, ast.In, ast.NotIn
 CASEFOLD_METHODS: frozenset[str] = frozenset({"lower", "upper", "casefold"})
 
 #: Waiver comment token (must be followed by a reason in practice).
-WAIVER_MARK: str = "env-ok"
+#: The colon is part of the token so the zero-waiver audit (tokenize
+#: COMMENT tokens containing "env-ok:") and this detector agree exactly
+#: on what counts as a waiver (review round #70).
+WAIVER_MARK: str = "env-ok:"
+
+#: Bare-filename length bound for the executable-name heuristic: real
+#: tool/asset names are short; longer strings are prose, not names
+#: (review round #70: magic number named per the §6 constants promise).
+MAX_EXECUTABLE_NAME_LENGTH: int = 64
 
 RULE_ENV_VERSION_LITERAL = "env_version_literal"
 RULE_ENV_DRIVE_PATH_LITERAL = "env_drive_path_literal"
@@ -99,7 +111,7 @@ RULE_ENV_EXECUTABLE_NAME_COMPARISON = "env_executable_name_comparison"
 
 #: Tree-scan zone excluded from the gate (sanctioned constructor/test-support
 #: area — same discipline as the data_rules engine's scan surface).
-SUPPORT_DIR_NAME = "_support"
+SUPPORT_DIRNAME = "_support"
 
 
 @dataclass(frozen=True)
@@ -144,17 +156,31 @@ def has_real_env_marker(source: str) -> bool:
     Detected forms: ``pytest.mark.<marker>`` attribute chains (module
     ``pytestmark`` entries and function decorators alike) and plain string
     entries inside a ``pytestmark`` assignment (pytest accepts marker-name
-    strings). Unparsable sources report no marker (their syntax error is
-    the file's own collection failure, not a scope question).
+    strings — the assignment *target* must be ``pytestmark``, so an
+    unrelated list like ``EXPECTED = ["windows_only"]`` stays out of scope).
+    Unparsable sources report no marker (their syntax error is the file's
+    own collection failure, not a scope question).
     """
     try:
         tree = ast.parse(source)
     except SyntaxError:
         return False
+    return _tree_has_real_env_marker(tree)
+
+
+def _tree_has_real_env_marker(tree: ast.Module) -> bool:
+    """Marker detection over an already-parsed tree (single-parse path for
+    :func:`find_env_violations`)."""
     for node in ast.walk(tree):
         if _marker_attribute_name(node) is not None:
             return True
         if isinstance(node, (ast.Assign, ast.AnnAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            if not any(
+                isinstance(target, ast.Name) and target.id == "pytestmark"
+                for target in targets
+            ):
+                continue
             value = node.value
             if not isinstance(value, (ast.List, ast.Tuple)):
                 continue
@@ -200,7 +226,7 @@ def _executable_name(value: str) -> bool:
     """True for a bare filename constant with an executable suffix."""
     if "/" in value or "\\" in value:
         return False  # path shapes belong to the drive-path rule
-    if len(value) > 64 or "." not in value:
+    if len(value) > MAX_EXECUTABLE_NAME_LENGTH or "." not in value:
         return False
     suffix = value[value.rindex("."):]
     return suffix.lower() in EXECUTABLE_SUFFIXES
@@ -268,7 +294,7 @@ def find_env_violations(source: str, *, filename: str = "<memory>") -> list[Viol
         tree = ast.parse(source)
     except SyntaxError:
         return []
-    if not has_real_env_marker(source):
+    if not _tree_has_real_env_marker(tree):
         return []
 
     lines = source.splitlines()
@@ -291,17 +317,21 @@ def find_env_violations(source: str, *, filename: str = "<memory>") -> list[Viol
     return findings
 
 
-def scan_tree(root: Path, *, skip_support: bool = True) -> list[Violation]:
+def scan_tree(
+    root: Path,
+    *,
+    skip_dir_names: frozenset[str] = frozenset({SUPPORT_DIRNAME}),
+) -> list[Violation]:
     """Scan ``*.py`` files under ``root`` (the tests tree for the CI gate).
 
-    With ``skip_support`` (default), ``tests/_support/`` is excluded — the
-    sanctioned constructor zone, whose own correctness is constrained by the
-    unit layer (tests/README.md §5 discipline). Files are read with explicit
-    ``encoding="utf-8"`` (Windows-first).
+    Directory names in ``skip_dir_names`` (default: ``tests/_support/``) are
+    excluded — the sanctioned constructor zone, whose own correctness is
+    constrained by the unit layer (tests/README.md §5 discipline). Files are
+    read with explicit ``encoding="utf-8"`` (Windows-first).
     """
     violations: list[Violation] = []
     for path in sorted(Path(root).rglob("*.py")):
-        if skip_support and SUPPORT_DIR_NAME in path.parts:
+        if skip_dir_names & set(path.parts):
             continue
         source = path.read_text(encoding="utf-8")
         violations.extend(find_env_violations(source, filename=str(path)))

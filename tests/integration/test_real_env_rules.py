@@ -16,7 +16,7 @@ from __future__ import annotations
 import tokenize
 from pathlib import Path
 
-from tests._support.env_rules import SUPPORT_DIR_NAME, scan_tree
+from tests._support.env_rules import SUPPORT_DIRNAME, scan_tree
 from tests._support.paths import TESTS_DIR
 
 MARKED_HEADER = "import pytest\npytestmark = [pytest.mark.tsduck]\n"
@@ -40,7 +40,7 @@ class TestScanTreeBehavior:
         assert scan_tree(tmp_path) == []
 
     def test_support_zone_is_excluded_from_scan(self, tmp_path: Path):
-        support = tmp_path / SUPPORT_DIR_NAME
+        support = tmp_path / SUPPORT_DIRNAME
         support.mkdir()
         # The constructor zone may document incident tokens verbatim (its
         # own correctness is constrained by the unit layer).
@@ -78,7 +78,7 @@ def test_real_tests_tree_has_zero_env_ok_waivers():
     docstrings or generated-source strings stays out of scope."""
     waivers: list[str] = []
     for path in sorted(TESTS_DIR.rglob("*.py")):
-        if SUPPORT_DIR_NAME in path.parts:
+        if SUPPORT_DIRNAME in path.parts:
             continue
         with tokenize.open(path) as handle:
             for token in tokenize.generate_tokens(handle.readline):
