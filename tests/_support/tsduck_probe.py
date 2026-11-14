@@ -27,8 +27,10 @@ from functools import lru_cache
 #: Env var for an explicit tsp executable override (tests / non-PATH installs).
 TSP_ENV_OVERRIDE = "DVB_NEXUS_TSP_PATH"
 
-#: Measured output format anchor (docs/research/tsduck-env.md, ticket #3).
-MEASURED_VERSION_LINE = (
+#: Canonical version-line anchor (measured asset: docs/research/tsduck-env.md,
+#: ticket #3). The name describes the line shape, not a claim that TSDuck
+#: output is "measured" (CONTEXT.md bans that framing).
+CANONICAL_VERSION_LINE = (
     "TSDuck - The MPEG Transport Stream Toolkit - version 3.40-4165"
 )
 

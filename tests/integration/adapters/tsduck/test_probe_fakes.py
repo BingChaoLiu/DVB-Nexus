@@ -20,7 +20,7 @@ from pathlib import Path
 import pytest
 
 from adapters.tsduck.version import (
-    MEASURED_VERSION_LINE,
+    CANONICAL_VERSION_LINE,
     ResolutionSource,
     TSDuckUnavailableReason,
     TSDuckVersionProbe,
@@ -36,7 +36,7 @@ FAKE_SUFFIX = ".cmd"
 def _write_fake_tsp(
     bin_dir: Path,
     *,
-    stderr_line: str = MEASURED_VERSION_LINE,
+    stderr_line: str = CANONICAL_VERSION_LINE,
     stdout_line: str | None = None,
 ) -> Path:
     """Write a batch ``tsp`` printing the given lines; returns the script."""
@@ -74,7 +74,7 @@ class TestPathResolution:
         assert result.version.resolution is ResolutionSource.PATH
         assert result.version.stream is VersionStream.STDERR
         assert result.version.executable == Path(shutil.which("tsp"))
-        assert result.version.raw_version_line == MEASURED_VERSION_LINE
+        assert result.version.raw_version_line == CANONICAL_VERSION_LINE
         assert result.detail  # display-only diagnostics always present
 
 
@@ -186,7 +186,7 @@ class TestVersionGate:
         # noise on stderr — stdout match wins, stderr is never parsed.
         bin_dir = tmp_path / "bin"
         _write_fake_tsp(
-            bin_dir, stdout_line=MEASURED_VERSION_LINE, stderr_line="* Error: noise"
+            bin_dir, stdout_line=CANONICAL_VERSION_LINE, stderr_line="* Error: noise"
         )
         monkeypatch.setenv("PATH", str(bin_dir))
 
@@ -211,7 +211,7 @@ class TestProbeTimeout:
             (
                 "@echo off\r\n"
                 "%SystemRoot%\\System32\\ping.exe -n 5 127.0.0.1 >nul\r\n"
-                f"echo {MEASURED_VERSION_LINE} 1>&2\r\n"
+                f"echo {CANONICAL_VERSION_LINE} 1>&2\r\n"
             ).encode("utf-8")
         )
         monkeypatch.setenv("PATH", str(bin_dir))
@@ -237,7 +237,7 @@ def _write_counting_tsp(bin_dir: Path) -> Path:
         (
             "@echo off\r\n"
             'echo called >>"%~dp0calls.log"\r\n'
-            f"echo {MEASURED_VERSION_LINE} 1>&2\r\n"
+            f"echo {CANONICAL_VERSION_LINE} 1>&2\r\n"
         ).encode("utf-8")
     )
     return script

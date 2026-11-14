@@ -10,18 +10,20 @@ from __future__ import annotations
 
 from tests._support.tsduck_probe import extract_version
 
-#: Measured output line (docs/research/tsduck-env.md, ticket #3).
-MEASURED_VERSION_LINE = (
+#: Canonical version-line anchor (measured asset: docs/research/tsduck-env.md,
+#: ticket #3). The name describes the line shape, not a claim that TSDuck
+#: output is "measured" (CONTEXT.md bans that framing).
+CANONICAL_VERSION_LINE = (
     "TSDuck - The MPEG Transport Stream Toolkit - version 3.40-4165"
 )
 
 
 def test_measured_asset_version_extracted():
-    assert extract_version(MEASURED_VERSION_LINE) == "3.40-4165"
+    assert extract_version(CANONICAL_VERSION_LINE) == "3.40-4165"
 
 
 def test_version_with_newline_and_crlf():
-    assert extract_version(MEASURED_VERSION_LINE + "\r\n") == "3.40-4165"
+    assert extract_version(CANONICAL_VERSION_LINE + "\r\n") == "3.40-4165"
 
 
 def test_no_version_word_yields_none():

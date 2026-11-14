@@ -17,7 +17,7 @@ output is never treated as absolute truth and never labelled ``measured``
 
 from adapters.tsduck.version import (
     DEFAULT_PROBE,
-    MEASURED_VERSION_LINE,
+    CANONICAL_VERSION_LINE,
     PROBE_TIMEOUT_SECONDS,
     ResolutionSource,
     TSDuckProbeResult,
@@ -33,7 +33,7 @@ from adapters.tsduck.version import (
 
 __all__ = [
     "DEFAULT_PROBE",
-    "MEASURED_VERSION_LINE",
+    "CANONICAL_VERSION_LINE",
     "PROBE_TIMEOUT_SECONDS",
     "ResolutionSource",
     "TSDuckProbeResult",

@@ -9,9 +9,13 @@ M2 scope; the public result types here are shaped for direct M2 consumption
 
 Contract anchors:
 
-- Measured version line (docs/research/tsduck-env.md §2.1/§6.2, ticket #3):
+- Canonical version line (measured asset: docs/research/tsduck-env.md
+  §2.1/§6.2, ticket #3):
   ``TSDuck - The MPEG Transport Stream Toolkit - version 3.40-4165``;
   extraction regex ``version (\\d+\\.\\d+-\\d+)`` (tsduck-env.md:191).
+  Naming discipline: the constant names the canonical line shape; TSDuck
+  output itself is never labelled "measured" (CONTEXT.md, observation
+  confidence axis).
   Re-measured 2026-11-14 for #25: ``tsp --version`` prints that line to
   **stderr** with stdout empty — the scan covers BOTH streams, stdout first.
 - The matched version pattern is the validity gate (ticket #3: garbage input
@@ -42,7 +46,7 @@ from pathlib import Path
 
 __all__ = [
     "DEFAULT_PROBE",
-    "MEASURED_VERSION_LINE",
+    "CANONICAL_VERSION_LINE",
     "PROBE_TIMEOUT_SECONDS",
     "ResolutionSource",
     "TSDuckProbeResult",
@@ -56,8 +60,10 @@ __all__ = [
     "scan_for_version",
 ]
 
-#: Measured version-line anchor (docs/research/tsduck-env.md, ticket #3).
-MEASURED_VERSION_LINE = (
+#: Canonical version-line anchor (measured asset: docs/research/tsduck-env.md,
+#: ticket #3). The name describes the line shape, not a claim that TSDuck
+#: output is "measured" (CONTEXT.md bans that framing).
+CANONICAL_VERSION_LINE = (
     "TSDuck - The MPEG Transport Stream Toolkit - version 3.40-4165"
 )
 
@@ -420,7 +426,7 @@ class TSDuckVersionProbe:
                 reason=TSDuckUnavailableReason.VERSION_UNPARSEABLE,
                 detail=(
                     f"{str(executable)!r} exited {completed.returncode} but no "
-                    "measured version token found in stdout/stderr "
+                    "canonical version line found in stdout/stderr "
                     "(exit 0 never proves validity, ticket #3)"
                 ),
             )
