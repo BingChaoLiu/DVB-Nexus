@@ -69,12 +69,12 @@ def test_pair_registration_and_plan_ref(golden_loader, fault_id: str):
     assert faulted.verification is not None
     assert faulted.verification.path == "tsduck-cross"
     # Frozen fault parameters travel in the manifest.
-    frozen = json_frozen = faulted_and_manifest_frozen(faulted)
+    frozen = faulted_manifest_frozen_params(faulted)
     assert frozen["fault_type"] == fault_id.upper().replace("-", "_")
     assert frozen["schema_version"] == 1
 
 
-def faulted_and_manifest_frozen(faulted):
+def faulted_manifest_frozen_params(faulted):
     import json
     from tests._support.paths import GOLDEN_ROOT
 
