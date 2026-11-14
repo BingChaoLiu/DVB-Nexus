@@ -26,6 +26,14 @@ _EXPECTATIONS = (
     {"event_type": "ts.psi_section_observed", "locator": {"pid": 0}},
 )
 
+#: Sanctioned L2 verification triple for tmp registrations (SPEC-506 §5 gate,
+#: ticket #38: every loadable registration carries an independent path).
+_CROSS_VERIFICATION = {
+    "path": "tsduck-cross",
+    "direction": "self-generate→tsduck-analyze",
+    "evidence_ref": "evidence.md",
+}
+
 
 @pytest.fixture
 def tmp_golden_root(tmp_path: Path) -> Path:
@@ -44,6 +52,7 @@ class TestLoadRegisteredVector:
             generator_version="tstabcomp (tstduck 3.40-4165)",
             packet_count=32,
             expectations=_EXPECTATIONS,
+            verification=_CROSS_VERIFICATION,
         )
         vector = GoldenLoader(tmp_golden_root).load("pat-minimal")
         assert vector.vector_id == "pat-minimal"
@@ -61,7 +70,11 @@ class TestLoadRegisteredVector:
     def test_sha_prefix_and_bare_hex_both_accepted(self, tmp_golden_root):
         ts_bytes = seeded_ts_stream(78, 8)
         write_golden_vector(
-            tmp_golden_root, "cc-wrap", ts_bytes, kind="generated_ts"
+            tmp_golden_root,
+            "cc-wrap",
+            ts_bytes,
+            kind="generated_ts",
+            verification=_CROSS_VERIFICATION,
         )
         manifest_path = tmp_golden_root / "cc-wrap" / "manifest.json"
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -155,7 +168,11 @@ class TestPathSafety:
 class TestRegisteredEnumeration:
     def test_registered_ids_lists_complete_trios_only(self, tmp_golden_root):
         write_golden_vector(
-            tmp_golden_root, "alpha", seeded_ts_stream(86, 8), kind="generated_ts"
+            tmp_golden_root,
+            "alpha",
+            seeded_ts_stream(86, 8),
+            kind="generated_ts",
+            verification=_CROSS_VERIFICATION,
         )
         # beta has only a .ts — no manifest → not registered
         (tmp_golden_root / "beta").mkdir()
@@ -172,6 +189,7 @@ class TestRegisteredEnumeration:
                 name,
                 seeded_ts_stream(90 + index, 8),
                 kind="generated_ts",
+                verification=_CROSS_VERIFICATION,
             )
         loader = GoldenLoader(tmp_golden_root)
         assert [vector.vector_id for vector in loader.load_all()] == [

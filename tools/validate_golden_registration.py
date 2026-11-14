@@ -37,6 +37,14 @@ DEFAULT_INDEX = Path("docs/test-vectors/TEST-VECTOR-INDEX.md")
 
 KINDS = ("generated_ts", "faulted_ts", "bit_level")
 
+#: SPEC-506 §4 verification schema / §5 three-layer acceptance (#14 Q1,
+#: ticket #38): the sanctioned independent-verification paths.  ``self-roundtrip``
+#: (L3 自研 round-trip) is deliberately absent — 同源自证 = 登记拒绝.  Kept as an
+#: independent re-implementation of the golden_loader gate (tests/conformance/
+#: golden_loader.py ``VERIFICATION_PATHS``) — one implementation's blind spot
+#: cannot accept a self-source claim.
+VERIFICATION_PATHS = ("tsduck-cross", "bit-level-review")
+
 #: SPEC-301 §4 authoritative event-type registry (the ``ts.*`` observation
 #: family is the one golden expectations use; the full registered set is
 #: enforced so a typo cannot smuggle an unregistered type past the gate).
@@ -139,6 +147,15 @@ def validate_vector(root: Path, directory: Path, report: Report, index_text: str
             f"{where}: verification needs path/direction/evidence_ref (SPEC-506 §4/§5)"
         )
     else:
+        # §5 red line (ticket #38): 同源自证 = 登记拒绝 — only the sanctioned
+        # independent-verification paths are acceptable registration evidence.
+        verification_path = verification.get("path")
+        if verification_path not in VERIFICATION_PATHS:
+            report.fail(
+                f"{where}: verification path {verification_path!r} outside sanctioned "
+                f"independent paths {VERIFICATION_PATHS} — 同源自证 (L3 self-roundtrip) "
+                "= 登记拒绝 (SPEC-506 §5)"
+            )
         evidence_ref = verification.get("evidence_ref", "")
         evidence_path = Path(str(evidence_ref).split(" + ")[0])
         if not evidence_path.is_file():
