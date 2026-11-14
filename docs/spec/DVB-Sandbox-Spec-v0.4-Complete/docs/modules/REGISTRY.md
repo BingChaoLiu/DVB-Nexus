@@ -37,7 +37,7 @@ SPEC-200～206 已于 2026-11-14 批准为 MVP 基线（APPROVED 0.5.0，[ticket
 
 ## C. Observation / Diagnosis / TSDuck
 
-编号对齐实际文件（[#10 编号体系重建](https://github.com/BingChaoLiu/DVB-Nexus/issues/10) 裁决）；SPEC-306～309 为旧注册语义的重新分配，规格文本随 [补写 MVP P0 缺失契约](https://github.com/BingChaoLiu/DVB-Nexus/issues/13) 编写。SPEC-300～305 已于 2026-11-14 批准为 MVP 基线（APPROVED 0.5.0，[ticket #12](https://github.com/BingChaoLiu/DVB-Nexus/issues/12) 缝合批准）；权威状态以各文件 front-matter 为准，此处不重复。
+编号对齐实际文件（[#10 编号体系重建](https://github.com/BingChaoLiu/DVB-Nexus/issues/10) 裁决）。SPEC-300～305 已于 2026-11-14 批准为 MVP 基线（APPROVED 0.5.0，[ticket #12](https://github.com/BingChaoLiu/DVB-Nexus/issues/12) 缝合批准），收录于 `Observation-Metrics/`；SPEC-306/307 已随 [补写 MVP P0 缺失契约](https://github.com/BingChaoLiu/DVB-Nexus/issues/13) 批准（APPROVED 0.5.0），收录于 [Diagnosis/](Diagnosis/SPEC-INDEX-DIAGNOSIS.md)；SPEC-308 已随 #13 批准，收录于 [TSDuck/](TSDuck/SPEC-INDEX-TSDUCK.md)；SPEC-309（P1）文本未编写。权威状态以各文件 front-matter 为准，此处不重复。
 
 | Spec ID | 名称 | 范围 | 建议依赖 | 优先级 |
 |---|---|---|---|---|
@@ -67,6 +67,8 @@ SPEC-200～206 已于 2026-11-14 批准为 MVP 基线（APPROVED 0.5.0，[ticket
 | SPEC-406 | Training Lab UI | 实验目标、提示、步骤、通关结果 | SPEC-205/206 | P0 |
 
 ## E. API / Storage / Quality
+
+SPEC-500/501/502/503/505/506 已于 2026-11-14 随 [补写 MVP P0 缺失契约](https://github.com/BingChaoLiu/DVB-Nexus/issues/13) 批准为 MVP 基线（APPROVED 0.5.0，收录于 [Platform/](Platform/SPEC-INDEX-PLATFORM.md)；其中 SPEC-506 为机制骨架，向量内容随 [golden streams 与 conformance 策略](https://github.com/BingChaoLiu/DVB-Nexus/issues/14)）；SPEC-504/507 为 P1 不在 MVP 基线。权威状态以各文件 front-matter 为准，此处不重复。
 
 | Spec ID | 名称 | 范围 | 建议依赖 | 优先级 |
 |---|---|---|---|---|

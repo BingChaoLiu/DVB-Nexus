@@ -4,7 +4,7 @@
 **Status:** MVP_BASELINE_APPROVED  
 **Normative parent:** DVB Sandbox SPEC-003；事件信封本包 SPEC-301 为全平台权威（ADR-0006）
 
-[ticket #12 缝合批准](https://github.com/BingChaoLiu/DVB-Nexus/issues/12)（2026-11-14）：六份规格逐份修订后批准为 MVP 基线。SPEC-306～309（Diagnosis/Rules/TSDuck Adapter/Comparator）不在本包，文本随 [补写 MVP P0 缺失契约 #13] 编写。
+[ticket #12 缝合批准](https://github.com/BingChaoLiu/DVB-Nexus/issues/12)（2026-11-14）：六份规格逐份修订后批准为 MVP 基线。SPEC-306/307 已随 [补写 MVP P0 缺失契约 #13](https://github.com/BingChaoLiu/DVB-Nexus/issues/13) 批准，收录于 [Diagnosis/](../Diagnosis/SPEC-INDEX-DIAGNOSIS.md) 包；SPEC-308 收录于 [TSDuck/](../TSDuck/SPEC-INDEX-TSDUCK.md) 包；SPEC-309（Comparator，P1）随 roadmap。
 
 | Spec ID | Document | Depends on | MVP priority | Primary output |
 |---|---|---|---|---|

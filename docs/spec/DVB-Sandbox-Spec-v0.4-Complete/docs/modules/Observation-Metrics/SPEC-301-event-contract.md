@@ -59,7 +59,9 @@ requirements: [REQ-OBS-301-001, REQ-OBS-301-002, REQ-OBS-301-003, REQ-OBS-301-00
     "expected_cc": 4,
     "actual_cc": 6,
     "discontinuity_indicator": false,
-    "packet_index": 12000
+    "packet_index": 12000,
+    "source": "internal_parser",
+    "confidence": "parsed"
   },
   "tags": ["ts", "continuity", "training"]
 }
@@ -94,6 +96,8 @@ requirements: [REQ-OBS-301-001, REQ-OBS-301-002, REQ-OBS-301-003, REQ-OBS-301-00
 - `topology.state_changed`
 - `ts.packet_batch_observed` / `ts.continuity_error` / `ts.pcr_jitter_observed` / `ts.psi_section_observed` / `ts.service_state_changed`
 
+> 观测记录义务（ticket #13 Q3-i 裁决）：`ts.*` 观测类事件的 payload schema 必须携带 `source`（五值 ObservationSource）与 `confidence`（四值 ConfidenceKind，SPEC-003 §2.4 模型）——信封不动（信封松负载紧，ADR-0006 第 4 条）；诊断侧规则置信度（SPEC-307 三档）是另一条轴，不得混用。
+
 **fault 家族**（四事件对四态，SCHEDULED→ACTIVE→APPLIED→REMOVED，ADR-0006 第 5 条；语义详见 SPEC-204 §8）：
 
 - `fault.injected` = SCHEDULED（prepare 校验通过）
@@ -106,7 +110,7 @@ requirements: [REQ-OBS-301-001, REQ-OBS-301-002, REQ-OBS-301-003, REQ-OBS-301-00
 - `scenario.step_started` / `scenario.step_completed`
 - `recovery.verification_completed`（权威名；乙方 `verification.completed` 废除）
 
-**diagnosis 家族**（生产者 Diagnosis Engine，SPEC-306/307；payload schema 含 `confidence` 等，**属 payload 层不入信封**，随 [补写 MVP P0 缺失契约](https://github.com/BingChaoLiu/DVB-Nexus/issues/13) 落地）：
+**diagnosis 家族**（生产者 Diagnosis Engine，SPEC-306/307；payload schema 含 `confidence` 三档枚举等，**属 payload 层不入信封**，已随 [补写 MVP P0 缺失契约](https://github.com/BingChaoLiu/DVB-Nexus/issues/13) 批准落地——形状见 SPEC-306 §7）：
 
 - `diagnosis.raised` / `diagnosis.updated` / `diagnosis.cleared`
 

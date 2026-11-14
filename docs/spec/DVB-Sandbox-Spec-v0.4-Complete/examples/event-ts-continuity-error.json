@@ -41,7 +41,9 @@
     "expected_cc": 4,
     "actual_cc": 6,
     "discontinuity_indicator": false,
-    "packet_index": 12000
+    "packet_index": 12000,
+    "source": "internal_parser",
+    "confidence": "parsed"
   },
   "tags": [
     "ts",

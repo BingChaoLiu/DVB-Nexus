@@ -127,6 +127,8 @@ interface Observation {
 
 禁止规则：`source='tsduck'` 的结果不得标成 `measured`；`SIM_STATE` 生成的结果不得标成 `parsed`；硬件测量值不得与模拟值混为同一可信类别。
 
+**payload 映射指针**（ticket #13 Q3-i 裁决）：观测类事件（`ts.*` 家族等，SPEC-301 §4）的 payload schema 必须携带 `source`（五值 `ObservationSource`）与 `confidence`（四值 `ConfidenceKind`）——信封不动（信封松负载紧，[ADR-0006](../../adr/0006-canonical-event-envelope.md) 第 4 条），本接口是观测记录的逻辑模型，事件 payload 是其传输/持久形态。注意此轴与 Diagnosis 的规则置信度（SPEC-306/307 的三档声明）是**两条不同的轴**。
+
 ### 2.5 Metric
 
 ```typescript
@@ -160,7 +162,7 @@ interface Diagnosis {
   severity: 'info' | 'warning' | 'error' | 'critical';
   title: string;
   summary: string;
-  confidence?: number;
+  confidence: 'low' | 'medium' | 'high';
   observationIds: string[];
   affectedNodeIds?: string[];
   suggestedActions?: string[];
@@ -168,7 +170,7 @@ interface Diagnosis {
 }
 ```
 
-`confidence` 的数值解释、阈值和算法必须由 SPEC-306/307 定义；不得在没有校准依据时宣称统计概率。
+`confidence` 是规则的**静态三档声明**（ticket #13 Q3-ii 裁决：`low/medium/high`，由规则定义方声明、引擎不计算连续分，语义归 SPEC-307）；不得在没有校准依据时宣称统计概率。连续置信分与概率校准进 roadmap。
 
 ### 2.7 TSArtifact
 
