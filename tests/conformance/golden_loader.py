@@ -14,7 +14,11 @@ A registered vector is a trio under ``<root>/<vector_id>/``:
 
 Loader enforcement: trio completeness (缺一不予登记), manifest↔directory
 identity, kind closed enum, sha256(bytes) == manifest sha256 (``sha256:``
-prefix optional), minimal expectations shape, path-safe vector ids.
+prefix optional), minimal expectations shape, path-safe vector ids, and the
+SPEC-506 §5 independent-verification gate (ticket #38): every registration
+carries a ``verification`` triple whose ``path`` is in the sanctioned
+``VERIFICATION_PATHS`` closed enum and whose ``evidence_ref`` addresses an
+existing file — 同源自证 (L3 self-roundtrip) = 登记拒绝.
 ``write_golden_vector`` exists for **tests only** — it registers private tmp
 copies; bytes must come from sanctioned constructors (SPEC-505 §6), and the
 digest is always computed from the given bytes, never trusted from callers.
@@ -29,8 +33,19 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from tests._support.paths import REPO_ROOT
+
 #: SPEC-506 §4 manifest kind closed enum.
 KINDS: tuple[str, ...] = ("generated_ts", "faulted_ts", "bit_level")
+
+#: SPEC-506 §4 verification schema / §5 three-layer acceptance (#14 Q1, ticket
+#: #38): the only sanctioned independent-verification paths.  ``tsduck-cross``
+#: is the L2 TSDuck bidirectional cross; ``bit-level-review`` is the L1
+#: externally-reviewed bit-level vector.  ``self-roundtrip`` (L3 自研
+#: round-trip) is deliberately ABSENT — 同源自证 = 登记拒绝 (§5 red line):
+#: a golden file must never be accepted solely because the same implementation
+#: parses its own output.
+VERIFICATION_PATHS: tuple[str, ...] = ("tsduck-cross", "bit-level-review")
 
 #: SPEC-506 §3: vector_id is a semantic slug (e.g. ``pat-minimal``).
 _VECTOR_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]*$")
@@ -158,22 +173,60 @@ def load_golden_vector(root: Path, vector_id: str) -> GoldenVector:
         )
 
     verification_raw = manifest.get("verification")
-    verification = None
-    if verification_raw is not None:
-        if not isinstance(verification_raw, dict) or not {
-            "path",
-            "direction",
-            "evidence_ref",
-        } <= set(verification_raw):
-            raise GoldenRegistrationError(
-                f"vector {checked_id!r}: verification field needs "
-                "path/direction/evidence_ref (SPEC-506 §4)"
-            )
-        verification = VerificationRecord(
-            path=str(verification_raw["path"]),
-            direction=str(verification_raw["direction"]),
-            evidence_ref=str(verification_raw["evidence_ref"]),
+    # §5 red line (ticket #38): EVERY registered vector carries at least one
+    # independent-verification path — a missing/incomplete triple is not a
+    # loadable registration (同源自证拒绝 includes the vacuous self-claim).
+    if not isinstance(verification_raw, dict) or not {
+        "path",
+        "direction",
+        "evidence_ref",
+    } <= set(verification_raw):
+        raise GoldenRegistrationError(
+            f"vector {checked_id!r}: manifest must carry a verification triple "
+            "path/direction/evidence_ref (SPEC-506 §4/§5 独立验证红线 — "
+            "at least one independent validation path is mandatory)"
         )
+    verification_path = verification_raw["path"]
+    if verification_path not in VERIFICATION_PATHS:
+        raise GoldenRegistrationError(
+            f"vector {checked_id!r}: verification path {verification_path!r} "
+            f"is outside the sanctioned independent-verification paths "
+            f"{VERIFICATION_PATHS} — 同源自证 (L3 self-roundtrip) = 登记拒绝 "
+            "(SPEC-506 §5, #14 Q1)"
+        )
+    direction = verification_raw["direction"]
+    evidence_ref = verification_raw["evidence_ref"]
+    if (
+        not isinstance(direction, str)
+        or not direction.strip()
+        or not isinstance(evidence_ref, str)
+        or not evidence_ref.strip()
+    ):
+        raise GoldenRegistrationError(
+            f"vector {checked_id!r}: verification direction/evidence_ref must "
+            "be non-empty strings (SPEC-506 §4)"
+        )
+    # Evidence must exist on disk — parity with the §8 validator (review fix
+    # A2: the loader only checked non-empty while the validator stat'ed the
+    # file, so the two gates disagreed). Resolution convention matches the
+    # validator's ``evidence_ref.split(" + ")[0]`` shape: repo-relative for
+    # registered-tree assets, absolute for tmp private registrations — but
+    # resolved from REPO_ROOT (derived from __file__), never the process cwd
+    # (tests/README.md §6), so the loader gate is cwd-independent where the
+    # validator relies on being run from the repo root.
+    evidence_anchor = Path(evidence_ref.split(" + ")[0])
+    if not evidence_anchor.is_absolute():
+        evidence_anchor = REPO_ROOT / evidence_anchor
+    if not evidence_anchor.is_file():
+        raise GoldenRegistrationError(
+            f"vector {checked_id!r}: verification evidence_ref missing on "
+            f"disk: {evidence_ref} (SPEC-506 §4/§5 — 独立验证证据必须存在)"
+        )
+    verification = VerificationRecord(
+        path=str(verification_path),
+        direction=direction,
+        evidence_ref=evidence_ref,
+    )
 
     related_specs_raw = manifest.get("related_specs", [])
     if not isinstance(related_specs_raw, list):
