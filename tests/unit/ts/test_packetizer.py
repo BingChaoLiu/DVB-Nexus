@@ -451,3 +451,106 @@ class TestPacketizerPacketSize:
                     assert TSPacket.from_bytes(wire).to_bytes() == wire
                 # The PES bytes survive framing contiguously in all variants.
                 assert b"".join(p.payload for p in packets) == pes
+
+
+# ---------------------------------------------------------------------------
+# Primary test REQ-TS-106-004
+# ---------------------------------------------------------------------------
+
+
+class TestPacketizerAdaptationStuffing:
+    """REQ-TS-106-004: AF stuffing 和可选字段容量计算正确."""
+
+    def test_packetizer_adaptation_stuffing(self) -> None:
+        """§7 算术逐字节核对: af_len=183-payload, 0xFF stuffing, 零长 AF, AFC."""
+        from ts.cc import CCAllocator
+        from ts.pcr import decode_pcr
+        from ts.packetizer.pes_packetizer import PESPacketizer, build_pcr_only_packet
+        from ts.packetizer.section_packetizer import SectionPacketizer
+
+        # --- section last packet: af_len = 183 - payload, all-0xFF stuffing ---
+        sec = make_section(184)
+        (_, second) = list(SectionPacketizer(100, CCAllocator()).packetize(sec))
+        wire = second.to_bytes()
+        assert second.payload == sec[183:]  # 1 payload byte
+        assert wire[3] >> 4 == 0b11  # AFC=11 adaptation + payload
+        assert wire[4] == 182  # adaptation_field_length = 183 - 1
+        assert wire[5] == 0x00  # flags: no fields requested
+        assert wire[6:187] == b"\xff" * 181  # stuffing bytes are all 0xFF (§7)
+        assert wire[187] == second.payload[0]  # payload ends the frame
+        # 4 + 1 + 182 + 1 = 188 (§7 capacity identity)
+
+        # --- zero-length AF at payload 183: length byte only, no flags ---
+        pes183 = make_pes_bytes(183)
+        (p,) = list(PESPacketizer(100, CCAllocator()).packetize(pes183))
+        wire = p.to_bytes()
+        assert wire[3] >> 4 == 0b11  # still AFC=11
+        assert wire[4] == 0x00  # adaptation_field_length = 183 - 183 = 0
+        assert wire[5:] == pes183  # payload starts right after the length byte
+
+        # --- payload 184: AFC=01 payload-only, no AF region at all ---
+        pes184 = make_pes_bytes(184)
+        (p,) = list(PESPacketizer(100, CCAllocator()).packetize(pes184))
+        wire = p.to_bytes()
+        assert wire[3] >> 4 == 0b01
+        assert wire[4:] == pes184
+
+        # --- build_pcr_only_packet: AF fills all 184 bytes (AFC=10) ---
+        pcr = make_pcr(base=987_654_321, extension=299)
+        pkt = build_pcr_only_packet(100, pcr, CCAllocator())
+        wire = pkt.to_bytes()
+        assert len(wire) == 188
+        assert wire[3] >> 4 == 0b10  # AFC=10, no payload
+        assert wire[4] == 183  # length byte + body = 184 post-header bytes
+        assert wire[5] == 0x10  # PCR_flag set, no other field
+        assert decode_pcr(wire[6:12]) == pcr  # 6-byte PCR slot decodes back
+        assert wire[12:] == b"\xff" * 176  # stuffing fills to the frame end
+
+        # --- first_packet_pcr: minimal AF, payload starts after the region ---
+        pes100 = make_pes_bytes(100)
+        (p,) = list(
+            PESPacketizer(100, CCAllocator()).packetize(pes100, first_packet_pcr=pcr)
+        )
+        wire = p.to_bytes()
+        assert wire[3] >> 4 == 0b11
+        assert wire[4] == 83  # adaptation_field_length = 183 - 100
+        assert wire[5] == 0x10  # PCR_flag
+        assert decode_pcr(wire[6:12]) == pcr
+        assert wire[12:88] == b"\xff" * 76  # stuffing between PCR and payload
+        assert wire[88:] == pes100  # payload offset: 4 + 1 + 83 = 88
+        # 4 + 1 + 83 + 100 = 188 (§7 capacity identity)
+
+        # --- exact-fit boundary: P=176 leaves adaptation_field_length=7 ---
+        pes176 = make_pes_bytes(176)
+        (p,) = list(
+            PESPacketizer(100, CCAllocator()).packetize(pes176, first_packet_pcr=pcr)
+        )
+        wire = p.to_bytes()
+        assert wire[4] == 7  # flags + PCR exactly, no stuffing byte
+        assert wire[5] == 0x10
+        assert decode_pcr(wire[6:12]) == pcr
+        assert wire[12:] == pes176  # no 0xFF padding at all
+
+        # --- random_access flag rides the first packet AF only ---
+        pes200 = make_pes_bytes(200)
+        packets = list(
+            PESPacketizer(100, CCAllocator()).packetize(pes200, random_access=True)
+        )
+        first_wire = packets[0].to_bytes()
+        assert first_wire[4] == 1  # flags-only AF body
+        assert first_wire[5] == 0x40  # random_access_indicator flag
+        assert first_wire[6:] == pes200[:182]  # payload: 4 + 1 + 1 = offset 6
+        second_wire = packets[1].to_bytes()
+        assert second_wire[5] & 0x40 == 0x00  # continuation has no RAI
+        assert second_wire[4] == 165  # 183 - 18 remainder bytes
+        assert second_wire[6:170] == b"\xff" * 164
+        assert second_wire[170:] == pes200[182:]
+
+        # --- PCR and random_access flags compose in one AF ---
+        (p,) = list(
+            PESPacketizer(100, CCAllocator()).packetize(
+                pes100, random_access=True, first_packet_pcr=pcr
+            )
+        )
+        wire = p.to_bytes()
+        assert wire[5] == 0x50  # RAI (0x40) | PCR_flag (0x10)
