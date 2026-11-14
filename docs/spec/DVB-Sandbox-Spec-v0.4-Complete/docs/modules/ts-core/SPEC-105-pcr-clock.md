@@ -1,7 +1,7 @@
 ---
 spec_id: SPEC-105
 title: MPEG Media Clock, PCR and PTS/DTS Primitives
-version: 0.5.0
+version: 0.5.1
 status: APPROVED
 phase: MVP
 owner: TS Core
