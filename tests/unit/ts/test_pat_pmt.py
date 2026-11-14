@@ -556,3 +556,102 @@ class TestProgramPidMapping:
         # PCR riding an ES PID is legal (§8.6 second clause): pmt1 carries
         # PCR on 0x1000 while its first ES sits on the same PID.
         assert validate_pid_associations(0x0000, pat_single, [(0x1000, pmt1)]) == []
+
+
+class TestTableLoopBounds:
+    """REQ-TS-103-005 — malformed length/loop/descriptor safety (primary)."""
+
+    def test_table_loop_bounds(self) -> None:
+        from ts.crc import mpeg2_crc32
+        from ts.errors import InvalidSectionError
+        from ts.section import parse_section
+        from ts.tables.pat import (
+            PAT_SECTION_POLICY,
+            PATBuilder,
+            PATProgram,
+            PATSection,
+            parse_pat,
+        )
+        from ts.tables.pmt import (
+            PMT_SECTION_POLICY,
+            PMTBuilder,
+            PMTSection,
+            ElementaryStream,
+            parse_pmt,
+        )
+
+        def wire_with_crc(post_header: bytes, table_id: int) -> bytes:
+            # Programmatic malformed-fixture constructor: header + post-
+            # header bytes + CRC recomputed by the SPEC-101-verified
+            # primitive so the structural gate (not the CRC gate) is what
+            # rejects the input. section_length = len(post_header) + 4 (the
+            # CRC field is part of the counted length).
+            section_length = len(post_header) + 4
+            head = bytes(
+                (
+                    table_id,
+                    0b10_11_0000 | ((section_length >> 8) & 0x0F),
+                    section_length & 0xFF,
+                )
+            )
+            frame = head + post_header
+            return frame + mpeg2_crc32(frame).to_bytes(4, "big")
+
+        # PAT loop region not a multiple of 4 (one half-entry).
+        pat = PATSection(1, 0, True, 0, 0, (
+            PATProgram(1, 0x1000), PATProgram(2, 0x1001),
+        ))
+        good = PATBuilder().build(pat).raw_bytes
+        half = good[: 3 + 5 + 4 + 2]  # header + public + 2 of 4 entry bytes
+        with pytest.raises(InvalidSectionError) as excinfo:
+            parse_pat(parse_section(wire_with_crc(half[3:], 0x00), PAT_SECTION_POLICY))
+        assert "PAT_PROGRAM_ENTRY_TRUNCATED" in str(excinfo.value)
+
+        # PAT region negative: public header present, no room for loop+CRC.
+        tiny = wire_with_crc(good[3:7], 0x00)  # section_length = 8
+        with pytest.raises(InvalidSectionError) as excinfo:
+            parse_pat(parse_section(tiny, PAT_SECTION_POLICY))
+        assert "PAT_PROGRAM_ENTRY_TRUNCATED" in str(excinfo.value)
+
+        # PMT fixed part truncated: section_length 12 < 5+4+4 = 13.
+        pmt = PMTSection(1, 0, True, 0, 0, 0x1000, b"", ())
+        pmt_good = PMTBuilder().build(pmt).raw_bytes
+        with pytest.raises(InvalidSectionError) as excinfo:
+            parse_pmt(
+                parse_section(wire_with_crc(pmt_good[3:11], 0x02), PMT_SECTION_POLICY)
+            )
+        assert "PMT_FIXED_HEADER_TRUNCATED" in str(excinfo.value)
+
+        # program_info_length runs into the CRC field.
+        overrun = bytearray(pmt_good)
+        overrun[10] = 0xF0  # reserved nibble + program_info_length high byte
+        overrun[11] = 0x01  # 1 descriptor byte, but none present
+        with pytest.raises(InvalidSectionError) as excinfo:
+            parse_pmt(
+                parse_section(wire_with_crc(bytes(overrun[3:-4]), 0x02), PMT_SECTION_POLICY)
+            )
+        assert "PMT_PROGRAM_INFO_LENGTH_INVALID" in str(excinfo.value)
+
+        # ES loop region ends with fewer than 5 bytes (truncated entry).
+        stub = wire_with_crc(pmt_good[3:-4] + b"\x00\x00", 0x02)
+        with pytest.raises(InvalidSectionError) as excinfo:
+            parse_pmt(parse_section(stub, PMT_SECTION_POLICY))
+        assert "PMT_ES_LOOP_TRUNCATED" in str(excinfo.value)
+
+        # ES_info_length overruns the ES loop boundary.
+        #   entry: stream_type 0x1B, PID 0x0100 (111 prefix), ES_info_length=1
+        es_overrun = wire_with_crc(
+            pmt_good[3:-4] + bytes((0x1B, 0xE1, 0x00, 0xF0, 0x01)), 0x02
+        )
+        with pytest.raises(InvalidSectionError) as excinfo:
+            parse_pmt(parse_section(es_overrun, PMT_SECTION_POLICY))
+        assert "PMT_ES_INFO_LENGTH_INVALID" in str(excinfo.value)
+
+        # Well-formed single ES entry with 1 descriptor byte parses.
+        es_ok = wire_with_crc(
+            pmt_good[3:-4] + bytes((0x1B, 0xE1, 0x00, 0xF0, 0x01, 0x52)), 0x02
+        )
+        parsed = parse_pmt(parse_section(es_ok, PMT_SECTION_POLICY))
+        assert parsed.streams == (ElementaryStream(0x1B, 0x0100, b"\x52"),)
+        assert parsed.program_descriptors == b""
+        assert parsed.pcr_pid == 0x1000
