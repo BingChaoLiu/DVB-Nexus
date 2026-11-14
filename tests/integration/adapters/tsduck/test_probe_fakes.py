@@ -73,3 +73,54 @@ class TestPathResolution:
         assert result.version.executable == Path(shutil.which("tsp"))
         assert result.version.raw_version_line == MEASURED_VERSION_LINE
         assert result.detail  # display-only diagnostics always present
+
+
+class TestOverrideResolution:
+    def test_explicit_override_beats_path_and_marks_source(
+        self, tmp_path: Path, monkeypatch
+    ):
+        override_script = _write_fake_tsp(tmp_path / "override")
+        path_dir = tmp_path / "on_path"
+        _write_fake_tsp(path_dir)
+        monkeypatch.setenv("PATH", str(path_dir))
+
+        result = TSDuckVersionProbe().probe(override=override_script)
+
+        assert result.available is True
+        assert result.version is not None
+        assert result.version.resolution is ResolutionSource.EXPLICIT
+        assert result.version.executable == override_script
+
+
+class TestFallbackResolution:
+    def test_fallback_root_used_when_path_misses(self, tmp_path: Path, monkeypatch):
+        empty_path_dir = tmp_path / "empty_path"
+        empty_path_dir.mkdir()
+        monkeypatch.setenv("PATH", str(empty_path_dir))
+        install_dir = tmp_path / "tsduck-install" / "bin"
+        expected_script = _write_fake_tsp(install_dir)
+        probe = TSDuckVersionProbe(fallback_roots=[install_dir])
+
+        result = probe.probe()
+
+        assert result.available is True
+        assert result.version is not None
+        assert result.version.resolution is ResolutionSource.FALLBACK
+        assert result.version.executable == expected_script
+
+
+class TestNotInstalled:
+    def test_double_failure_yields_structured_unavailable(self, tmp_path, monkeypatch):
+        empty_path_dir = tmp_path / "empty_path"
+        empty_path_dir.mkdir()
+        monkeypatch.setenv("PATH", str(empty_path_dir))
+        empty_fallback = tmp_path / "empty_fallback"
+        empty_fallback.mkdir()
+        probe = TSDuckVersionProbe(fallback_roots=[empty_fallback])
+
+        result = probe.probe()
+
+        assert result.available is False
+        assert result.version is None
+        assert result.reason is TSDuckUnavailableReason.NOT_INSTALLED
+        assert result.detail

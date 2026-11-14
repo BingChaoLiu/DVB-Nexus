@@ -29,9 +29,13 @@ Contract anchors:
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
+import string
 import subprocess
+import sys
+from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -199,6 +203,50 @@ class TSDuckProbeResult:
             raise ValueError("available probe result must not carry a reason")
 
 
+def _default_fallback_roots() -> list[Path]:
+    """Fallback probe roots (test-pinned interpretation of ADR-0005 决策 6).
+
+    Anchored to docs/research/tsduck-env.md §6.2: ``%ProgramFiles%\\TSDuck\\bin``
+    plus custom-drive installs (the measured machine keeps TSDuck at
+    ``D:\\Program Files\\TSDuck\\bin`` off the system drive). Built per probe
+    call so environment changes are visible without import-order effects.
+    """
+    roots: list[Path] = []
+    for env_name in ("ProgramFiles", "ProgramFiles(x86)"):
+        base = os.environ.get(env_name)
+        if base:
+            roots.append(Path(base) / "TSDuck" / "bin")
+    roots.extend(_logical_drive_roots())
+    unique: list[Path] = []
+    seen: set[str] = set()
+    for root in roots:
+        key = str(root).lower()
+        if key not in seen:
+            seen.add(key)
+            unique.append(root)
+    return unique
+
+
+def _logical_drive_roots() -> list[Path]:
+    """``<drive>:\\Program Files\\TSDuck\\bin`` for every existing drive.
+
+    ``GetLogicalDrives`` answers from the OS drive table without probing
+    each letter through the filesystem (A:/B: legacy devices stay cold).
+    Non-Windows platforms contribute nothing (fallback is the ProgramFiles
+    environment roots only).
+    """
+    if sys.platform != "win32":
+        return []
+    import ctypes
+
+    mask = ctypes.windll.kernel32.GetLogicalDrives() & 0x3FFFFFF
+    roots = []
+    for index, letter in enumerate(string.ascii_uppercase):
+        if mask >> index & 1:
+            roots.append(Path(f"{letter}:\\Program Files\\TSDuck\\bin"))
+    return roots
+
+
 class TSDuckVersionProbe:
     """Environment probe: executable discovery + version extraction + cache.
 
@@ -207,50 +255,100 @@ class TSDuckVersionProbe:
     cache behavior; the module-level :data:`DEFAULT_PROBE` (with
     :func:`probe_tsduck`) provides the ADR-0005 process-lifetime cache for
     production callers.
+
+    Resolution order: explicit ``override`` → PATH → fallback roots. An
+    override that does not resolve fails immediately with a structured
+    ``not_installed`` result (no silent PATH fall-through: the caller
+    explicitly configured a location, so silently probing elsewhere would
+    be degradation).
     """
 
-    def __init__(self, *, timeout: float = PROBE_TIMEOUT_SECONDS) -> None:
+    def __init__(
+        self,
+        *,
+        timeout: float = PROBE_TIMEOUT_SECONDS,
+        fallback_roots: Sequence[Path] | None = None,
+    ) -> None:
         if timeout <= 0:
             raise ValueError("timeout must be positive")
         self._timeout = timeout
+        self._fallback_roots = fallback_roots
         self._cache: dict[str, TSDuckProbeResult] = {}
 
     def probe(self, *, override: str | Path | None = None) -> TSDuckProbeResult:
         """Probe TSDuck availability; never raises for TSDuck-missing states.
 
-        ``override`` (explicit executable or name to resolve first) beats
-        PATH discovery. Resolution order: override → PATH → fallback roots.
         Successful results are cached per resolved executable; failures are
         never cached (a transient timeout must not poison process lifetime).
         """
-        resolved = self._resolve(override)
-        if resolved is None:
+        failures: list[TSDuckProbeResult] = []
+
+        override_resolution = self._resolve_override(override)
+        if isinstance(override_resolution, TSDuckProbeResult):
+            return override_resolution
+        candidates: list[tuple[Path, ResolutionSource]] = []
+        if override_resolution is not None:
+            candidates.append((override_resolution, ResolutionSource.EXPLICIT))
+
+        found = shutil.which("tsp")
+        if found is not None:
+            candidates.append((Path(found), ResolutionSource.PATH))
+
+        for root in self._effective_fallback_roots():
+            resolved = shutil.which("tsp", path=str(root))
+            if resolved is not None:
+                candidates.append((Path(resolved), ResolutionSource.FALLBACK))
+
+        if not candidates:
             return TSDuckProbeResult(
                 available=False,
                 version=None,
                 reason=TSDuckUnavailableReason.NOT_INSTALLED,
-                detail="TSDuck CLI 'tsp' not found on PATH or fallback locations",
+                detail=(
+                    "TSDuck CLI 'tsp' not found on PATH or fallback locations "
+                    f"(fallback roots: {self._effective_fallback_roots()})"
+                ),
             )
-        executable, source = resolved
-        cache_key = str(executable)
-        cached = self._cache.get(cache_key)
-        if cached is not None:
-            return cached
 
-        result = self._run_version_probe(executable, source)
-        if result.available:
-            self._cache[cache_key] = result
-        return result
+        for executable, source in candidates:
+            cached = self._cache.get(str(executable))
+            if cached is not None:
+                return cached
+            result = self._run_version_probe(executable, source)
+            if result.available:
+                self._cache[str(executable)] = result
+                return result
+            failures.append(result)
 
-    def _resolve(
+        return _aggregate_failure(failures)
+
+    def _effective_fallback_roots(self) -> list[Path]:
+        if self._fallback_roots is None:
+            return _default_fallback_roots()
+        return list(self._fallback_roots)
+
+    def _resolve_override(
         self, override: str | Path | None
-    ) -> tuple[Path, ResolutionSource] | None:
-        if override is not None:
-            raise NotImplementedError("override resolution lands with slice 3")
-        found = shutil.which("tsp")
-        if found is None:
+    ) -> Path | TSDuckProbeResult | None:
+        """Resolve an explicit override; structured result when unresolvable."""
+        if override is None:
             return None
-        return Path(found), ResolutionSource.PATH
+        override_path = Path(override)
+        if override_path.is_file():
+            return override_path
+        resolved = shutil.which(str(override))
+        if resolved is not None:
+            return Path(resolved)
+        return TSDuckProbeResult(
+            available=False,
+            version=None,
+            reason=TSDuckUnavailableReason.NOT_INSTALLED,
+            detail=(
+                f"override {str(override)!r} does not resolve to an executable "
+                "(file missing and not on PATH); PATH fall-through suppressed "
+                "because the override was explicitly configured"
+            ),
+        )
 
     def _run_version_probe(
         self, executable: Path, source: ResolutionSource
@@ -305,6 +403,33 @@ class TSDuckVersionProbe:
                 f"(source={source.value}, stream={match.stream.value})"
             ),
         )
+
+
+#: Most-informative-wins aggregation order (test-pinned interpretation):
+#: a candidate that executed but printed no version token says more than
+#: one that could not spawn at all.
+_REASON_PRIORITY = (
+    TSDuckUnavailableReason.VERSION_UNPARSEABLE,
+    TSDuckUnavailableReason.NOT_EXECUTABLE,
+    TSDuckUnavailableReason.NOT_INSTALLED,
+)
+
+
+def _aggregate_failure(failures: list[TSDuckProbeResult]) -> TSDuckProbeResult:
+    reason = next(
+        (
+            candidate_reason
+            for candidate_reason in _REASON_PRIORITY
+            if any(failure.reason == candidate_reason for failure in failures)
+        ),
+        TSDuckUnavailableReason.NOT_INSTALLED,
+    )
+    return TSDuckProbeResult(
+        available=False,
+        version=None,
+        reason=reason,
+        detail=" | ".join(failure.detail for failure in failures if failure.detail),
+    )
 
 
 #: Process-lifetime default probe (ADR-0005 decision 6 cache discipline).
