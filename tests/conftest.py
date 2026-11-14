@@ -21,6 +21,7 @@ from pathlib import Path
 
 import pytest
 
+from tests._support.api_client import ApiClientHarness
 from tests._support.artifact_paths import ArtifactStoreHandle
 from tests._support.golden import GoldenLoader
 from tests._support.markers import check_layer_markers, layer_for_path
@@ -166,3 +167,17 @@ def golden_loader() -> GoldenLoader:
     via ``tests._support.golden.write_golden_vector`` for mechanics work.
     """
     return GoldenLoader(root=GOLDEN_ROOT)
+
+
+@pytest.fixture
+def api_client() -> ApiClientHarness:
+    """SPEC-505 §4 `api_client`: FastAPI test client + DTO round-trip
+    assertions (SPEC-500).
+
+    Factory-shaped: tests pass the ASGI app to ``.build(app)`` — the src
+    ``api`` package has no app factory at the M0 skeleton stage, and the
+    fixture does not fabricate one (SPEC-505 §7). Once SPEC-500 lands, a
+    derived ``client`` fixture wraps the real app factory; the harness
+    itself is unchanged.
+    """
+    return ApiClientHarness()

@@ -17,8 +17,15 @@ dependencies = []
 dev = [
     "import-linter>=2.0,<3",
     # Test tooling (SPEC-505 Test Architecture, ticket #22). Runtime
-    # dependencies stay empty at the M0 skeleton stage.
+    # dependencies stay empty at the M0 skeleton stage. fastapi/httpx2/
+    # pydantic are mandated by the SPEC-505 §4 api_client fixture
+    # (FastAPI test client + Pydantic DTO round-trip, ADR-0003 frozen stack).
+    # httpx2: starlette TestClient's supported transport (httpx emits
+    # StarletteDeprecationWarning since starlette ≥0.49).
     "pytest>=8,<9",
+    "fastapi>=0.110,<1",
+    "httpx2>=2,<3",
+    "pydantic>=2.6,<3",
 ]
 
 # ---------------------------------------------------------------------------
