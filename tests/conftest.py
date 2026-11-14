@@ -21,7 +21,7 @@ from pathlib import Path
 
 import pytest
 
-from tests._support.api_client import ApiClientHarness
+from tests._support.api_client import ApiClient, ApiClientHarness
 from tests._support.artifact_paths import ArtifactStoreHandle
 from tests._support.golden import GoldenLoader
 from tests._support.markers import check_layer_markers, layer_for_path
@@ -178,10 +178,25 @@ def api_client() -> ApiClientHarness:
     """SPEC-505 §4 `api_client`: FastAPI test client + DTO round-trip
     assertions (SPEC-500).
 
-    Factory-shaped: tests pass the ASGI app to ``.build(app)`` — the src
-    ``api`` package has no app factory at the M0 skeleton stage, and the
-    fixture does not fabricate one (SPEC-505 §7). Once SPEC-500 lands, a
-    derived ``client`` fixture wraps the real app factory; the harness
-    itself is unchanged.
+    Factory-shaped: tests pass the ASGI app to ``.build(app)`` — probe
+    routers and in-test apps stay explicit at the call site, and the
+    harness never fabricates an app by itself (SPEC-505 §7). The src
+    ``api`` app factory exists since the SPEC-500 skeleton (#24,
+    ``api.app.create_app``); the derived ``client`` fixture below wraps it
+    through this harness.
     """
     return ApiClientHarness()
+
+
+@pytest.fixture
+def client(api_client: ApiClientHarness) -> ApiClient:
+    """Derived default client over the real ``create_app()`` (SPEC-500 skeleton).
+
+    The derivation promised by the #22 scaffold: the harness builds a
+    ``TestClient`` around ``api.app.create_app()`` (skeleton cross-cutting
+    contracts only — no business routers). Tests that need probe routers or
+    custom apps call ``api_client.build(create_app(router))`` instead.
+    """
+    from api.app import create_app
+
+    return api_client.build(create_app())

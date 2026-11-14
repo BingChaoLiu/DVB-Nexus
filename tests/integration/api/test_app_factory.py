@@ -25,8 +25,15 @@ class TestAppFactoryBasics:
         app = create_app()
         assert isinstance(app, FastAPI)
 
-    def test_canary_serves_version_policy_and_posture(self, api_client):
-        client = api_client.build(create_app())
+    def test_client_fixture_wraps_create_app_via_harness(self, client):
+        # The derived SPEC-505 §4 fixture (promised by the #22 scaffold,
+        # landed in review-fix #4): default client over the real factory
+        # through the api_client harness.
+        response = client.get("/api/v1/version")
+        assert response.status_code == 200
+        assert client.client.app is not None  # TestClient passthrough
+
+    def test_canary_serves_version_policy_and_posture(self, client):
         response = client.get("/api/v1/version")
         assert response.status_code == 200
         assert response.json() == {
@@ -35,10 +42,9 @@ class TestAppFactoryBasics:
             "tenant_id": "local",
         }
 
-    def test_canary_only_reachable_under_frozen_prefix(self, api_client):
+    def test_canary_only_reachable_under_frozen_prefix(self, client):
         # The prefix is part of the frozen contract: the route must not leak
         # onto an unversioned path.
-        client = api_client.build(create_app())
         response = client.get("/version")
         assert response.status_code == 404
 
@@ -78,8 +84,7 @@ class TestRouterMounting:
 
 
 class TestOpenapiInvariant:
-    def test_every_openapi_path_lives_under_frozen_prefix(self, api_client):
-        client = api_client.build(create_app())
+    def test_every_openapi_path_lives_under_frozen_prefix(self, client):
         openapi = client.get("/openapi.json").json()
         assert openapi["paths"], "OpenAPI schema must be generated (SPEC-500 §10)"
         for path in openapi["paths"]:
@@ -87,10 +92,9 @@ class TestOpenapiInvariant:
                 f"route {path!r} escapes the frozen /api/v1 prefix"
             )
 
-    def test_skeleton_openapi_path_snapshot(self, api_client):
+    def test_skeleton_openapi_path_snapshot(self, client):
         # Contract-test snapshot discipline (SPEC-500 §10) for the skeleton
         # stage: exactly the canary route. Route tickets (M3/M4) extend this
         # snapshot with their SPEC-500 §4 paths.
-        client = api_client.build(create_app())
         openapi = client.get("/openapi.json").json()
         assert set(openapi["paths"]) == {"/api/v1/version"}

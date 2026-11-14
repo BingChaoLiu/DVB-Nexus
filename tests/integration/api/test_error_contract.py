@@ -15,7 +15,6 @@ from __future__ import annotations
 import pytest
 from fastapi import APIRouter
 from pydantic import BaseModel
-from starlette.testclient import TestClient
 
 from api.app import create_app
 from api.dto import ErrorResponse
@@ -171,13 +170,16 @@ class TestUnhandledExceptionMapsTo500:
     """Seam 3: unknown/unhandled exceptions render the spec 500 shape.
 
     Starlette's ServerErrorMiddleware always re-raises after rendering the
-    registered Exception-level handler, so this test needs a TestClient
-    built with ``raise_server_exceptions=False`` (the scaffold ``api_client``
-    harness cannot express that flag — extension requested in the report).
+    registered Exception-level handler, so these tests build their client
+    with ``raise_server_exceptions=False`` — expressed through the
+    ``api_client`` harness passthrough (scaffold extension landed in
+    review-fix #4).
     """
 
-    def test_unhandled_exception_renders_500_envelope(self):
-        client = TestClient(create_app(_probe_router()), raise_server_exceptions=False)
+    def test_unhandled_exception_renders_500_envelope(self, api_client):
+        client = api_client.build(
+            create_app(_probe_router()), raise_server_exceptions=False
+        )
         response = client.get("/api/v1/probe/unhandled")
         assert response.status_code == 500
         body = response.json()
@@ -188,7 +190,7 @@ class TestUnhandledExceptionMapsTo500:
         # No internals leak into the envelope.
         assert "boom" not in body["error"]["message"]
 
-    def test_bare_application_error_is_unclassified_too(self):
+    def test_bare_application_error_is_unclassified_too(self, api_client):
         from application.errors import ApplicationError
 
         router = APIRouter()
@@ -197,7 +199,7 @@ class TestUnhandledExceptionMapsTo500:
         def bare() -> dict:
             raise ApplicationError("SOME_CODE", "no category row claims me")
 
-        client = TestClient(create_app(router), raise_server_exceptions=False)
+        client = api_client.build(create_app(router), raise_server_exceptions=False)
         response = client.get("/api/v1/probe/bare")
         assert response.status_code == 500
         assert response.json()["error"]["error_code"] == "INTERNAL_UNCLASSIFIED"

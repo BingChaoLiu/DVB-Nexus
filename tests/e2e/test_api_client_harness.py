@@ -1,11 +1,14 @@
 """``api_client`` harness behavior (SPEC-505 §4, serving SPEC-500).
 
 E2E layer: full-stack plumbing through a real ASGI app. The app here is
-built **inside the test** — the src ``api`` package has no app factory yet
-(M0 skeleton), so the harness is validated against a minimal FastAPI app;
-when the SPEC-500 ticket lands, tests construct/mount the real app and the
-fixture grows a default ``client`` derivation. This is scaffold validation
-of the fixture seam, not business e2e coverage.
+built **inside the test** on purpose: the factory-shaped harness must
+accept ANY ASGI app, so it is validated against a minimal in-test FastAPI
+app (not just the real factory). The real factory exists since the
+SPEC-500 skeleton (#24, ``api.app.create_app``) and is wrapped by the
+derived ``client`` fixture in the root conftest; the SPEC-500 skeleton
+error-contract tests mount probe routers via
+``api_client.build(create_app(router))``. This is harness validation, not
+business e2e coverage.
 """
 
 from __future__ import annotations
