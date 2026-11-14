@@ -79,7 +79,13 @@ class ProcessResult:
 
     @property
     def stderr_text(self) -> str:
-        """GBK-tolerant display decode — never parsed semantically (SPEC-308 §7)."""
+        """Display-only decode of the (GBK-localized) stderr stream.
+
+        The decode itself is UTF-8 with ``errors="replace"`` (undecodable GBK
+        bytes become replacement characters, never a crash); the discipline
+        that matters is that this text is never parsed semantically —
+        diagnostics display only (SPEC-308 §7, ticket #3).
+        """
         return self.stderr.decode("utf-8", errors="replace")
 
 
