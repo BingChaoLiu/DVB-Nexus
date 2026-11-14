@@ -554,3 +554,90 @@ class TestPacketizerAdaptationStuffing:
         )
         wire = p.to_bytes()
         assert wire[5] == 0x50  # RAI (0x40) | PCR_flag (0x10)
+
+
+# ---------------------------------------------------------------------------
+# Primary test REQ-TS-106-005
+# ---------------------------------------------------------------------------
+
+
+class TestPacketizerCC:
+    """REQ-TS-106-005: CCAllocator 状态在所有 packetization 路径一致."""
+
+    def test_packetizer_cc(self) -> None:
+        """初始 CC、跨 run 延续、15→0 wrap、PID 独立、adaptation-only 不递增."""
+        from ts.cc import CCAllocator
+        from ts.packet import PID_NULL
+        from ts.packetizer.pes_packetizer import PESPacketizer, build_pcr_only_packet
+        from ts.packetizer.section_packetizer import SectionPacketizer
+
+        # initial_cc is honored for a fresh PID (SPEC-100 §5.4 via the
+        # allocator — the packetizer holds no CC state of its own).
+        alloc = CCAllocator(initial_cc=5)
+        pktz = SectionPacketizer(100, alloc)
+        (p,) = list(pktz.packetize(make_section(4)))
+        assert p.continuity_counter == 5
+
+        # A second run on the SAME allocator continues the PID's CC: cross-
+        # run sharing is the caller's allocator lifecycle (SPEC-106 §3).
+        (p,) = list(pktz.packetize(make_section(4)))
+        assert p.continuity_counter == 6
+
+        # Every payload packet advances the PID CC by +1 mod 16: 15 -> 0.
+        alloc = CCAllocator()
+        pktz = SectionPacketizer(100, alloc)
+        ccs = []
+        for _ in range(17):
+            (p,) = list(pktz.packetize(make_section(3)))
+            ccs.append(p.continuity_counter)
+        assert ccs == [i % 16 for i in range(17)]
+
+        # Per-PID independence through one shared allocator (§8).
+        alloc = CCAllocator()
+        section_pktz = SectionPacketizer(100, alloc)
+        pes_pktz = PESPacketizer(200, alloc)
+        (pa,) = list(section_pktz.packetize(make_section(3)))
+        (pb,) = list(pes_pktz.packetize(make_pes_bytes(9)))
+        (pa2,) = list(section_pktz.packetize(make_section(3)))
+        assert pa.continuity_counter == 0
+        assert pb.continuity_counter == 0  # PID 200 independent of PID 100
+        assert pa2.continuity_counter == 1
+
+        # Adaptation-only PCR packet: reuses the PID's most recent CC and
+        # does NOT advance it (§7/§8, ruling #11 construction semantics).
+        alloc = CCAllocator()
+        pktz = SectionPacketizer(100, alloc)
+        for _ in range(4):
+            list(pktz.packetize(make_section(3)))  # CC 0..3
+        pcr_pkt = build_pcr_only_packet(100, make_pcr(), alloc)
+        assert pcr_pkt.pid == 100
+        assert pcr_pkt.continuity_counter == 3  # reuse without advance
+        (p,) = list(pktz.packetize(make_section(3)))
+        assert p.continuity_counter == 4  # payload sequence unbroken
+
+        # A fresh PID's first packet being adaptation-only uses initial_cc.
+        alloc = CCAllocator(initial_cc=7)
+        pcr_pkt = build_pcr_only_packet(100, make_pcr(), alloc)
+        assert pcr_pkt.continuity_counter == 7
+
+        # Packetizers never create null packets (§8: Mux-owned).
+        assert pcr_pkt.pid != PID_NULL
+
+    def test_packetizer_cc_argument_validation(self) -> None:
+        """Non-CCAllocator/non-PCR arguments raise TypeError; bad pids the 106 code."""
+        from ts.cc import CCAllocator
+        from ts.errors import PacketizationError
+        from ts.packetizer.pes_packetizer import PESPacketizer, build_pcr_only_packet
+        from ts.packetizer.section_packetizer import SectionPacketizer
+
+        with pytest.raises(TypeError):
+            SectionPacketizer(100, "not-an-allocator")  # type: ignore[arg-type]
+        with pytest.raises(TypeError):
+            PESPacketizer(100, "not-an-allocator")  # type: ignore[arg-type]
+        alloc = CCAllocator()
+        with pytest.raises(TypeError):
+            build_pcr_only_packet(100, "not-a-pcr", alloc)  # type: ignore[arg-type]
+        with pytest.raises(TypeError):
+            build_pcr_only_packet(100, make_pcr(), "not-an-allocator")  # type: ignore[arg-type]
+        with pytest.raises(PacketizationError, match="PACKETIZER_PID_INVALID"):
+            build_pcr_only_packet(0x2000, make_pcr(), alloc)
