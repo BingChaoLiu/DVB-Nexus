@@ -4,6 +4,7 @@
 
 ## Python 与 MSYS 路径
 
+- **双引号内的 Windows 路径不要以 `\` 结尾**：结尾 `\"` 被转义为字面引号 → `unexpected EOF while looking for matching '"'`。Git Bash 命令里统一用正斜杠（`D:/Document/...`），Git Bash 与原生 Windows Python 都接受。
 - 原生 Windows Python **不理解 MSYS 的 `/tmp` 等路径**：`Path("/tmp/f")` 会被解析为当前盘根下的 `\tmp\f`，得到 `FileNotFoundError`。
 - 临时文件要给 Python 用时，用 `cygpath` 转换并经**环境变量**传入（不要写死在脚本里）：
 
