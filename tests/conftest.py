@@ -22,7 +22,9 @@ from pathlib import Path
 import pytest
 
 from tests._support.artifact_paths import ArtifactStoreHandle
+from tests._support.golden import GoldenLoader
 from tests._support.markers import check_layer_markers, layer_for_path
+from tests._support.paths import GOLDEN_ROOT
 from tests._support.session_factory import SessionRunFactory
 from tests._support.sqlite_support import JournalHandle, default_migrations_dir
 from tests._support.tsduck_probe import TSP_ENV_OVERRIDE, probe_tsp
@@ -151,3 +153,16 @@ def session_run() -> SessionRunFactory:
     real SPEC-200 domain models when they land (field names already match).
     """
     return SessionRunFactory()
+
+
+@pytest.fixture
+def golden_loader() -> GoldenLoader:
+    """SPEC-505 §4 `golden_loader`: loads vectors + expectations per the
+    SPEC-506 §4 manifest registration format.
+
+    Bound to the repo-level registered golden root ``docs/test-vectors/golden``
+    (#14 Q4 migration; SPEC-505 §11 shares the golden root with SPEC-506).
+    Read-only against the registered tree; tests register private tmp copies
+    via ``tests._support.golden.write_golden_vector`` for mechanics work.
+    """
+    return GoldenLoader(root=GOLDEN_ROOT)
