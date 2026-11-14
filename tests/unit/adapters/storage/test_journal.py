@@ -14,7 +14,7 @@ tests/integration/adapters/storage/.
 import pytest
 
 from adapters.storage import db
-from adapters.storage.errors import InvalidEnvelopeError
+from adapters.storage.errors import InvalidEnvelopeError, StorageWriteFailure
 from adapters.storage.journal import EventRow, SqliteEventJournal
 
 
@@ -185,3 +185,68 @@ def test_query_enforces_hard_cap_2000() -> None:
         journal.query("sess-1", limit=2001)
     with pytest.raises(ValueError):
         journal.query("sess-1", limit=0)
+
+
+# --- invalid envelopes rejected before commit (SPEC-301 §9) -----------------
+
+
+def test_append_rejects_malformed_envelopes_without_storing() -> None:
+    journal = _journal()
+
+    cases: list[dict] = []
+    missing_event_id = _envelope()
+    del missing_event_id["event_id"]
+    cases.append(missing_event_id)
+    missing_event_type = _envelope()
+    del missing_event_type["event_type"]
+    cases.append(missing_event_type)
+    missing_severity = _envelope()
+    del missing_severity["severity"]
+    cases.append(missing_severity)
+    missing_producer = _envelope()
+    del missing_producer["producer"]
+    cases.append(missing_producer)
+    empty_producer_id = _envelope()
+    empty_producer_id["producer"]["producer_id"] = ""
+    cases.append(empty_producer_id)
+    missing_scope = _envelope()
+    del missing_scope["scope"]
+    cases.append(missing_scope)
+    null_session = _envelope()
+    null_session["scope"]["session_id"] = None  # R4: journal stamps per session
+    cases.append(null_session)
+    wrong_type = _envelope()
+    wrong_type["event_id"] = 12345
+    cases.append(wrong_type)
+
+    for envelope in cases:
+        with pytest.raises(InvalidEnvelopeError):
+            journal.append(envelope)
+
+    assert journal.query("sess-1") == []
+
+
+def test_append_rejects_non_object_and_unserializable_envelopes() -> None:
+    journal = _journal()
+    with pytest.raises(InvalidEnvelopeError):
+        journal.append(["not", "a", "dict"])
+    unserializable = _envelope()
+    unserializable["payload"] = {"x": {1, 2}}  # sets are not JSON-representable
+    with pytest.raises(InvalidEnvelopeError):
+        journal.append(unserializable)
+    assert journal.query("sess-1") == []
+
+
+def test_append_failure_maps_to_storage_write_failure() -> None:
+    """SPEC-502 §7 row 2: journal append failure -> OBS_STORAGE_WRITE_FAILURE.
+    Triggered on a test-owned connection whose events table was dropped (the
+    OperationalError path a real disk/lock failure would take)."""
+    conn = db.connect(":memory:")
+    db.migrate(conn)
+    journal = SqliteEventJournal(conn)
+    conn.execute("DROP TABLE events")
+
+    with pytest.raises(StorageWriteFailure) as excinfo:
+        journal.append(_envelope())
+
+    assert excinfo.value.code == "OBS_STORAGE_WRITE_FAILURE"
