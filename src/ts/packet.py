@@ -35,6 +35,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from ts._bytesutil import PID_MAX, _coerce_bytes
 from ts.adaptation_field import (
     ZERO_LENGTH_ADAPTATION_FIELD,
     AdaptationField,
@@ -68,23 +69,17 @@ TS_CC_OUT_OF_RANGE = "TS_CC_OUT_OF_RANGE"
 TS_SCRAMBLING_RESERVED = "TS_SCRAMBLING_RESERVED"
 TS_SCRAMBLING_OUT_OF_RANGE = "TS_SCRAMBLING_OUT_OF_RANGE"
 
-_PID_MAX = 0x1FFF
 _CC_MAX = 0x0F
 _TSC_MAX = 0b11
-#: 184-byte AF/payload region split: length byte + AF body.
-_AF_ONLY_BODY_LENGTH = TS_PACKET_SIZE - TS_HEADER_SIZE - 1  # 183
-_PAYLOAD_ONLY_LENGTH = TS_PACKET_SIZE - TS_HEADER_SIZE  # 184
 
-_BYTES_LIKE = (bytes, bytearray, memoryview)
-
-
-def _coerce_bytes(data: bytes, *, param: str) -> bytes:
-    """Accept ``bytes``/``bytearray``/``memoryview``, reject everything else."""
-    if isinstance(data, bytes):
-        return data
-    if isinstance(data, _BYTES_LIKE):
-        return bytes(data)
-    raise TypeError(f"{param} must be a bytes-like object, got {type(data).__name__}")
+#: Canonical frame-geometry constants (review-fix F6: 183/184 single source).
+#: The 184-byte post-header AF/payload region splits into the adaptation-only
+#: AF body (length byte + body) and the payload-only region; every other
+#: module derives its 183/184 names from these two.
+#: Adaptation-only AF body: length byte + AF body == 183.
+AF_ONLY_BODY_LENGTH = TS_PACKET_SIZE - TS_HEADER_SIZE - 1  # 183
+#: Payload-only region: the full post-header region == 184.
+PAYLOAD_ONLY_LENGTH = TS_PACKET_SIZE - TS_HEADER_SIZE  # 184
 
 
 @dataclass(frozen=True)
@@ -133,9 +128,9 @@ class TSPacket:
         """
         if isinstance(self.pid, bool) or not isinstance(self.pid, int):
             raise TypeError(f"pid must be int, got {type(self.pid).__name__}")
-        if not 0 <= self.pid <= _PID_MAX:
+        if not 0 <= self.pid <= PID_MAX:
             raise InvalidPacketError(
-                f"{TS_PID_OUT_OF_RANGE}: pid must be in 0..{_PID_MAX} "
+                f"{TS_PID_OUT_OF_RANGE}: pid must be in 0..{PID_MAX} "
                 f"(13-bit), got {self.pid}"
             )
         if isinstance(self.continuity_counter, bool) or not isinstance(
@@ -183,10 +178,10 @@ class TSPacket:
                 "absent (AFC=00 is reserved/invalid, SPEC-100 §4)"
             )
         if payload is not None and af is None:
-            if len(payload) != _PAYLOAD_ONLY_LENGTH:
+            if len(payload) != PAYLOAD_ONLY_LENGTH:
                 raise InvalidPacketError(
                     f"{TS_AF_LENGTH_INVALID}: payload-only packets (AFC=01) "
-                    f"carry exactly {_PAYLOAD_ONLY_LENGTH} payload bytes, "
+                    f"carry exactly {PAYLOAD_ONLY_LENGTH} payload bytes, "
                     f"got {len(payload)}"
                 )
         elif payload is None:
@@ -196,27 +191,27 @@ class TSPacket:
                     f"{TS_AF_LENGTH_INVALID}: a zero-length adaptation field "
                     "cannot fill an adaptation-only packet"
                 )
-            if af_encoded_length(af) > _AF_ONLY_BODY_LENGTH:
+            if af_encoded_length(af) > AF_ONLY_BODY_LENGTH:
                 raise InvalidPacketError(
                     f"{TS_AF_LENGTH_INVALID}: adaptation field content "
                     f"({af_encoded_length(af)} bytes) exceeds the "
-                    f"{_AF_ONLY_BODY_LENGTH}-byte body of an "
+                    f"{AF_ONLY_BODY_LENGTH}-byte body of an "
                     "adaptation-only packet"
                 )
         else:
             # Adaptation+payload (AFC=11): at least 1 payload byte (§5.2).
-            if len(payload) < 1 or len(payload) > _AF_ONLY_BODY_LENGTH:
+            if len(payload) < 1 or len(payload) > AF_ONLY_BODY_LENGTH:
                 raise InvalidPacketError(
                     f"{TS_AF_LENGTH_INVALID}: adaptation+payload packets "
-                    f"carry 1..{_AF_ONLY_BODY_LENGTH} payload bytes, got "
+                    f"carry 1..{AF_ONLY_BODY_LENGTH} payload bytes, got "
                     f"{len(payload)}"
                 )
-            body_target = _AF_ONLY_BODY_LENGTH - len(payload)
+            body_target = AF_ONLY_BODY_LENGTH - len(payload)
             if af.is_zero_length:
-                if len(payload) != _AF_ONLY_BODY_LENGTH:
+                if len(payload) != AF_ONLY_BODY_LENGTH:
                     raise InvalidPacketError(
                         f"{TS_AF_LENGTH_INVALID}: a zero-length adaptation "
-                        f"field leaves exactly {_AF_ONLY_BODY_LENGTH} bytes "
+                        f"field leaves exactly {AF_ONLY_BODY_LENGTH} bytes "
                         f"of payload, got {len(payload)}"
                     )
             elif af_encoded_length(af) > body_target:
@@ -294,19 +289,19 @@ class TSPacket:
                 )
             if afc == int(AdaptationFieldControl.ADAPTATION_ONLY):
                 # §5.2: adaptation-only AF must fill all 184 bytes.
-                if af_length != _AF_ONLY_BODY_LENGTH:
+                if af_length != AF_ONLY_BODY_LENGTH:
                     raise InvalidPacketError(
                         f"{TS_AF_LENGTH_INVALID}: adaptation-only packets "
                         f"(AFC=10) need adaptation_field_length "
-                        f"{_AF_ONLY_BODY_LENGTH} (length byte + body = 184), "
+                        f"{AF_ONLY_BODY_LENGTH} (length byte + body = 184), "
                         f"got {af_length}"
                     )
-            elif af_length > _AF_ONLY_BODY_LENGTH - 1:
+            elif af_length > AF_ONLY_BODY_LENGTH - 1:
                 # §5.2: AFC=11 leaves room for at least 1 payload byte.
                 raise InvalidPacketError(
                     f"{TS_AF_LENGTH_INVALID}: adaptation_field_length "
                     f"{af_length} leaves no payload for an AFC=11 packet "
-                    f"(max {_AF_ONLY_BODY_LENGTH - 1})"
+                    f"(max {AF_ONLY_BODY_LENGTH - 1})"
                 )
             if af_length == 0:
                 adaptation_field = ZERO_LENGTH_ADAPTATION_FIELD
@@ -363,9 +358,9 @@ class TSPacket:
         out = bytearray(header)
         if self.adaptation_field is not None:
             if afc == AdaptationFieldControl.ADAPTATION_ONLY:
-                target = _AF_ONLY_BODY_LENGTH
+                target = AF_ONLY_BODY_LENGTH
             else:
-                target = _AF_ONLY_BODY_LENGTH - len(self.payload or b"")
+                target = AF_ONLY_BODY_LENGTH - len(self.payload or b"")
             out += encode_adaptation_field(self.adaptation_field, target)
         if self.payload is not None:
             out += self.payload

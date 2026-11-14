@@ -56,6 +56,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Sequence
 
+from ts._bytesutil import PID_MAX, _coerce_bytes
 from ts.crc import mpeg2_crc32, verify_mpeg2_crc32
 from ts.errors import InvalidSectionError
 from ts.section import (
@@ -107,10 +108,7 @@ PMT_SECTION_POLICY = SectionPolicy(
 
 _U16_MAX = 0xFFFF
 _U8_MAX = 0xFF
-_PID_MAX = 0x1FFF
 _VERSION_MAX = 0x1F
-
-_BYTES_LIKE = (bytes, bytearray, memoryview)
 
 
 def _check_int(value: object, name: str, lo: int, hi: int) -> int:
@@ -125,15 +123,6 @@ def _check_int(value: object, name: str, lo: int, hi: int) -> int:
     if not lo <= value <= hi:
         raise ValueError(f"{name} must be in {lo}..{hi}, got {value}")
     return value
-
-
-def _coerce_bytes(value: object, name: str) -> bytes:
-    """Accept ``bytes``/``bytearray``/``memoryview``, reject everything else."""
-    if isinstance(value, bytes):
-        return value
-    if isinstance(value, _BYTES_LIKE):
-        return bytes(value)
-    raise TypeError(f"{name} must be bytes-like, got {type(value).__name__}")
 
 
 @dataclass(frozen=True)
@@ -151,7 +140,7 @@ class ElementaryStream:
 
     def __post_init__(self) -> None:
         _check_int(self.stream_type, "stream_type", 0, _U8_MAX)
-        _check_int(self.elementary_pid, "elementary_pid", 0, _PID_MAX)
+        _check_int(self.elementary_pid, "elementary_pid", 0, PID_MAX)
         object.__setattr__(self, "descriptors", _coerce_bytes(self.descriptors, "descriptors"))
 
 
@@ -196,7 +185,7 @@ class PMTSection:
                 f"section_number {self.section_number} must not exceed "
                 f"last_section_number {self.last_section_number} (§7)"
             )
-        _check_int(self.pcr_pid, "pcr_pid", 0, _PID_MAX)
+        _check_int(self.pcr_pid, "pcr_pid", 0, PID_MAX)
         object.__setattr__(
             self,
             "program_descriptors",

@@ -60,6 +60,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 
+from ts._bytesutil import _coerce_bytes
 from ts.crc import verify_mpeg2_crc32
 from ts.errors import InvalidSectionError
 from ts.issues import ParseIssue, ValidationIssue
@@ -94,20 +95,6 @@ _EXT_MAX = 0xFFFF
 _VERSION_MAX = 0x1F
 _U8_MAX = 0xFF
 _CRC_MAX = 0xFFFFFFFF
-
-_BYTES_LIKE = (bytes, bytearray, memoryview)
-
-
-def _coerce_bytes(data: bytes, *, param: str) -> bytes:
-    """Accept ``bytes``/``bytearray``/``memoryview``, reject everything else."""
-    if isinstance(data, bytes):
-        return data
-    if isinstance(data, _BYTES_LIKE):
-        return bytes(data)
-    raise TypeError(
-        f"{param} must be a bytes-like object (bytes, bytearray, memoryview), "
-        f"got {type(data).__name__}"
-    )
 
 
 def _check_int(value: object, name: str, lo: int, hi: int) -> int:

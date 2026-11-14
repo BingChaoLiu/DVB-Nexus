@@ -18,30 +18,13 @@ The module imports no other project package and no third-party package
 ``TSPacket`` and PSI Section (SPEC-102) consumers.
 """
 
+from ts._bytesutil import _coerce_bytes
+
 CRC32_MPEG2_POLY = 0x04C11DB7
 CRC32_MPEG2_INIT = 0xFFFFFFFF
 
 _MASK32 = 0xFFFFFFFF
 _CRC_FIELD_WIDTH = 4
-
-_BYTES_LIKE = (bytes, bytearray, memoryview)
-
-
-def _coerce_bytes(data: bytes, *, param: str) -> bytes:
-    """Validate a bytes-like argument and normalize it to ``bytes``.
-
-    ``bytes`` is returned as-is; ``bytearray`` / ``memoryview`` are copied.
-    Anything else raises ``TypeError`` — no silent coercion (SPEC-101 §6:
-    ``str`` and ``int`` in particular must not be accepted implicitly).
-    """
-    if isinstance(data, bytes):
-        return data
-    if isinstance(data, _BYTES_LIKE):
-        return bytes(data)
-    raise TypeError(
-        f"{param} must be a bytes-like object (bytes, bytearray, memoryview), "
-        f"got {type(data).__name__}"
-    )
 
 
 def _validate_initial(initial: int, *, param: str = "initial") -> int:

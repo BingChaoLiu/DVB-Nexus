@@ -57,6 +57,7 @@ codes by the underlying parser): ``SECTION_POINTER_FIELD_INVALID``,
 
 from __future__ import annotations
 
+from ts._bytesutil import PID_MAX
 from ts.errors import InvalidSectionError
 from ts.issues import ParseIssue
 from ts.packet import TSPacket
@@ -77,9 +78,6 @@ SECTION_DISCARDED_ON_DISCONTINUITY = "SECTION_DISCARDED_ON_DISCONTINUITY"
 SECTION_TRUNCATED_AT_EOF = "SECTION_TRUNCATED_AT_EOF"
 
 _HEADER_SIZE = 3  # section header size (ts.section.SECTION_HEADER_SIZE)
-
-_PID_MAX = 0x1FFF
-
 
 class _LengthFault(Exception):
     """Internal: section length beyond policy — state cleared, abort packet."""
@@ -102,8 +100,8 @@ class SectionAssembler:
     def __init__(self, pid: int, policy_resolver) -> None:
         if isinstance(pid, bool) or not isinstance(pid, int):
             raise TypeError(f"pid must be int, got {type(pid).__name__}")
-        if not 0 <= pid <= _PID_MAX:
-            raise ValueError(f"pid must be in 0..{_PID_MAX} (13-bit), got {pid}")
+        if not 0 <= pid <= PID_MAX:
+            raise ValueError(f"pid must be in 0..{PID_MAX} (13-bit), got {pid}")
         if not callable(policy_resolver):
             raise TypeError(
                 "policy_resolver must be callable(table_id) -> "

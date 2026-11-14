@@ -31,6 +31,7 @@ from __future__ import annotations
 
 from typing import Iterator
 
+from ts._bytesutil import _BYTES_LIKE, PID_MAX
 from ts.cc import CCAllocator
 from ts.errors import PacketizationError
 from ts.packet import PID_NULL, TSPacket
@@ -47,14 +48,11 @@ from ts.packetizer.stuffing import (
     emit_verified_packet,
 )
 
-_PID_MAX = 0x1FFF
 _SECTION_HEADER_SIZE = 3
 #: Section bytes the first packet can carry next to the pointer field (§5.2).
 _FIRST_PACKET_SECTION_CAPACITY = PAYLOAD_ONLY_LENGTH - 1  # 183
 #: Section bytes a continuation packet can carry (§5.2).
 _CONTINUATION_CAPACITY = PAYLOAD_ONLY_LENGTH  # 184
-
-_BYTES_LIKE = (bytes, bytearray, memoryview)
 
 
 def validate_packetizer_pid(pid: int) -> int:
@@ -66,9 +64,9 @@ def validate_packetizer_pid(pid: int) -> int:
     """
     if isinstance(pid, bool) or not isinstance(pid, int):
         raise TypeError(f"pid must be int, got {type(pid).__name__}")
-    if not 0 <= pid <= _PID_MAX or pid == PID_NULL:
+    if not 0 <= pid <= PID_MAX or pid == PID_NULL:
         raise PacketizationError(
-            f"{PACKETIZER_PID_INVALID}: pid must be in 0..{_PID_MAX} "
+            f"{PACKETIZER_PID_INVALID}: pid must be in 0..{PID_MAX} "
             f"(13-bit) and must not be the null PID 0x{PID_NULL:04X} "
             "(null packets are owned by the Mux, SPEC-106 §8), got "
             f"{pid}"

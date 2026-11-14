@@ -46,6 +46,7 @@ from __future__ import annotations
 
 from typing import Iterator
 
+from ts._bytesutil import _BYTES_LIKE
 from ts.adaptation_field import AdaptationField
 from ts.cc import CCAllocator
 from ts.errors import PacketizationError
@@ -72,7 +73,6 @@ __all__ = [
     "build_pcr_only_packet",
 ]
 
-_BYTES_LIKE = (bytes, bytearray, memoryview)
 #: packet_start_code_prefix (ITU-T H.222.0; every PES stream_id carries it).
 _START_CODE_PREFIX = b"\x00\x00\x01"
 #: Bytes that must exist before the length field can be read at all.

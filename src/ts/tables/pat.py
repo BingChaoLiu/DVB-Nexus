@@ -65,6 +65,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Sequence
 
+from ts._bytesutil import PID_MAX
 from ts.crc import mpeg2_crc32, verify_mpeg2_crc32
 from ts.errors import InvalidSectionError
 from ts.section import (
@@ -113,7 +114,6 @@ PAT_SECTION_POLICY = SectionPolicy(
 
 _U16_MAX = 0xFFFF
 _U8_MAX = 0xFF
-_PID_MAX = 0x1FFF
 _VERSION_MAX = 0x1F
 
 
@@ -141,7 +141,7 @@ class PATProgram:
 
     def __post_init__(self) -> None:
         _check_int(self.program_number, "program_number", 0, _U16_MAX)
-        _check_int(self.program_map_pid, "program_map_pid", 0, _PID_MAX)
+        _check_int(self.program_map_pid, "program_map_pid", 0, PID_MAX)
 
 
 @dataclass(frozen=True)

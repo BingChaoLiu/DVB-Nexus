@@ -45,6 +45,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from ts._bytesutil import _coerce_bytes
 from ts.errors import InvalidPESPacketError, InvalidTimestampError
 from ts.timestamp import (
     PTS_MAX,
@@ -112,17 +113,6 @@ PACKET_LENGTH_MODE_ZERO: str = "zero"
 #: ``analysis_only`` generation profile name (SPEC-104 §8): deterministic
 #: test payloads, explicitly not playback-capable.
 ANALYSIS_ONLY_PROFILE: str = "analysis_only"
-
-_BYTES_LIKE = (bytes, bytearray, memoryview)
-
-
-def _coerce_bytes(data: bytes, *, param: str) -> bytes:
-    """Accept ``bytes``/``bytearray``/``memoryview``, reject everything else."""
-    if isinstance(data, bytes):
-        return data
-    if isinstance(data, _BYTES_LIKE):
-        return bytes(data)
-    raise TypeError(f"{param} must be a bytes-like object, got {type(data).__name__}")
 
 
 def _is_video_stream_id(stream_id: int) -> bool:

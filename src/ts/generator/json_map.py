@@ -46,7 +46,7 @@ from ts.generator.config import (
     ProgramConfig,
 )
 
-_BYTES_LIKE = (bytes, bytearray, memoryview)
+from ts._bytesutil import _BYTES_LIKE
 
 _TOP_LEVEL_KEYS = (
     "schema_version",

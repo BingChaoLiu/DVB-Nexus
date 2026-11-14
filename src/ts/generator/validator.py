@@ -60,6 +60,7 @@ from ts.generator.config import (
     GeneratorConfig,
     ProgramConfig,
 )
+from ts._bytesutil import PID_MAX, _require_int
 from ts.issues import ValidationIssue
 from ts.mux.scheduler import SLOT_BITS
 from ts.pes import SPECIAL_STREAM_IDS
@@ -83,7 +84,6 @@ RESERVED_PIDS = frozenset(range(RESERVED_PID_LOW, RESERVED_PID_HIGH + 1)) | {
     PID_NULL
 }
 
-_PID_MAX = 0x1FFF
 _U16_MAX = 0xFFFF
 _U8_MAX = 0xFF
 _VERSION_MAX = 0x1F
@@ -94,12 +94,6 @@ _VERSION_MAX = 0x1F
 PMT_FIXED_SECTION_OVERHEAD = 13
 PMT_ES_ENTRY_COST = 5
 PMT_SECTION_LENGTH_MAX = 1021
-
-
-def _require_int(value: object, name: str) -> None:
-    """Programming-error guard: strict int, bool excluded (TypeError)."""
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise TypeError(f"{name} must be int, got {type(value).__name__}")
 
 
 def _error(code: str, message: str, field: str) -> ValidationIssue:
@@ -346,11 +340,11 @@ def validate_config(config: object) -> list[ValidationIssue]:
         pid_fields.append((stream.pid, "pid"))
     for pid, field in pid_fields:
         _require_int(pid, field)
-        if not 0 <= pid <= _PID_MAX:
+        if not 0 <= pid <= PID_MAX:
             issues.append(
                 _error(
                     GENERATOR_PID_COLLISION,
-                    f"{field} must be a 13-bit PID (0..{_PID_MAX}), got {pid}",
+                    f"{field} must be a 13-bit PID (0..{PID_MAX}), got {pid}",
                     field,
                 )
             )
@@ -384,7 +378,7 @@ def validate_config(config: object) -> list[ValidationIssue]:
         return (
             isinstance(pid, int)
             and not isinstance(pid, bool)
-            and 0 <= pid <= _PID_MAX
+            and 0 <= pid <= PID_MAX
             and pid not in RESERVED_PIDS
         )
 
