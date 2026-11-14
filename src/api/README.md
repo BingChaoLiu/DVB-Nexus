@@ -80,5 +80,10 @@ SPEC-500 未在本文件之外指定版本策略/错误契约的文档位置,故
 
 本票(骨架 + 横切契约)不实现任何 SPEC-500 §4 业务路由:路由随 M3
 (topologies/sessions/runs/diagnosis/artifacts/scenarios)与 M4(observation
-查询)经 `create_app(*routers)` 接线。`GET /api/v1/version` 为骨架 canary
-(版本策略/姿态可观测),非 §4 路由清单项,M3 时由委派者裁定去留。
+查询)经 `create_app(*routers)` 接线。
+
+**`GET /api/v1/version` 不在 SPEC-500 §4 冻结路由清单内**(review-fix #9
+明示):它是骨架冒烟 seam——让冻结前缀行为与 Q4 单机姿态在 HTTP 面可断
+言——由委派者裁定保留;M3 落地真实路由时将被移除或吸收进真实路由集。
+依赖它的快照断言见
+`tests/integration/api/test_app_factory.py::test_skeleton_openapi_path_snapshot`。
