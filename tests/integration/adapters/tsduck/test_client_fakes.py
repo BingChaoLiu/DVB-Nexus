@@ -137,21 +137,54 @@ def _unavailable_probe() -> FakeProbe:
 
 
 @pytest.fixture
-def fake_install(tmp_path: Path) -> Path:
-    """A fake TSDuck bin dir: probed tsp + the tsanalyze sibling the client
-    resolves (name is platform-shaped, as the client's resolution is)."""
+def fake_tsp(tmp_path: Path) -> Path:
+    """The probed ``tsp`` inside a fake TSDuck bin dir, plus the tsanalyze
+    sibling the client resolves.
+
+    Both names are platform-shaped (``sys.platform`` branch, review fix B7):
+    tests hand THIS file to the probe, so on Linux the probed executable is
+    the existing ``tsp`` — not a nonexistent ``tsp.exe`` that only passes by
+    accident because the probe is fake. The pass reason is direct.
+    """
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     tsp = bin_dir / ("tsp.exe" if sys.platform == "win32" else "tsp")
     tsp.write_bytes(b"")
     tsanalyze_name = "tsanalyze.exe" if sys.platform == "win32" else "tsanalyze"
     (bin_dir / tsanalyze_name).write_bytes(b"")
-    return bin_dir
+    return tsp
+
+
+@pytest.fixture
+def make_client(fake_tsp: Path):
+    """TSDuckClient factory over the fake install (review fix B7).
+
+    One construction point instead of eight inline ``TSDuckClient(probe=…,
+    runner=…)`` copies: default wiring is the available fake probe bound to
+    the platform-shaped ``fake_tsp``; tests override the runner (canned
+    results / failure seams), the synthetic version token, or the whole
+    probe for the negative cases.
+    """
+
+    def _make(
+        runner=None,
+        *,
+        version: str = FAKE_VERSION,
+        probe=None,
+    ) -> TSDuckClient:
+        return TSDuckClient(
+            probe=(
+                probe if probe is not None else _available_probe(fake_tsp, version)
+            ),
+            runner=runner,
+        )
+
+    return _make
 
 
 class TestAnalyzeOrchestration:
     def test_analyze_builds_whitelist_argv_and_records_nine_fields(
-        self, tmp_path, fake_install
+        self, tmp_path, make_client
     ):
         ts_file = tmp_path / "input.ts"
         ts_file.write_bytes(bytes(range(64)))
@@ -167,7 +200,7 @@ class TestAnalyzeOrchestration:
                 )
             ]
         )
-        client = TSDuckClient(probe=_available_probe(fake_install / "tsp.exe"), runner=runner)
+        client = make_client(runner)
 
         result = asyncio.run(client.analyze(ts_file, run_id="run-42"))
 
@@ -186,7 +219,7 @@ class TestAnalyzeOrchestration:
         assert record.input_artifact_sha256 == hashlib.sha256(ts_file.read_bytes()).hexdigest()
         assert record.run_id == "run-42"
 
-    def test_analyze_returns_normalized_report(self, tmp_path, fake_install):
+    def test_analyze_returns_normalized_report(self, tmp_path, make_client):
         ts_file = tmp_path / "input.ts"
         ts_file.write_bytes(bytes(64))
         runner = FakeRunner(
@@ -200,7 +233,7 @@ class TestAnalyzeOrchestration:
                 )
             ]
         )
-        client = TSDuckClient(probe=_available_probe(fake_install / "tsp.exe"), runner=runner)
+        client = make_client(runner)
 
         result = asyncio.run(client.analyze(ts_file))
 
@@ -208,7 +241,7 @@ class TestAnalyzeOrchestration:
         assert result.report.ts.services_total == 1
         assert result.report.source_document  # raw JSON kept for the artifact
 
-    def test_timeout_forwarded_to_runner(self, tmp_path, fake_install):
+    def test_timeout_forwarded_to_runner(self, tmp_path, make_client):
         ts_file = tmp_path / "input.ts"
         ts_file.write_bytes(bytes(16))
         runner = FakeRunner(
@@ -222,13 +255,13 @@ class TestAnalyzeOrchestration:
                 )
             ]
         )
-        client = TSDuckClient(probe=_available_probe(fake_install / "tsp.exe"), runner=runner)
+        client = make_client(runner)
 
         asyncio.run(client.analyze(ts_file, timeout=7.5))
 
         assert runner.calls[0]["timeout"] == 7.5
 
-    def test_gate_failure_carries_the_call_record(self, tmp_path, fake_install):
+    def test_gate_failure_carries_the_call_record(self, tmp_path, make_client):
         """§7 recording duty holds on failures: the failed invocation's
         record travels on the raised gate error."""
         ts_file = tmp_path / "garbage.ts"
@@ -244,7 +277,7 @@ class TestAnalyzeOrchestration:
                 )
             ]
         )
-        client = TSDuckClient(probe=_available_probe(fake_install / "tsp.exe"), runner=runner)
+        client = make_client(runner)
 
         with pytest.raises(TSDuckJsonGateError) as excinfo:
             asyncio.run(client.analyze(ts_file, run_id="run-9"))
@@ -264,7 +297,7 @@ class TestFailurePathCallRecords:
     never fabricated."""
 
     def test_timeout_record_nine_fields_from_the_partial_run(
-        self, tmp_path, fake_install
+        self, tmp_path, make_client
     ):
         ts_file = tmp_path / "input.ts"
         ts_file.write_bytes(bytes(32))
@@ -279,10 +312,7 @@ class TestFailurePathCallRecords:
             pid=99,
             timed_out=True,
         )
-        client = TSDuckClient(
-            probe=_available_probe(fake_install / "tsp.exe"),
-            runner=FailingRunner(error),
-        )
+        client = make_client(FailingRunner(error))
 
         with pytest.raises(TSDuckTimeoutError) as excinfo:
             asyncio.run(client.analyze(ts_file, run_id="run-timeout"))
@@ -302,7 +332,7 @@ class TestFailurePathCallRecords:
         assert record.run_id == "run-timeout"
 
     def test_cancelled_record_nine_fields_from_the_partial_run(
-        self, tmp_path, fake_install
+        self, tmp_path, make_client
     ):
         ts_file = tmp_path / "input.ts"
         ts_file.write_bytes(bytes(16))
@@ -316,10 +346,7 @@ class TestFailurePathCallRecords:
             pid=7,
             cancelled=True,
         )
-        client = TSDuckClient(
-            probe=_available_probe(fake_install / "tsp.exe"),
-            runner=FailingRunner(error),
-        )
+        client = make_client(FailingRunner(error))
 
         with pytest.raises(TSDuckCancelledError) as excinfo:
             asyncio.run(client.analyze(ts_file, run_id="run-cancel"))
@@ -336,17 +363,14 @@ class TestFailurePathCallRecords:
         assert record.run_id == "run-cancel"
 
     def test_spawn_failure_record_carries_explicit_none_for_no_data(
-        self, tmp_path, fake_install
+        self, tmp_path, make_client
     ):
         """Nothing was spawned and nothing was captured: exit code and the
         two stream fields are explicit ``None`` — 不虚构 (§7 duty still
         holds for the fields that DO have data)."""
         ts_file = tmp_path / "input.ts"
         ts_file.write_bytes(bytes(16))
-        client = TSDuckClient(
-            probe=_available_probe(fake_install / "tsp.exe"),
-            runner=FailingRunner(TSDuckSpawnFailedError("spawn boom")),
-        )
+        client = make_client(FailingRunner(TSDuckSpawnFailedError("spawn boom")))
 
         with pytest.raises(TSDuckSpawnFailedError) as excinfo:
             asyncio.run(client.analyze(ts_file, run_id="run-spawn"))
@@ -372,9 +396,9 @@ class TestClientErrorFamily:
         with pytest.raises(TSDuckNotFoundError):
             asyncio.run(client.get_version())
 
-    def test_below_baseline_raises_unsupported(self, fake_install):
+    def test_below_baseline_raises_unsupported(self, make_client):
         # 3.39 < MVP baseline 3.40 — synthetic fixture token, not an env claim.
-        client = TSDuckClient(probe=_available_probe(fake_install / "tsp.exe", "3.39-4165"))
+        client = make_client(version="3.39-4165")
         with pytest.raises(TSDuckVersionUnsupportedError) as excinfo:
             asyncio.run(client.get_version())
         assert "3.39-4165" in str(excinfo.value)
@@ -390,7 +414,7 @@ class TestClientErrorFamily:
         assert "tsanalyze" in str(excinfo.value)
 
     def test_unreadable_input_hashes_to_none_and_gate_still_governs(
-        self, tmp_path, fake_install
+        self, tmp_path, make_client
     ):
         """Missing input file: tsanalyze exits 1 (#3 §4.4), sha256 cannot be
         computed — the record carries None and the gate (exit 1, no JSON)
@@ -409,7 +433,7 @@ class TestClientErrorFamily:
                 )
             ]
         )
-        client = TSDuckClient(probe=_available_probe(fake_install / "tsp.exe"), runner=runner)
+        client = make_client(runner)
 
         with pytest.raises(TSDuckJsonGateError) as excinfo:
             asyncio.run(client.analyze(missing))
