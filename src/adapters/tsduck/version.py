@@ -61,8 +61,24 @@ MEASURED_VERSION_LINE = (
     "TSDuck - The MPEG Transport Stream Toolkit - version 3.40-4165"
 )
 
-#: Measured extraction regex (docs/research/tsduck-env.md:191).
+#: Measured line shape (tsduck-env.md §2.1) — primary extraction tier.
+#: Anchoring here defeats the measured runtime noise line
+#: ``* new TSDuck version 3.45-4798 is available (yours is 3.40-4165), ...``
+#: (tsduck-env.md §2.2), which contains a version-like token for the
+#: *upstream* release: matching it would report the wrong version.
+VERSION_LINE_PATTERN = re.compile(
+    r"TSDuck - The MPEG Transport Stream Toolkit - version (\d+\.\d+-\d+)"
+)
+
+#: Measured extraction regex (docs/research/tsduck-env.md:191) — secondary
+#: tolerance tier for lines that drop the canonical prefix. Applied only to
+#: lines that are not ``*``-prefixed TSDuck log output (the measured
+#: message prefix of ``* Error: ...`` and the update-notification noise).
 VERSION_PATTERN = re.compile(r"version (\d+\.\d+-\d+)")
+
+#: TSDuck log/noise line prefix (measured: ``* Error: ...``, §4.4;
+#: ``* new TSDuck version ...``, §2.2).
+_LOG_LINE_PREFIX = "*"
 
 #: Probe subprocess budget (seconds). The version print is instantaneous;
 #: generous for cold-start antivirus scans on Windows. Test-pinned
@@ -136,18 +152,27 @@ def scan_for_version(stdout: bytes, stderr: bytes) -> VersionMatch | None:
     """Scan both streams for the measured version pattern (stdout first).
 
     The one sanctioned extraction surface that reads TSDuck stderr
-    semantically (ADR-0005 decision 6). First regex-valid line wins; a
-    stream without a match — whatever the exit code was — yields nothing
-    (ticket #3: exit 0 never proves validity).
+    semantically (ADR-0005 decision 6). Two tiers, each stdout-then-stderr
+    with first valid match wins: the measured canonical line shape first,
+    then the loose research regex on non-log lines. A stream without a
+    match — whatever the exit code was — yields nothing (ticket #3: exit 0
+    never proves validity).
     """
+    stream_lines: list[tuple[VersionStream, str]] = []
     for stream, raw in ((VersionStream.STDOUT, stdout), (VersionStream.STDERR, stderr)):
         text = _decode_stream(raw)
         for line in text.splitlines():
-            token = extract_version(line)
+            stream_lines.append((stream, line))
+
+    for pattern, allow_log_lines in ((VERSION_LINE_PATTERN, True), (VERSION_PATTERN, False)):
+        for stream, line in stream_lines:
+            if not allow_log_lines and line.startswith(_LOG_LINE_PREFIX):
+                continue
+            token = _match_token(pattern, line)
             if token is None:
                 continue
             components = re.fullmatch(r"(\d+)\.(\d+)-(\d+)", token)
-            assert components is not None  # guaranteed by VERSION_PATTERN shape
+            assert components is not None  # guaranteed by the pattern shapes
             return VersionMatch(
                 raw_version_line=line.strip(),
                 stream=stream,
@@ -157,6 +182,11 @@ def scan_for_version(stdout: bytes, stderr: bytes) -> VersionMatch | None:
                 build=int(components.group(3)),
             )
     return None
+
+
+def _match_token(pattern: re.Pattern[str], line: str) -> str | None:
+    match = pattern.search(line)
+    return match.group(1) if match else None
 
 
 @dataclass(frozen=True)
