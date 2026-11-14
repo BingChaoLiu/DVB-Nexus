@@ -26,8 +26,9 @@ where = ["src"]
 
 # ---------------------------------------------------------------------------
 # Dependency boundaries (ADR-0005 decision 4 "模块划分 —— 11 包维持 + 目录融合版").
-# Layer names only in code and docs; L1~L5 architecture-layer numbering is
-# banned (CONTEXT.md). Boundaries live only here in the lint layer.
+# Layer names only in code and docs; architecture-layer numbering is banned
+# per CONTEXT.md (fidelity tiers keep their own names). Boundaries live only
+# here in the lint layer.
 #
 # Encoding rule: each ADR bullet's stated dependency edges are the allowed set;
 # everything else is forbidden (complement), plus the bullet's explicit bans.
