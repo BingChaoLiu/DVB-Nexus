@@ -12,8 +12,13 @@ requires-python = ">=3.10"
 # Runtime deps per ADR-0003 frozen stack. Pydantic v2 arrives with the
 # SPEC-003 shared domain models (ticket #21): v2 API required
 # (ConfigDict/StringConstraints), <3 guards against the next major.
+# FastAPI arrives as a runtime dep with the SPEC-500 REST skeleton
+# (ticket #24): app factory + error contract render through FastAPI
+# (ADR-0003 frozen stack, Presentation/Application boundary per ADR-0005);
+# pin kept identical to the dev-group entry added by ticket #22.
 dependencies = [
     "pydantic>=2,<3",
+    "fastapi>=0.110,<1",
 ]
 
 [project.optional-dependencies]
