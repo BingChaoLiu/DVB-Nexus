@@ -1,0 +1,111 @@
+"""Journal stamp/dedup/query protocol (SPEC-502 sections 5-7, SPEC-301 §5).
+
+Seams (delegator-approved, public API only):
+- append -> stamped seq observable via the returned value AND the stored row;
+- dedup replay -> original seq + duplicate=True, no duplicate row;
+- query -> ordered rows, cursor, default/hard limit;
+- invalid envelopes rejected before commit.
+
+Unit slices run against an in-memory database (no file I/O); the file-backed
+behaviors (WAL, concurrency across connections, migrations) live under
+tests/integration/adapters/storage/.
+"""
+
+import json
+import sqlite3
+
+import pytest
+
+from adapters.storage import db
+from adapters.storage.errors import InvalidEnvelopeError
+from adapters.storage.journal import EventRow, SqliteEventJournal
+
+
+def _envelope(
+    session_id: str = "sess-1",
+    event_id: str = "evt-1",
+    event_type: str = "simulation.run_started",
+    severity: str = "info",
+    producer_id: str = "sim-engine",
+) -> dict:
+    """Minimal SPEC-301 §2-shaped envelope (required fields only)."""
+    return {
+        "schema_version": "1.0",
+        "event_id": event_id,
+        "event_type": event_type,
+        "producer": {
+            "producer_id": producer_id,
+            "producer_version": "0.1.0",
+            "instance_id": "inst-1",
+        },
+        "scope": {"tenant_id": "local", "session_id": session_id},
+        "time": {
+            "source": {"value_ns": 1, "clock_domain": "sim:sess-1", "clock_epoch": 0},
+            "observed": {"value_ns": 2, "clock_domain": "wall:utc", "clock_epoch": 0},
+        },
+        "severity": severity,
+        "payload": {},
+        "tags": [],
+    }
+
+
+def _journal() -> SqliteEventJournal:
+    conn = db.connect(":memory:")
+    db.migrate(conn)
+    return SqliteEventJournal(conn)
+
+
+# --- append: stamping (REQ-PLT-502-002) -------------------------------------
+
+
+def test_append_stamps_first_seq_and_stores_row() -> None:
+    journal = _journal()
+    envelope = _envelope()
+
+    stamped_seq, duplicate = journal.append(envelope)
+
+    assert (stamped_seq, duplicate) == (1, False)
+    rows = journal.query("sess-1")
+    assert len(rows) == 1
+    row = rows[0]
+    assert isinstance(row, EventRow)
+    assert (row.session_id, row.journal_seq) == ("sess-1", 1)
+    assert row.event_type == "simulation.run_started"
+    assert row.severity == "info"
+    assert row.producer_id == "sim-engine"
+    assert row.event_id == "evt-1"
+    # The authoritative stored envelope carries the stamp.
+    assert row.envelope["journal_seq"] == 1
+
+
+def test_append_is_monotonic_per_session() -> None:
+    journal = _journal()
+    seqs = [journal.append(_envelope(event_id=f"evt-{i}"))[0] for i in range(3)]
+    assert seqs == [1, 2, 3]
+
+
+def test_journal_seq_independent_across_sessions() -> None:
+    journal = _journal()
+    assert journal.append(_envelope(session_id="sess-a", event_id="a1"))[0] == 1
+    assert journal.append(_envelope(session_id="sess-b", event_id="b1"))[0] == 1
+    assert journal.append(_envelope(session_id="sess-a", event_id="a2"))[0] == 2
+
+
+def test_append_does_not_mutate_caller_envelope() -> None:
+    journal = _journal()
+    envelope = _envelope()
+    journal.append(envelope)
+    assert "journal_seq" not in envelope
+
+
+def test_append_overwrites_producer_supplied_journal_seq() -> None:
+    """ADR-0006 decision 2: producers never fill journal_seq; the stamp point
+    is unique, so any incoming value is replaced by the authoritative one."""
+    journal = _journal()
+    envelope = _envelope()
+    envelope["journal_seq"] = 999_999
+
+    seq, duplicate = journal.append(envelope)
+
+    assert (seq, duplicate) == (1, False)
+    assert journal.query("sess-1")[0].envelope["journal_seq"] == 1
