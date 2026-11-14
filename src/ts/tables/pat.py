@@ -200,6 +200,22 @@ class PATBuilder:
     """
 
     def build(self, table: PATSection) -> PSISection:
+        """Encode ``table`` into one CRC-complete PSI section (§7).
+
+        Args:
+            table: The :class:`PATSection` to encode (identity fields as
+                carried; reserved bits encode to the standard constants).
+
+        Returns:
+            The framed :class:`PSISection` (public header + program loop +
+            CRC field over the exact wire bytes).
+
+        Raises:
+            TypeError: ``table`` is not a :class:`PATSection`.
+            InvalidSectionError: the encoded section_length exceeds
+                ``PAT_SECTION_LENGTH_MAX`` (split the program loop across
+                sections instead of relying on an implicit split).
+        """
         if not isinstance(table, PATSection):
             raise TypeError(
                 f"table must be PATSection, got {type(table).__name__}"

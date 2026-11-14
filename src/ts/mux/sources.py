@@ -53,9 +53,16 @@ class PacketSource(Protocol):
     """Frozen source protocol (ruling #11): stable packet order, no clock."""
 
     @property
-    def source_id(self) -> str: ...
+    def source_id(self) -> str:
+        """Stable source identifier the mux schedules by (``"pat"``,
+        ``"pmt"``, ``"es:<n>"`` or caller-chosen for plain rate sources)."""
 
-    def iter_packets(self) -> Iterator[TSPacket]: ...
+    def iter_packets(self) -> Iterator[TSPacket]:
+        """Yield the finished SPEC-100 packets in their stable order.
+
+        The mux treats the yielded packets as read-only frames and stamps
+        release ticks itself (sources never see the media clock).
+        """
 
 
 class TablePacketSource:
@@ -96,6 +103,8 @@ class TablePacketSource:
 
     @property
     def source_id(self) -> str:
+        """The reserved table id (``"pat"`` or ``"pmt"``) the mux maps to
+        its matching ``TableRepetitionConfig`` period."""
         return self._source_id
 
     @property
@@ -156,10 +165,14 @@ class PESPacketSource:
 
     @property
     def source_id(self) -> str:
+        """The caller-chosen non-empty id (``ES_SOURCE_ID_PREFIX``-prefixed
+        per SPEC-108 §5) the mux reports in scheduling/summary accounting."""
         return self._source_id
 
     @property
     def pid(self) -> int:
+        """The single output PID this source frames every PES onto
+        (validated by the owned :class:`PESPacketizer`)."""
         return self._pid
 
     @property

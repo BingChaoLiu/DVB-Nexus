@@ -36,6 +36,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from dataclasses import dataclass
+from typing import Protocol
 
 from ts.errors import GenerationError, TSCoreError
 from ts.generator.codes import (
@@ -93,6 +94,23 @@ class GenerationSummary:
     generator_version: str
 
 
+class OutputSink(Protocol):
+    """Minimal write-protocol ``generate_to`` emits through (§6).
+
+    A standard binary writer (``sys.stdout.buffer``, an open file, any
+    object with a compatible ``write``); TS Core never touches artifact
+    paths or databases — Artifact Storage wraps the sink and computes
+    SHA-256 downstream of the Generator→sink edge.
+    """
+
+    def write(self, data: bytes) -> int | None:
+        """Accept exactly one 188-byte packet per call (§7 step 8).
+
+        Returns the number of bytes accepted (``None``-returning writers
+        are tolerated; a short count raises ``GENERATOR_OUTPUT_WRITE_FAILED``).
+        """
+
+
 class TSGenerator:
     """Configuration-driven deterministic TS generator (SPEC-108 §6)."""
 
@@ -111,13 +129,13 @@ class TSGenerator:
         self._require_generatable(config)
         return self._iter_run(config)
 
-    def generate_to(self, config: GeneratorConfig, sink) -> GenerationSummary:
+    def generate_to(self, config: GeneratorConfig, sink: OutputSink) -> GenerationSummary:
         """Write the whole run through ``sink.write`` and return the digest.
 
-        ``sink`` is the minimal ``write(bytes)`` protocol object (§6: a
-        standard binary writer; TS Core never touches artifact paths or
-        databases — Artifact Storage wraps it and computes SHA-256).  Every
-        call hands the sink exactly one 188-byte packet (§7 step 8); a
+        ``sink`` is the minimal :class:`OutputSink` ``write(bytes)`` protocol
+        object (§6: a standard binary writer; TS Core never touches artifact
+        paths or databases — Artifact Storage wraps it and computes SHA-256).
+        Every call hands the sink exactly one 188-byte packet (§7 step 8); a
         failing or short write raises ``GENERATOR_OUTPUT_WRITE_FAILED``.
         """
         self._require_generatable(config)

@@ -222,6 +222,25 @@ class PMTBuilder:
     """
 
     def build(self, table: PMTSection) -> PSISection:
+        """Encode ``table`` into one CRC-complete PSI section (§7).
+
+        Args:
+            table: The :class:`PMTSection` to encode; descriptor loops are
+                encoded exactly as carried (empty loops are the MVP
+                default, §12) and reserved bits encode to the standard
+                constants.
+
+        Returns:
+            The framed :class:`PSISection` (public header + PCR_PID /
+            program_info_length + program descriptors + ES loop + CRC
+            field over the exact wire bytes).
+
+        Raises:
+            TypeError: ``table`` is not a :class:`PMTSection`.
+            InvalidSectionError: the encoded section_length exceeds
+                ``PMT_SECTION_LENGTH_MAX`` (split the ES loop across
+                sections instead of relying on an implicit split).
+        """
         if not isinstance(table, PMTSection):
             raise TypeError(
                 f"table must be PMTSection, got {type(table).__name__}"
