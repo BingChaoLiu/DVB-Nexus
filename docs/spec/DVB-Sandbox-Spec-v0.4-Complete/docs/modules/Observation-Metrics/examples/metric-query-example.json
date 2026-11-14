@@ -1,0 +1,20 @@
+{
+  "metric_names": [
+    "ts.continuity_error_total",
+    "ts.pcr_jitter_ns"
+  ],
+  "start": {
+    "value_ns": 0,
+    "clock_domain": "sim:sess-demo-001"
+  },
+  "end": {
+    "value_ns": 10000000000,
+    "clock_domain": "sim:sess-demo-001"
+  },
+  "step_ns": 1000000000,
+  "filters": {
+    "service_id": "service-100",
+    "pid": 256
+  },
+  "max_points": 1000
+}

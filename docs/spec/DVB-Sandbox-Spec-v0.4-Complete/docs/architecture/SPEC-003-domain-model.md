@@ -1,0 +1,227 @@
+---
+spec_id: SPEC-003
+title: Domain Model and Shared Contracts
+version: 0.4.0
+status: DRAFT
+phase: BASELINE
+owner: Architecture
+depends_on:
+  - SPEC-001
+---
+
+# SPEC-003 — 领域模型与共享契约
+
+## 1. 目标
+
+定义跨模块共享的最小概念，避免 Topology、Runtime、Observation、Diagnosis、API 和前端分别维护不兼容的数据结构。具体字段最终由对应 Module Spec 扩展和冻结。
+
+## 2. 核心实体
+
+### 2.1 Topology
+
+描述用户设计的节点、端口和连接，是配置模型，不是运行状态。
+
+```typescript
+type SignalPlane = 'RF' | 'SEC_CONTROL' | 'MPEG_TS' | 'T2MI' | 'IP';
+type PortDirection = 'input' | 'output' | 'bidirectional';
+
+interface Topology {
+  topologyId: string;
+  revision: number;
+  nodes: TopologyNode[];
+  connections: TopologyConnection[];
+}
+
+interface TopologyNode {
+  nodeId: string;
+  nodeType: string;
+  config: Record<string, unknown>;
+  ports: TopologyPort[];
+}
+
+interface TopologyPort {
+  portId: string;
+  direction: PortDirection;
+  plane: SignalPlane;
+  protocol?: string;
+  maxConnections?: number;
+}
+
+interface TopologyConnection {
+  connectionId: string;
+  from: { nodeId: string; portId: string };
+  to: { nodeId: string; portId: string };
+  plane: SignalPlane;
+}
+```
+
+约束：配置模型需做版本化和 schema 校验。不同信号平面不能仅凭 UI 连线建立有效连接；由后端 Validator 检查端口 plane、方向、容量和协议兼容性。MVP 实际启用 `MPEG_TS`。
+
+### 2.2 RunContext
+
+```typescript
+interface RunContext {
+  runId: string;
+  sessionId: string;
+  topologyId: string;
+  topologyRevision: number;
+  sequenceNumber: number;
+  mode: 'sandbox' | 'live';
+  fidelity: 'SIM_STATE' | 'SIM_TS' | 'LIVE';
+  startedAtUtcMs: number;
+  generatorVersion?: string;
+  configHash?: string;
+  seed?: number;
+}
+```
+
+- `sequenceNumber` 在同一 Run 内单调递增。
+- `topologyRevision` 用于防止旧配置计算结果覆盖新配置状态。
+- `startedAtUtcMs` 是 UTC Unix epoch 毫秒；协议仿真时间另行表达，不混用墙钟。
+- `LIVE` 是未来模式，MVP 不要求实现。
+
+### 2.3 RuntimeEvent Envelope
+
+```typescript
+interface RuntimeEvent<T = unknown> {
+  eventId: string;
+  runId: string;
+  sequenceNumber: number;
+  eventType: string;
+  emittedAtUtcMs: number;
+  simulationTimeTicks?: number;
+  schemaVersion: number;
+  payload: T;
+}
+```
+
+所有事件带 Schema Version。跨 WebSocket/持久化边界的字段兼容性由 SPEC-501 定义。
+
+### 2.4 Observation
+
+Observation 表示被测量、解析、模拟或推断的事实，不直接等同于根因。
+
+```typescript
+type ObservationSource =
+  | 'generator' | 'internal_parser' | 'tsduck' | 'hardware' | 'rule_engine';
+type ConfidenceKind = 'simulated' | 'parsed' | 'measured' | 'inferred';
+
+interface Observation {
+  observationId: string;
+  runId: string;
+  source: ObservationSource;
+  confidence: ConfidenceKind;
+  type: string;
+  observedAtUtcMs: number;
+  simulationTimeTicks?: number;
+  pid?: number;
+  packetIndex?: number;
+  value?: unknown;
+  unit?: string;
+  artifactId?: string;
+  evidenceRefs?: string[];
+}
+```
+
+禁止规则：`source='tsduck'` 的结果不得标成 `measured`；`SIM_STATE` 生成的结果不得标成 `parsed`；硬件测量值不得与模拟值混为同一可信类别。
+
+### 2.5 Metric
+
+```typescript
+interface Metric {
+  metricId: string;
+  runId: string;
+  name: string;
+  value: number | string | boolean;
+  unit?: string;
+  source: ObservationSource;
+  quality: 'valid' | 'unavailable' | 'estimated' | 'invalid';
+  observedAtUtcMs: number;
+  windowStartUtcMs?: number;
+  windowEndUtcMs?: number;
+  pid?: number;
+}
+```
+
+不同指标的采样窗口、聚合方式、有效范围和单位由 SPEC-301 定义。不能把未知值强制填成 0。
+
+### 2.6 Diagnosis
+
+Diagnosis 表示规则或分析逻辑产生的根因候选，不是原始事实。
+
+```typescript
+interface Diagnosis {
+  diagnosisId: string;
+  runId: string;
+  ruleId: string;
+  code: string;
+  severity: 'info' | 'warning' | 'error' | 'critical';
+  title: string;
+  summary: string;
+  confidence?: number;
+  observationIds: string[];
+  affectedNodeIds?: string[];
+  suggestedActions?: string[];
+  createdAtUtcMs: number;
+}
+```
+
+`confidence` 的数值解释、阈值和算法必须由 SPEC-303/304 定义；不得在没有校准依据时宣称统计概率。
+
+### 2.7 TSArtifact
+
+```typescript
+interface TSArtifact {
+  artifactId: string;
+  runId: string;
+  kind: 'input_ts' | 'generated_ts' | 'faulted_ts' | 'report' | 'log' | 'evidence';
+  relativePath: string;
+  packetSize?: 188 | 204;
+  packetCount?: number;
+  byteSize: number;
+  sha256: string;
+  generatorVersion?: string;
+  configHash?: string;
+  faultProfileIds?: string[];
+  createdAtUtcMs: number;
+}
+```
+
+`relativePath` 必须相对应用管理的 Artifact 根目录。不能把任意绝对文件路径直接暴露给 API 客户端。
+
+## 3. 状态模型
+
+建议将状态拆开，不用单一 `health` 表达所有语义：
+
+- `lifecycleState`：created / starting / running / stopping / stopped / failed。
+- `operationalState`：active / idle / unavailable。
+- `health`：ok / warn / error / unknown。
+- `lockState`：locked / unlocked / acquiring / not_applicable（仅适用有 Lock 语义的设备）。
+
+各节点类型允许的状态组合由 SPEC-003 后续修订或节点 Module Spec 定义。
+
+## 4. 时间模型
+
+必须区分：
+
+1. `observedAtUtcMs`：现实世界 UTC 时间，用于日志和排序。
+2. `simulationTimeTicks`：仿真虚拟时间，单位和时钟频率由 Simulation Clock Spec 定义。
+3. PCR/PTS/DTS：MPEG-TS 协议时钟域，按标准定义的回绕和时基处理。
+
+不得用系统当前毫秒时间直接代替 PCR 或 PTS。
+
+## 5. 版本与兼容
+
+- 对外 JSON Schema 必须有版本策略。
+- 添加可选字段通常可兼容；删除、改名、改变单位或枚举语义属于破坏性变化。
+- 所有持久化的 Run、Event、Artifact 必须能关联 schema/generator/analyzer 版本。
+- 前端不得自行推导未提供的协议测量值。
+
+## 6. 待模块 Spec 明确
+
+- 完整 NodeType 注册表和每种节点 Config Schema。
+- Runtime 生命周期状态机。
+- EventType 注册表和事件 payload schema。
+- Observation/Metric 的单位与枚举注册表。
+- Diagnosis 规则优先级、抑制、关联和置信度语义。
+- Artifact 保留、清理、访问和校验策略。

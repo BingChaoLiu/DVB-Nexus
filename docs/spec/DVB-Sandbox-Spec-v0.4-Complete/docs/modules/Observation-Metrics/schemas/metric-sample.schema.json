@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Observation Metric Sample",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "metric_name",
+    "value_type",
+    "value",
+    "time",
+    "dimensions",
+    "quality",
+    "provenance"
+  ],
+  "properties": {
+    "metric_name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+    },
+    "value_type": {
+      "enum": [
+        "counter",
+        "gauge",
+        "histogram"
+      ]
+    },
+    "value": {
+      "type": [
+        "number",
+        "object",
+        "null"
+      ]
+    },
+    "unit": {
+      "type": "string"
+    },
+    "time": {
+      "type": "object",
+      "required": [
+        "value_ns",
+        "clock_domain"
+      ],
+      "properties": {
+        "value_ns": {
+          "type": "integer"
+        },
+        "clock_domain": {
+          "type": "string"
+        }
+      }
+    },
+    "dimensions": {
+      "type": "object",
+      "additionalProperties": {
+        "type": [
+          "string",
+          "integer",
+          "boolean"
+        ]
+      }
+    },
+    "quality": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "good",
+          "missing",
+          "late",
+          "estimated",
+          "partial",
+          "revised",
+          "invalid"
+        ]
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "required": [
+        "source_event_ids"
+      ],
+      "properties": {
+        "source_event_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "journal_watermark": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      }
+    }
+  }
+}

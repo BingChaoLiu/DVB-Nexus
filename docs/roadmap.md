@@ -1,0 +1,101 @@
+# DVB-Nexus 远期路线图（Roadmap）
+
+> **定位**：本文件是 MVP 之外全部远期工作的**唯一权威索引**（ADR-0002）。MVP = TS-first 传输层八步闭环；这里承载其余一切——保证 MVP 完成后，v0.3 愿景中的射频沙盘、高级封装、实况接入等 idea 有直接的继续条件。
+>
+> **推进方式**：每个 Phase 启动时另开一张 wayfinder map（对照 map [#1](https://github.com/BingChaoLiu/DVB-Nexus/issues/1) 的模式），先验证层后决策层，不直接开工。
+
+## 1. 与 MVP 的边界
+
+| 属于 MVP | 属于本路线图 |
+|---|---|
+| MPEG-TS 传输层八步闭环（Create → Generate → Inject → Analyze → Diagnose → Inspect → Recover → Verify） | RF/LNB/DiSEqC/Unicable、T2MI/BBFrame/PLP、BISS/CA、Live Mode、Time Machine |
+| 188-byte 包长、`analysis_only` profile、最小前端 UI | RS204/M2TS、`playback_ready`、完整物理层、真实音视频编码 |
+| `SignalPlane` 只启用 `MPEG_TS`（模型保留五平面扩展位） | `RF` / `SEC_CONTROL` / `T2MI` / `IP` 平面的实际启用 |
+
+**已预留的扩展点**（MVP 实现时不得砍掉）：拓扑模型 `SignalPlane` 五平面枚举、节点类型注册表机制、仿真保真级 `SIM_STATE`/`SIM_TS`/`LIVE` 三档、SPEC-600+ 编号空间、Observation 的 `hardware`/`measured` 来源与置信枚举。
+
+## 2. 阶段划分
+
+源自 SPEC-000 §6 与 provenance/chatgpt-v04.md，MVP（Phase 1）之后：
+
+| Phase | 主题 | 核心内容 | 前置条件 |
+|---|---|---|---|
+| **Phase 2** | 高级封装层 | T2-MI 解封装三级子图、BBFrame/PLP 提取、BISS Mode 1 加解扰、教学靶场 B/C 系列案例 | MVP TS 闭环验收通过；语义级故障注入能力（构造期注入）可用 |
+| **Phase 3** | RF/SEC 沙盘 | LNB/DiSEqC/Tuner/Unicable 的 L0 状态模型与物理视图、DiSEqC 命令模型、A 系列靶场 | L0 求值引擎成熟（架构评审裁决其 MVP 形态）；端口模型扩展 |
+| **Phase 4** | Live Engineering | Linux DVB Frontend 接入、实况流监测与告警、D2 系列实战案例 | Linux/WSL2 运行环境（见 §5 Windows 限制）；Observation 告警链路成熟 |
+| **Later** | 工程增强 | Time Machine（Ring Buffer/事件冻结/回放）、TS Differential Analyzer（双流差异）、`playback_ready` 档、MPTS 多节目调度 | 按需另启 effort |
+
+## 3. SPEC-600+ 未来模块目录
+
+源自规格包 `REGISTRY.md` §F（编号原样保留，规格文本未编写；实现前需按 map 流程编写并批准）：
+
+| Spec ID | 名称 | 范围 | 优先级 |
+|---|---|---|---|
+| SPEC-600 | T2MI Parser | T2-MI Packet 基础解析 | P2 |
+| SPEC-601 | BBFrame Parser | BBHEADER、BBFrame 边界和 CRC | P2 |
+| SPEC-602 | PLP Extractor | T2-MI PLP ID 过滤与提取 | P2 |
+| SPEC-603 | Inner TS Reconstruction | BBFrame 解封装和 Inner TS 输出 | P2 |
+| SPEC-610 | BISS Mode 1 | BISS-1 参数、解扰接口和证据 | P2 |
+| SPEC-611 | BISS Mode E | ESW/Injected ID 计算和验证 | P2 |
+| SPEC-612 | DVB-CA | PMT CA Descriptor、ECM/EMM 关系 | P3 |
+| SPEC-620 | RF Simulation | RF 参数和质量状态模型 | P2 |
+| SPEC-621 | LNB Model | 本振、极化、电压和频段状态 | P2 |
+| SPEC-622 | DiSEqC Controller | 命令模型、端口和控制状态 | P2 |
+| SPEC-623 | Unicable | EN 50494/EN 50607 槽位与调谐模型 | P2 |
+| SPEC-630 | Linux DVB Frontend Adapter | Linux DVB API 接入 | P3 |
+| SPEC-631 | Live TS Input | 文件/网络/硬件输入统一接口 | P2 |
+| SPEC-632 | Live Monitoring | 实况指标与告警 | P2 |
+| SPEC-640 | Time Machine | Ring Buffer、事件触发、冻结与回放 | P2 |
+| SPEC-641 | TS Differential Analyzer | 双码流结构与指标差异分析 | P2 |
+
+## 4. v0.3 故障案例库（远期靶场素材）
+
+> 原文见 `docs/spec/provenance/v03.md` §7。以下条目已按标准核查报告（`docs/research/standards-audit.md` §8）**订正**——⚠️ 标注处为对 v0.3 原文的修正，实现知识卡片时以本节为准。
+
+### 领域 A：射频与前端供电链路（Phase 3）
+
+- **A1 Unicable 频道槽位冲突**：多 tuner 共享单根同轴电缆，两个接收端被分配相同 **User Band 槽位频率**（如 1210 MHz），导致无法锁定。⚠️ 订正：SCR 展开名为 **Satellite Channel Router**（EN 50494；非"Subscriber Channel Radio"）；冲突本质是同一 User Band 被两个接收端占用导致 SCR 堆叠信号互相干扰，**不是 LNB 本振冲突**。EN 50607（dCSS/Unicable II）扩展至最多 32 个 UB。
+- **A2 22kHz 持续音调残留**：高频段正常、切低频段时 BER 飙升——LNB 供电/多路开关异常使低频段指令混入残留 22kHz，LNB 错误切入高频本振。训练目标：物理视图电压（13/18V）× 22kHz 组合逻辑排查。
+
+### 领域 B：多流与嵌套封装（Phase 2）
+
+- **B1 T2MI PLP ID 映射错位**：外层锁定正常、T2MI 节点绿灯，但内层 TS 无业务——Demux 锁了数据 PLP 0 而业务在 PLP 1。三级子图（外层 TS Packet → BBFrame → Inner TS）✅ 已核实与 TS 102 773 §5.1 一致；PLP 选择与内层解析分层解耦。
+- **B2 BBHEADER 帧同步错位**：⚠️ 订正出处——**BBHEADER/SYNCD 定义在 EN 302 755 §5.1.7**（MATYPE/UPL/DFL/SYNC/SYNCD/CRC-8 共 10 字节），**TS 102 773 全文不含 BBHEADER**（它只规定 T2-MI 包封装：包头 6 字节 + CRC-32）。SYNCD（2 字节）是"数据字段内首个 UP 的位距离"，**不是同步字节**。教学引用改为：EN 302 755 §5.1.7（BBHEADER）+ TS 102 773 §5.1（T2-MI 包）。
+
+### 领域 C：加扰与条件接收（Phase 2）
+
+- **C1 BISS 密钥错位**：⚠️ 订正——BISS **Mode 1** 密钥为 **12 位十六进制（48-bit）session word**（"16 字节密钥"的说法错误）；**Mode E** = 固定 Session Key 加密 SW 成 16 位十六进制 **ESW** 带外下发 + **静态 128-bit Injected/Buried ID 预置于接收端**（不在流中传输、不是动态数据）。BISS **无 ECM**（CA_PID 固定 0x1FFF，Tech 3292）；BISS2 的 CA_system_ID = 0x2602。底层算法：BISS1 = DVB-CSA1 + DES；BISS2 = DVB-CISSA（TS 103 127）+ AES-128。
+- **C2 PID 映射混淆（CA 字错配）**：PMT 中加扰 PID 动态变更而 Demux 过滤表未同步，ECM 与加密 PES 错位。⚠️ 该案例属 DVB-CA 语境（SPEC-612），混入 BISS 案例时注意区分（BISS 无 ECM）。
+
+### 领域 D：SI/PSI 与时序（Phase 2~4）
+
+- **D1 FastScan 后 NIT 版本不同步**：运营商更新 transponder 列表后终端命中陈旧缓存（table_id_extension 版本号未变 / TSID 未同步更新）。训练目标：FastScan 面板、LC 映射、NIT 版本比对。
+- **D2 PCR 抖动超标致 CC 异常**：⚠️ 订正数值——ISO/IEC 13818-1 §2.7.2 的 PCR **间隔规范限值是 100ms**（"Jitter > 500ms" 的原表述两头不靠）；**±500ns 是 TR 101 290 P2 的 PCR 准确度阈值**（另一个量）。教学叙事改为："PCR 间隔超过 100ms（ISO §2.7.2）或 PCR 抖动超出 ±500ns（TR 101 290 P2）"。
+
+## 5. 技术事实备忘（远期实现必读）
+
+源自研究调研（`docs/research/`），实现对应 Phase 时先复核：
+
+### T2-MI（Phase 2）
+- **解封装三套现成方案**，无需自研：TSDuck `t2mi` 插件（本机 3.40 已含，`--extract` 支持按 PLP 提取）/ FFmpeg 7.1 `t2mi` demuxer / DVBInspector PLP 导出
+- **封装（builder）**只有 Rust crate [`dvb-t2mi`](https://crates.io/crates/dvb_t2mi)（v14.0.0，MIT OR Apache-2.0）——但采用度极低（~1.6k 下载/13 stars），届时需重新复核成熟度；集成路径 PyO3 薄绑定或 CLI 子进程
+
+### BISS（Phase 2）
+- ⚠️ **TSDuck descrambler 不支持 BISS**（实测仅 DVB-CSA2/AES-CBC/CTR/ATIS-IDSA/DVB-CISSA）——v0.3"实况复用 TSDuck 解 BISS"的设想不成立
+- BISS1 → libdvbcsa（CSA1 实现）+ DES（session word 加密）；BISS2 → CISSA（ETSI TS 103 127）+ AES-128 自研或第三方实现
+- 标准原文：EBU Tech 3292（BISS2）与 Tech 3292-s1（BISS-CA）可免费下载
+
+### Live Mode（Phase 4）
+- **Windows 硬限制**（TSDuck User Guide §7.1.2.2）：DVB 调谐走 DirectShow/BDA，系统无预装驱动、**无法查询调谐器实际锁定参数**——Phase 4 需要 Linux/WSL2 环境
+- 文件/网络/内存输入与全部处理插件在 Windows 完全可用（不阻塞 Phase 2/3）
+
+### Unicable（Phase 3）
+- EN 50494/EN 50607 正文付费，术语与架构层面已核实（Satellite Channel Router、User Band、dCSS 32 UB）；具体条款号实现时需购买原文核对
+
+## 6. 参考索引
+
+- 规格底稿：`docs/spec/`（使用规则见其 README）
+- 权威决策：`docs/adr/` + [map #1](https://github.com/BingChaoLiu/DVB-Nexus/issues/1)
+- 领域词汇：根目录 `CONTEXT.md`
+- 独立调研：`docs/research/`（TSDuck 环境 / 生态对比 / Python 性能 / 标准核查）
+- 实测资产：`docs/research/tsduck-data/`（golden.ts 生成链）、`docs/research/python-ts-bench/`（性能基准）

@@ -1,0 +1,47 @@
+{
+  "schema_version": "1.0",
+  "event_id": "01JOBS000000000000000001",
+  "event_type": "ts.continuity_error",
+  "producer": {
+    "producer_id": "ts-core",
+    "producer_version": "0.4.0",
+    "instance_id": "ts-core-1",
+    "producer_seq": 42
+  },
+  "scope": {
+    "tenant_id": "local",
+    "session_id": "sess-demo-001",
+    "scenario_id": "scenario-cc-discontinuity"
+  },
+  "time": {
+    "source": {
+      "value_ns": 1200000000,
+      "clock_domain": "sim:sess-demo-001",
+      "clock_epoch": 0
+    },
+    "observed": {
+      "value_ns": 1790000000000000000,
+      "clock_domain": "wall:utc",
+      "clock_epoch": 0
+    }
+  },
+  "correlation": {
+    "trace_id": "trace-demo",
+    "fault_id": "fault-cc-01",
+    "node_id": "demux-0",
+    "service_id": "service-100",
+    "pid": 256
+  },
+  "severity": "warning",
+  "payload": {
+    "expected_cc": 4,
+    "actual_cc": 6,
+    "discontinuity_indicator": false,
+    "packet_index": 12000
+  },
+  "tags": [
+    "ts",
+    "continuity",
+    "training"
+  ]
+}

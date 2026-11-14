@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Observation Alert Record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "alert_id",
+    "fingerprint",
+    "rule_id",
+    "state",
+    "severity",
+    "scope",
+    "time",
+    "evidence_refs"
+  ],
+  "properties": {
+    "alert_id": {
+      "type": "string"
+    },
+    "fingerprint": {
+      "type": "string"
+    },
+    "rule_id": {
+      "type": "string"
+    },
+    "rule_version": {
+      "type": "string"
+    },
+    "state": {
+      "enum": [
+        "pending",
+        "firing",
+        "resolving",
+        "resolved",
+        "suppressed"
+      ]
+    },
+    "severity": {
+      "enum": [
+        "info",
+        "warning",
+        "error",
+        "critical"
+      ]
+    },
+    "scope": {
+      "type": "object",
+      "required": [
+        "tenant_id",
+        "session_id"
+      ],
+      "properties": {
+        "tenant_id": {
+          "type": "string"
+        },
+        "session_id": {
+          "type": "string"
+        }
+      }
+    },
+    "time": {
+      "type": "object",
+      "required": [
+        "value_ns",
+        "clock_domain"
+      ],
+      "properties": {
+        "value_ns": {
+          "type": "integer"
+        },
+        "clock_domain": {
+          "type": "string"
+        }
+      }
+    },
+    "summary": {
+      "type": "string",
+      "maxLength": 512
+    },
+    "evidence_refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "suppression": {
+      "type": [
+        "object",
+        "null"
+      ]
+    }
+  }
+}

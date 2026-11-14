@@ -1,0 +1,196 @@
+{
+ "env": {
+  "python": "3.10.11 (tags/v3.10.11:7d4cc5a, Apr  5 2023, 00:38:17) [MSC v.1929 64 bit (AMD64)]",
+  "executable": "C:\\Users\\Administrator\\AppData\\Local\\Microsoft\\WindowsApps\\PythonSoftwareFoundation.Python.3.10_qbz5n2kfra8p0\\python.exe",
+  "machine": "AMD64",
+  "win32_ver": "10 10.0.26200 SP0 Multiprocessor Free",
+  "cpu_count": 24,
+  "processor_id": "AMD64 Family 25 Model 33 Stepping 0, AuthenticAMD",
+  "quick": false
+ },
+ "a_dataclass": {
+  "frozen_pos (SPEC-100 style)": {
+   "n": 1000000,
+   "times_s": [
+    1.046,
+    1.065,
+    1.1268
+   ],
+   "best_s": 1.046,
+   "median_s": 1.065,
+   "per_op_ns_best": 1046.0,
+   "ops_per_s_best": 956023.0
+  },
+  "frozen_kwargs": {
+   "n": 1000000,
+   "times_s": [
+    1.1697,
+    1.1794,
+    1.2188
+   ],
+   "best_s": 1.1697,
+   "median_s": 1.1794,
+   "per_op_ns_best": 1169.7,
+   "ops_per_s_best": 854909.0
+  },
+  "plain_pos": {
+   "n": 1000000,
+   "times_s": [
+    0.6281,
+    0.6659,
+    0.6719
+   ],
+   "best_s": 0.6281,
+   "median_s": 0.6659,
+   "per_op_ns_best": 628.1,
+   "ops_per_s_best": 1592143.0
+  },
+  "slots_pos": {
+   "n": 1000000,
+   "times_s": [
+    0.9429,
+    0.9552,
+    1.0795
+   ],
+   "best_s": 0.9429,
+   "median_s": 0.9552,
+   "per_op_ns_best": 942.9,
+   "ops_per_s_best": 1060517.0
+  },
+  "tuple": {
+   "n": 1000000,
+   "times_s": [
+    0.1717,
+    0.1855,
+    0.195
+   ],
+   "best_s": 0.1717,
+   "median_s": 0.1855,
+   "per_op_ns_best": 171.7,
+   "ops_per_s_best": 5823508.0
+  },
+  "frozen_pos_gc_off": {
+   "n": 1000000,
+   "times_s": [
+    0.8048,
+    0.8334,
+    0.842
+   ],
+   "best_s": 0.8048,
+   "median_s": 0.8334,
+   "per_op_ns_best": 804.8,
+   "ops_per_s_best": 1242499.0
+  },
+  "_mem_bytes_per_obj": {
+   "frozen": 192.0,
+   "plain": 192.0,
+   "slots": 96.0,
+   "tuple": 104.0
+  }
+ },
+ "b_serialize": {
+  "struct_pack+concat": {
+   "n": 1000000,
+   "times_s": [
+    0.2487,
+    0.2497,
+    0.2501
+   ],
+   "best_s": 0.2487,
+   "median_s": 0.2497,
+   "per_op_ns_best": 248.7,
+   "ops_per_s_best": 4020836.0
+  },
+  "bytes_tuple+concat": {
+   "n": 1000000,
+   "times_s": [
+    0.2573,
+    0.2577,
+    0.2835
+   ],
+   "best_s": 0.2573,
+   "median_s": 0.2577,
+   "per_op_ns_best": 257.3,
+   "ops_per_s_best": 3886308.0
+  },
+  "bytearray_tmpl_copy": {
+   "n": 1000000,
+   "times_s": [
+    0.1659,
+    0.1661,
+    0.1664
+   ],
+   "best_s": 0.1659,
+   "median_s": 0.1661,
+   "per_op_ns_best": 165.9,
+   "ops_per_s_best": 6027648.0
+  },
+  "bytearray_reuse_nocopy": {
+   "n": 1000000,
+   "times_s": [
+    0.0557,
+    0.0561,
+    0.0561
+   ],
+   "best_s": 0.0557,
+   "median_s": 0.0561,
+   "per_op_ns_best": 55.7,
+   "ops_per_s_best": 17955062.0
+  }
+ },
+ "c_write": {
+  "per_packet_188B_defaultbuf": {
+   "n": 1000000,
+   "times_s": [
+    0.1944,
+    0.2238,
+    0.2559
+   ],
+   "best_s": 0.1944,
+   "median_s": 0.2238,
+   "per_op_ns_best": 194.4,
+   "ops_per_s_best": 5144282.0
+  },
+  "chunked_96KB_1MBbuf": {
+   "n": 1000000,
+   "times_s": [
+    0.0505,
+    0.0528,
+    0.0542
+   ],
+   "best_s": 0.0505,
+   "median_s": 0.0528,
+   "per_op_ns_best": 50.5,
+   "ops_per_s_best": 19792926.0
+  }
+ },
+ "d_scheduler": {
+  "decision_only": {
+   "n": 500000,
+   "times_s": [
+    0.068,
+    0.0683,
+    0.069
+   ],
+   "best_s": 0.068,
+   "median_s": 0.0683,
+   "per_op_ns_best": 135.9,
+   "ops_per_s_best": 7357745.0
+  },
+  "end_to_end_io": {
+   "n": 500000,
+   "times_s": [
+    0.2287,
+    0.2315,
+    0.26
+   ],
+   "best_s": 0.2287,
+   "median_s": 0.2315,
+   "per_op_ns_best": 457.4,
+   "ops_per_s_best": 2186254.0,
+   "null_packets": 78969,
+   "video_packets": 372243,
+   "file_bytes": 94000000
+  }
+ }
+}

@@ -1,0 +1,22 @@
+{
+  "alert_id": "alert-0001",
+  "fingerprint": "sha256:demo-fingerprint",
+  "rule_id": "PCR_JITTER_HIGH",
+  "rule_version": "1.0",
+  "state": "firing",
+  "severity": "warning",
+  "scope": {
+    "tenant_id": "local",
+    "session_id": "sess-demo-001"
+  },
+  "time": {
+    "value_ns": 8000000000,
+    "clock_domain": "sim:sess-demo-001"
+  },
+  "summary": "PCR jitter exceeded the configured training-profile threshold",
+  "evidence_refs": [
+    "journal:1002",
+    "metric:ts.pcr_jitter_ns:bucket-8"
+  ],
+  "suppression": null
+}

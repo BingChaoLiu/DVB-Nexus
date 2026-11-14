@@ -1,0 +1,13 @@
+# IMPLEMENTATION_REPORT
+- Agent/task:
+- Spec IDs, versions and hashes:
+- Commit:
+- Modified files:
+- Requirements implemented:
+- Exact test commands:
+- Passed/failed/skipped:
+- Acceptance criteria status:
+- Deviations / approved change requests:
+- Performance/resource measurements:
+- Known limitations:
+- Reviewer:

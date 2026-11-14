@@ -1,0 +1,12 @@
+# SPEC Change Request
+- Request ID:
+- Affected Spec IDs/versions:
+- Problem and reproducible evidence:
+- Proposed change and rationale:
+- API/schema impact:
+- Dependent Specs:
+- Compatibility/migration:
+- Tests to add:
+- Risk:
+- Decision: PENDING / ACCEPTED / REJECTED
+- Approver/date:

@@ -1,0 +1,6 @@
+# Machine-local tooling: .claude/skills holds absolute-path symlinks generated
+# by the skills setup; re-created per machine, never shared.
+.claude/
+
+# Local scratch
+.scratch/

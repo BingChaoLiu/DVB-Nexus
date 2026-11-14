@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "scenario_id": "lab.ts.cc-discontinuity",
+  "version": "1.0.0",
+  "title": "Locate a continuity-counter discontinuity",
+  "difficulty": "beginner",
+  "simulation_config": {
+    "mode": "deterministic",
+    "seed": 123456,
+    "clock": {
+      "mode": "deterministic",
+      "start_time_ns": 0,
+      "speed_num": 1,
+      "speed_den": 1
+    }
+  },
+  "fault_plan": [
+    {
+      "fault_id": "fault-cc-001",
+      "fault_type": "CC_DISCONTINUITY",
+      "target_id": "pid:0x0100",
+      "injection_point": "after_packet_index",
+      "activation": {
+        "packet_index": 120
+      },
+      "parameters": {
+        "delta": 3
+      }
+    }
+  ],
+  "pass_criteria": [
+    {
+      "criterion_id": "PASS-1",
+      "kind": "no_unexpected_cc_error",
+      "mandatory": true
+    },
+    {
+      "criterion_id": "PASS-2",
+      "kind": "fault_inactive",
+      "mandatory": true
+    }
+  ]
+}
