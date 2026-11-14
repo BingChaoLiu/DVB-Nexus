@@ -9,9 +9,12 @@ description = "DVB-Nexus sandbox backend: MPEG-TS semantic core, simulation runt
 # No readme reference: repo README.md is currently UTF-16-encoded (pre-existing
 # defect, reported to the delegator); setuptools reads it as UTF-8 and fails.
 requires-python = ">=3.10"
-# Runtime dependencies intentionally empty at the M0 skeleton stage:
-# FastAPI/Pydantic etc. arrive with later tickets (ADR-0003 frozen stack).
-dependencies = []
+# Runtime deps per ADR-0003 frozen stack. Pydantic v2 arrives with the
+# SPEC-003 shared domain models (ticket #21): v2 API required
+# (ConfigDict/StringConstraints), <3 guards against the next major.
+dependencies = [
+    "pydantic>=2,<3",
+]
 
 [project.optional-dependencies]
 dev = [
