@@ -1,6 +1,6 @@
 # TS Core Spec Index
 
-**Package version:** 0.5.0  
+**Package version:** 0.5.1  
 **Status:** MVP_BASELINE_APPROVED  
 **Normative parent:** DVB Sandbox SPEC-001/003/004/005  
 
@@ -33,3 +33,5 @@ SPEC-105 ──┬─ SPEC-100 ─┴─ SPEC-106 ─ SPEC-107 ─┐
 All entries are `DRAFT` at package creation. When an individual Spec is approved, update its front matter and this index. Do not update any document to `IMPLEMENTED` until code merge, test evidence, and acceptance review are complete.
 
 2026-11-14：SPEC-100~108 与 TS-CORE-INTEGRATION-CONTRACT 经 Wayfinder ticket「ts-core 规格逐份修订批准」逐份修订并批准为 MVP 基线（front-matter `status: APPROVED`、`version: 0.5.0`）。golden 向量补齐（包/section/TS 级）归 conformance ticket，阻塞实现完成而非规格批准。
+
+2026-11-15：默认表周期错相修订（#72 裁决，SPEC_CHANGE_REQUEST 方案 1）——SPEC-108 §4 `GeneratorConfig` 默认 `pat_period_ms`/`pmt_period_ms` 100/100 → 101/103，SPEC-107 §5.2 初始默认建议同步错相；同相位双表叠加常规 ES pull 构成 ≥3 pulls/slot，结构性违反 §5 deadline 窗（证据 #34 实测）。包版本 0.5.0 → 0.5.1；全部文件 lockstep bump，契约文本未实质修订仅版本对齐；实现默认值（`src/ts/generator/config.py`）随本修订同步。
