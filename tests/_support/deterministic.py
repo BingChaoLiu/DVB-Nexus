@@ -30,10 +30,6 @@ SEED_MIN: int = 0
 SEED_MAX: int = 2**64 - 1
 
 
-def _check_seed(seed: int) -> int:
-    return check_seed(seed)
-
-
 def check_seed(seed: int) -> int:
     """Validate the SPEC-200 seed domain (uint64); returns the seed.
 
@@ -55,7 +51,7 @@ def seeded_bytes(seed: int, length: int) -> bytes:
 
     Append-stable: prefixes of longer generations match shorter ones.
     """
-    _check_seed(seed)
+    check_seed(seed)
     if length < 0:
         raise ValueError(f"length must be >= 0, got {length}")
     rng = random.Random(seed)
@@ -69,7 +65,7 @@ def seeded_ts_stream(seed: int, packet_count: int) -> bytes:
     at every ``PACKET_SIZE`` boundary so framing-sensitive tests (splitting,
     buffering, multi-packet windows) have honest material.
     """
-    _check_seed(seed)
+    check_seed(seed)
     if packet_count < 0:
         raise ValueError(f"packet_count must be >= 0, got {packet_count}")
     stream = bytearray(seeded_bytes(seed, packet_count * PACKET_SIZE))
