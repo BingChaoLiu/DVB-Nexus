@@ -29,3 +29,10 @@
 ## gh CLI
 
 - 多行 body 用 heredoc 写临时文件 + `--body-file`（操作配方见 [issue-tracker.md](issue-tracker.md)）。
+
+## Worktree 内跑检查（共享 .venv 陷阱）
+
+共享 `.venv` 的 editable install 指向**主仓** `src`：在 worktree 里裸跑检查会**静默验证主仓代码**并报绿（M3 retro 实证：#40 的 lint-imports 少分析 1 个文件照样全绿）。
+
+- `pytest`：pyproject `pythonpath` 已含 rootdir 相对 `src`，任意 checkout 内自愈，无需环境变量；守卫测试 `tests/integration/test_env_under_test_is_this_tree.py` 钉死该不变量。
+- `lint-imports`：不走 pytest，必须显式 `PYTHONPATH=$PWD/src`；判断是否踩坑看分析文件数（主仓与 worktree 数量不同 = 踩坑）。
