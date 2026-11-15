@@ -33,7 +33,7 @@ from __future__ import annotations
 import asyncio
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Callable, Mapping, Protocol
+from typing import Any, Callable, Mapping, Protocol, Sequence
 
 from simulation.clock import SimulationClock, SimulationClockConfig
 from simulation.errors import (
@@ -70,7 +70,26 @@ __all__ = [
     "SimulationSessionSpec",
     "ValidationReport",
     "new_session_spec",
+    # ticket #45 appended face (see VALIDATION_GATES below)
+    "VALIDATION_GATES",
 ]
+
+# --- ticket #45 appended face (SPEC-205, SIM-F) ---------------------------------
+#
+# Session-validation gates consulted inside ``validate_session`` while the
+# session is in the VALIDATING phase (SPEC-200 section 5). Each gate
+# receives the session spec and returns path-addressed violation strings
+# (empty = pass); violations are appended to the topology violations and
+# ride the same ``SIM_VALIDATION_FAILED`` report path.
+#
+# Appended-face discipline: the default-empty list preserves #41 behavior
+# byte-identically for every existing caller — no gate, no change. The
+# scenario engine (simulation.scenario.loader, #45) registers its
+# fault-plan gate (缺 expected_observations 的 scenario 在 VALIDATING 被
+# 拒绝 — ticket #45 acceptance core) through
+# ``install_scenario_validation_gate``; no existing signature or export
+# changed.
+VALIDATION_GATES: list[Callable[[SimulationSessionSpec], Sequence[str]]] = []
 
 
 # --- SPEC-200 section 4 data model -------------------------------------------
@@ -410,6 +429,10 @@ class SimulationRuntime:
             require_transition(session.lifecycle, LifecycleState.VALIDATING)
             self._transition(session, LifecycleState.VALIDATING)
             violations = tuple(validate_topology(session.graph))
+            # ticket #45 appended face: scenario/validation gates ride the
+            # same VALIDATING phase (default-empty list = no-op for #41).
+            for gate in VALIDATION_GATES:
+                violations = violations + tuple(gate(session.spec))
             report = ValidationReport(violations=violations)
             if report.ok:
                 require_transition(session.lifecycle, LifecycleState.READY)
