@@ -39,6 +39,7 @@ from simulation.ts_runtime import ArtifactRef, TSRuntime, TSRunResult
 from tests.unit.simulation._ts_runtime_builders import (
     CCShiftFilter,
     FakeArtifactSink,
+    GatedFakeArtifactSink,
     make_generator_config,
     make_session_spec,
 )
@@ -359,22 +360,27 @@ class TestBoundedCancel:
 
     async def _run_until_cancelled(self, runtime: TSRuntime, prepared, sink):
         task = asyncio.create_task(runtime.run(prepared, sink))
-        # Event-driven wait (no wall-clock sleep): the run registers its
-        # cancel flag before the worker starts consuming batches.
+        # Event-driven wait (no wall-clock sleep). The gated sink parks the
+        # worker on its first write, so the cancel request cannot lose the
+        # scheduling race against generation completion — a fast Linux
+        # runner otherwise finishes the whole 5000-packet run first
+        # (GatedFakeArtifactSink, M4 CI finding).
         for _ in range(100_000):
-            if runtime.active_run_ids:
+            if sink.started.is_set():
                 break
             await asyncio.sleep(0)
+        assert sink.started.is_set(), "generation never reached its first sink write"
         assert runtime.active_run_ids, "run never registered for cancel"
         run_id = next(iter(runtime.active_run_ids))
         runtime.cancel(run_id)
         runtime.cancel(run_id)  # idempotent
+        sink.release.set()
         return await task
 
     def test_cancelled_run_yields_partial_artifacts(self) -> None:
         runtime = self._make_cancel_runtime()
         prepared = _prepare(runtime, output_packet_count=5000)
-        sink = FakeArtifactSink()
+        sink = GatedFakeArtifactSink()
         result = asyncio.run(self._run_until_cancelled(runtime, prepared, sink))
 
         assert result.status == "cancelled"
@@ -389,7 +395,7 @@ class TestBoundedCancel:
     def test_bytes_stop_growing_at_batch_boundary(self) -> None:
         runtime = self._make_cancel_runtime()
         prepared = _prepare(runtime, output_packet_count=5000)
-        sink = FakeArtifactSink()
+        sink = GatedFakeArtifactSink()
         result = asyncio.run(self._run_until_cancelled(runtime, prepared, sink))
         landed_packets = len(sink.legs["baseline"].chunks)
         assert landed_packets == result.packet_count
