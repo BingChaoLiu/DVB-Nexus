@@ -212,6 +212,9 @@ __all__ = [
     "SqliteArtifactRepository",
     "SqliteDiagnosisRepository",
     "SqliteRunRepository",
+    "SqliteVerificationRepository",
+    "VerdictRecord",
+    "VerificationRepository",
 ]
 
 
@@ -347,4 +350,115 @@ def _diagnosis_record(row: sqlite3.Row) -> DiagnosisRecord:
         state=row["state"],
         raised_at=row["raised_at"],
         cleared_at=row["cleared_at"],
+    )
+
+
+# --- verification verdicts (SPEC-206 §4/§5, ticket #56) --------------------------
+#
+# Migration 003 (additive table; the SPEC-502 §4 frozen tables untouched).
+# Storage-owned row discipline (same posture as DiagnosisRecord): plain
+# strings and JSON-TEXT list projections — ``simulation.verification``
+# imports THIS module (adapters is a declared simulation edge), never the
+# reverse.
+
+
+@dataclass(frozen=True)
+class VerdictRecord:
+    """One stored verification_verdicts row (SPEC-206 §4 result structure).
+
+    ``criteria``/``evidence_refs`` are the per-criterion and evidence
+    projections stored as JSON TEXT; ``verified_at_utc_ms`` is the
+    operational verification timestamp (epoch-ms, ticket #23 R8).
+    """
+
+    verdict_id: str
+    session_id: str
+    run_id: str
+    baseline_run_id: str
+    scenario_id: str
+    scenario_version: str
+    scenario_content_hash: str
+    verdict: str
+    criteria: list[dict[str, Any]] = field(default_factory=list)
+    evidence_refs: list[dict[str, Any]] = field(default_factory=list)
+    summary: str = ""
+    verified_at_utc_ms: int = 0
+
+
+_VERDICT_STATES = ("PASS", "FAIL", "INCONCLUSIVE")
+
+
+class VerificationRepository(Protocol):
+    """The verdict persistence face (SPEC-206 §5 item 3: 事后审计与重放)."""
+
+    def save(self, record: VerdictRecord) -> None: ...
+
+    def query(self, session_id: str) -> list[VerdictRecord]: ...
+
+
+class SqliteVerificationRepository:
+    """SQLite implementation of :class:`VerificationRepository`."""
+
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        self._conn = conn
+
+    def save(self, record: VerdictRecord) -> None:
+        if record.verdict not in _VERDICT_STATES:
+            raise ValueError(
+                "verification_verdicts.verdict must be one of "
+                f"{_VERDICT_STATES}, got {record.verdict!r} (SPEC-206 §4)"
+            )
+        criteria_json = json.dumps(record.criteria, ensure_ascii=False)
+        evidence_json = json.dumps(record.evidence_refs, ensure_ascii=False)
+        try:
+            self._conn.execute(
+                "INSERT INTO verification_verdicts (verdict_id, session_id,"
+                " run_id, baseline_run_id, scenario_id, scenario_version,"
+                " scenario_content_hash, verdict, criteria_json,"
+                " evidence_refs_json, summary, verified_at_utc_ms)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    record.verdict_id,
+                    record.session_id,
+                    record.run_id,
+                    record.baseline_run_id,
+                    record.scenario_id,
+                    record.scenario_version,
+                    record.scenario_content_hash,
+                    record.verdict,
+                    criteria_json,
+                    evidence_json,
+                    record.summary,
+                    record.verified_at_utc_ms,
+                ),
+            )
+        except sqlite3.IntegrityError as exc:
+            raise StorageConflictError(
+                f"verdict {record.verdict_id!r} violates a"
+                " verification_verdicts constraint"
+            ) from exc
+
+    def query(self, session_id: str) -> list[VerdictRecord]:
+        rows = self._conn.execute(
+            "SELECT * FROM verification_verdicts WHERE session_id = ?"
+            " ORDER BY verified_at_utc_ms ASC, verdict_id ASC",
+            (session_id,),
+        ).fetchall()
+        return [_verdict_record(row) for row in rows]
+
+
+def _verdict_record(row: sqlite3.Row) -> VerdictRecord:
+    return VerdictRecord(
+        verdict_id=row["verdict_id"],
+        session_id=row["session_id"],
+        run_id=row["run_id"],
+        baseline_run_id=row["baseline_run_id"],
+        scenario_id=row["scenario_id"],
+        scenario_version=row["scenario_version"],
+        scenario_content_hash=row["scenario_content_hash"],
+        verdict=row["verdict"],
+        criteria=json.loads(row["criteria_json"]),
+        evidence_refs=json.loads(row["evidence_refs_json"]),
+        summary=row["summary"],
+        verified_at_utc_ms=row["verified_at_utc_ms"],
     )

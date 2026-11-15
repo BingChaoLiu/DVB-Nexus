@@ -678,6 +678,45 @@ class SimulationRuntime:
             )
             return closed
 
+    def emit_fault_event(
+        self,
+        session_id: str,
+        run_id: str,
+        event_type: str,
+        *,
+        fault_id: str,
+        fault_type: str,
+        target_node_id: str | None,
+        target_pid: int | None,
+        payload=None,
+        severity: str = "info",
+    ) -> None:
+        """Emit one ``fault.*`` lifecycle event on this session's clock
+        (ticket #56, SPEC-204 §8/§9 real-emission seam).
+
+        Public additive face next to the run face: the SPEC-203 TS runtime
+        calls it at the fault execution points (prepare-passed plan binding,
+        activation crossing, applied confirmation, window close). Read-only
+        emission — it never mutates session state and takes no command lock
+        (SPEC-200 section 7 item 1 reserves the lock for mutating
+        commands); the virtual-time anchor is this session's clock.
+        Unknown sessions raise :class:`SessionNotFoundError` (no silent
+        drops for a DELIVERY_PROTECTED family).
+        """
+        session = self._require(session_id)
+        self._emitter.fault_event(
+            event_type,
+            session_id,
+            run_id,
+            virtual_time_ns=session.clock.now_ns(),
+            fault_id=fault_id,
+            fault_type=fault_type,
+            target_node_id=target_node_id,
+            target_pid=target_pid,
+            payload=payload,
+            severity=severity,
+        )
+
     # --- internals --------------------------------------------------------------
 
     def _require(self, session_id: str) -> _Session:

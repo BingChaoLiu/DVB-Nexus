@@ -261,11 +261,19 @@ class TestTsPayloadContract:
         }
         validate_payload("ts.continuity_error", payload)  # must not raise
 
-    def test_non_ts_registered_payload_has_no_extra_constraint(self):
-        # MVP payload schemas beyond ts.* source/confidence are registered
-        # later (SPEC-301 section 13); registry only demands an object.
-        validate_payload("fault.injected", {})  # must not raise
+    def test_still_schemaless_registered_payload_has_no_extra_constraint(self):
+        # MVP payload schemas beyond ts.*/diagnosis.*/fault.*/recovery.* are
+        # registered with their owning tickets (SPEC-301 section 13); the
+        # still-schemaless families only demand an object.
         validate_payload("simulation.run_progress", {"progress": 0.5})
+        validate_payload("topology.state_changed", {})
+        validate_payload("scenario.step_started", {})
+
+    def test_fault_registered_payload_shape_is_enforced(self):
+        # ticket #56 registered the SPEC-204 §9 fault.* payload schema —
+        # the family is no longer schemaless.
+        with pytest.raises(EnvelopeError):
+            validate_payload("fault.injected", {})
 
     def test_payload_must_be_a_mapping(self):
         with pytest.raises(EnvelopeError):

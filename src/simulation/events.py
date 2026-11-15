@@ -122,6 +122,51 @@ class SimulationEventEmitter:
             severity=severity,
         )
 
+    def fault_event(
+        self,
+        event_type: str,
+        session_id: str,
+        run_id: str,
+        *,
+        virtual_time_ns: int,
+        fault_id: str,
+        fault_type: str,
+        target_node_id: str | None,
+        target_pid: int | None,
+        payload: Mapping[str, Any] | None = None,
+        severity: str = "info",
+    ) -> dict[str, Any] | None:
+        """Build one ``fault.*`` lifecycle event and publish it (ticket #56).
+
+        SPEC-204 §9: ``scope.run_id`` attribution, correlation addressing by
+        ``fault_id`` + ``node_id`` + ``pid`` (the ADR-0006 decision 3 dual
+        target form), and the registered SPEC-204 §9 payload shape
+        (fault_id / fault_type / injection index / before-after summary
+        pointer). Everything else follows the shared ``_emit`` discipline:
+        parse_envelope is a construction guarantee, ``journal_seq`` stays
+        unassigned (gateway-stamped), and the fault family is
+        DELIVERY_PROTECTED (registry constant — never coalesced or dropped).
+        """
+        return self._emit(
+            event_type,
+            session_id=session_id,
+            run_id=run_id,
+            virtual_time_ns=virtual_time_ns,
+            payload=dict(payload or {}),
+            severity=severity,
+            correlation={
+                "trace_id": None,
+                "span_id": None,
+                "parent_event_id": None,
+                "fault_id": fault_id,
+                "node_id": target_node_id,
+                "port_id": None,
+                "service_id": None,
+                "pid": target_pid,
+            },
+            tags=["simulation", "fault"],
+        )
+
     # --- internals ------------------------------------------------------------
 
     def _emit(
@@ -133,6 +178,8 @@ class SimulationEventEmitter:
         virtual_time_ns: int,
         payload: dict[str, Any],
         severity: str,
+        correlation: Mapping[str, Any] | None = None,
+        tags: list[str] | None = None,
     ) -> dict[str, Any] | None:
         document = {
             "schema_version": "1.0",
@@ -160,10 +207,10 @@ class SimulationEventEmitter:
                     "clock_epoch": 0,
                 },
             },
-            "correlation": None,
+            "correlation": dict(correlation) if correlation is not None else None,
             "severity": severity,
             "payload": payload,
-            "tags": ["simulation"],
+            "tags": tags if tags is not None else ["simulation"],
         }
         # Schema conformance is a construction guarantee (REQ-SIM-200-007):
         # refuse to hand a non-conforming document to the sink.

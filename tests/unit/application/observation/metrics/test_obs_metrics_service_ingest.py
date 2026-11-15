@@ -84,7 +84,12 @@ def test_non_simulation_events_do_not_fabricate_virtual_time_samples() -> None:
         record(
             raw_envelope(
                 event_type="fault.injected",
-                payload={"fault_id": "f-1", "fault_type": "PAT_MISSING"},
+                payload={
+                    "fault_id": "f-1",
+                    "fault_type": "PAT_MISSING",
+                    "injection_index": 0,
+                    "expected_observations": ["ts.psi_section_observed"],
+                },  # SPEC-204 §9 shape (ticket #56 registry branch)
             ),
             journal_seq=1,
         )
