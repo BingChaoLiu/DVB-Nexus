@@ -15,7 +15,10 @@ CI 首跑红一轮）。
    tokens（#47 达 15.7M），11 票重复摊销远贵于一次前置；简报顺带固化
    环境纪律（worktree 检查姿势、house 测试惯用法）与 seam 图，供接口
    契约切分（下一步）直接引用。小票图（<6 票）跳过，sparse pointers
-   直读权威源即可。
+   直读权威源即可。落点约定（M4 retro finding B5）：仓库同级
+   `dvb-nexus-m<N>-brief/BRIEF.md`（M4 先例
+   `D:\Document\Project\dvb-nexus-m4-brief\BRIEF.md`，790 行一次
+   21.5M 摊销九票）；milestone 收尾后保留作历史，不进 repo。
 3. **接口契约先行**：派发前为并行票切好互斥 OWN / NOT-TOUCH 文件面；
    同一文件的不同 section（pyproject 的运行时依赖 vs 测试配置）也须唯一
    归属。票面与派发词冲突时，orchestrator 裁定并留档；派发词中关于
@@ -50,6 +53,12 @@ CI 首跑红一轮）。
   会被当新发现重审（M3 retro：spec 轴四处检索找不到任何 REPORT）。
   分支 commit 与报告内容一致；orchestrator 的汇总留档归 tracking
   issue。
+- **下游接口清单交接**（M4 retro finding B7）：IMPLEMENTATION_REPORT
+  首节固定「下游接口清单」（类/函数签名 + payload/fixture 键契约 +
+  组合根绑定姿势）；orchestrator 派下游票时把上游清单**原文贴进派工
+  词**并明示「不重读上游全报告」——M4 实测：带现成清单的后票
+  （#55 13.7M/#58 32.6M）显著低于中途链票自行检索的（#53 65M/
+  #56 57M）。
 - worktree 内跑检查：pytest 经 pyproject `pythonpath` 自愈；
   `lint-imports` 必须 `PYTHONPATH=$PWD/src`（见
   `docs/agents/windows-shell.md`「Worktree 内跑检查」）。

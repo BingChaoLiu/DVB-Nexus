@@ -645,7 +645,7 @@ def test_generator_clean_baseline():
         if name == "ts.generator" or name.startswith("ts.generator.")
     }
     for name in purged:
-        del sys.modules[name]
+        del sys.modules[name]  # sysmodules-ok: purge for fresh-import isolation
     try:
         importlib.import_module("ts.generator")
         importlib.import_module("ts.generator.generator")
@@ -672,8 +672,8 @@ def test_generator_clean_baseline():
             for name in list(sys.modules)
             if name == "ts.generator" or name.startswith("ts.generator.")
         ]:
-            del sys.modules[name]
-        sys.modules.update(purged)
+            del sys.modules[name]  # sysmodules-ok: snapshot-restore pair
+        sys.modules.update(purged)  # sysmodules-ok: restore pre-check modules
 
 
 # --- REQ-TS-108-007: analysis_only profile boundary ----------------------------

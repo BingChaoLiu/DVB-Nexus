@@ -63,6 +63,7 @@ Issue both sub-agent calls together, in the foreground, and aggregate the report
 
 - The full diff command and commit list.
 - The list of standards-source files you found in step 3, **plus the smell baseline from step 3** pasted in full (the sub-agent has no other access to it).
+- The **report-consistency spot check** (repo discipline, twice-bitten: M3 "REPORT 检索不到" → 落票纪律；M4 #53 偏差 11 "声称全绑定" vs 未绑 verification_port/event_sink): sample 2-3 originating issues' posted reports/comments and grep-verify concrete wiring/binding/inventory claims against the diff (claimed constant exists, claimed route bound, claimed file list matches). Report mismatches under a dedicated "报告一致性" heading.
 - The brief: "Report, per file/hunk where relevant, (a) every place the diff violates a documented standard: cite the standard (file + the rule); and (b) any baseline smell you spot: name it and quote the hunk. Distinguish hard violations from judgement calls: documented-standard breaches can be hard, but baseline smells are always judgement calls, and a documented repo standard overrides the baseline. Skip anything tooling enforces. Under 400 words."
 
 **Spec sub-agent prompt** should include:

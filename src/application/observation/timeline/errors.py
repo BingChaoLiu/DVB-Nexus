@@ -10,17 +10,21 @@ The timeline query/export face reports failures with the canonical
   deleted). Non-retryable: the client restarts iteration from page one.
   #53 later reuses this exact code when wiring REST pagination.
 - ``OBS_QUERY_RANGE_TOO_LARGE`` — SPEC-303 §9 reuses the SPEC-300 §13
-  code for over-limit time ranges. The constant is declared here so the
-  timeline service can raise it; the formal #53 route-wiring registration
-  covers the REST mapping (this module does not pre-empt it).
+  code for over-limit time ranges. NOT redeclared: the raise point was
+  first registered by ticket #50 in
+  :mod:`application.observation.metrics.errors`; the timeline service
+  imports that constant object (M4 retro finding A3 — a spelling fork
+  cannot silently unhook the shared code). The formal #53 route-wiring
+  registration covers the REST mapping.
 - ``OBS_INVALID_TIME_DOMAIN`` — NOT redeclared: the code lives in the
   single shared vocabulary :class:`domain.observation.EnvelopeErrorCode`
   (the time-domain guard raises it); the timeline service reuses
   ``code.value`` for its own mixed-domain refusals.
 """
 
+from application.observation.metrics.errors import OBS_QUERY_RANGE_TOO_LARGE
+
 OBS_CURSOR_EXPIRED = "OBS_CURSOR_EXPIRED"
-OBS_QUERY_RANGE_TOO_LARGE = "OBS_QUERY_RANGE_TOO_LARGE"
 
 
 class TimelineError(Exception):
