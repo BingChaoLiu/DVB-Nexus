@@ -45,6 +45,12 @@ import { useSessionStream } from "./stream/useSessionStream";
 import { VerifyResultCard } from "./verify/VerifyResultCard";
 import { VerifyRunForm, type VerifyRunPayload } from "./verify/VerifyRunForm";
 import { EmptyState } from "../../components/ui";
+// SPEC-405 CLI console (ticket #66, approved R1): minimal additive mount —
+// one import + one tab state + conditional wrap. The stream tab renders the
+// SPEC-403 panels exactly as before; the CLI tab renders the #66-owned
+// section. routes.tsx top-level three-area nav is deliberately unchanged.
+import { CliConsoleSection } from "./cli-console/CliConsoleSection";
+import "./cli-console/cli-console.css";
 import "./monitor.css";
 
 /** Feature-local canonical-convention keys (see file header note). */
@@ -107,6 +113,10 @@ function SessionGuide({ onTrack }: { onTrack: (sessionId: string) => void }) {
 function MonitorPage({ sessionId, onUntrack }: { sessionId: string; onUntrack: () => void }) {
   const queryClient = useQueryClient();
   const wsStatus = useSessionStream(sessionId);
+  // SPEC-405 mount (R1): stream = the SPEC-403 panels (default, unchanged);
+  // cli = the #66 CLI console section. Only the tab bar + conditional wrap
+  // below are additive; every existing panel is untouched.
+  const [section, setSection] = useState<"stream" | "cli">("stream");
 
   // --- server state (all queries session-scoped) ---------------------------
   const snapshotQuery = useQuery({
@@ -267,6 +277,29 @@ function MonitorPage({ sessionId, onUntrack }: { sessionId: string; onUntrack: (
         </button>
       </header>
 
+      <div className="dvb-mon-section-tabs" role="tablist" aria-label="monitor sections">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={section === "stream"}
+          onClick={() => setSection("stream")}
+        >
+          Stream Monitor
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={section === "cli"}
+          onClick={() => setSection("cli")}
+        >
+          CLI 对照
+        </button>
+      </div>
+
+      {section === "cli" ? (
+        <CliConsoleSection sessionId={sessionId} />
+      ) : (
+        <>
       <Panel title="运行控制">
         <ControlBar
           lifecycle={(snapshotQuery.data?.lifecycle as LifecycleWire | undefined) ?? null}
@@ -345,6 +378,8 @@ function MonitorPage({ sessionId, onUntrack }: { sessionId: string; onUntrack: (
       <Panel title="journal 尾窗">
         <JournalTail sessionId={sessionId} />
       </Panel>
+        </>
+      )}
     </div>
   );
 }
