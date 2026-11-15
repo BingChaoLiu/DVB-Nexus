@@ -39,6 +39,12 @@ AST 检测器（风格与 data_rules 一致：违规形态、`io-ok:` 逐行豁�
   出现即 review 关注点）。动态参数的 `connect(path)` 逃逸启发式（保守
   边界，同 data_rules 阈值哲学）。
 - 墙钟断言归确定性纪律（§5/§8 确定性项），不在本检测器范围。
+- **跨层规则（M4 retro finding A2）**：`io_sys_modules_write` 标记任意层的
+  直接 `sys.modules` 写（`del`/下标赋值/`pop`/`clear`/`update`/
+  `setdefault`）——purge 不恢复会铸造重复类对象、按导入顺序污染全树
+  （M4 挂账 1 根因）。豁免 `# sysmodules-ok: <理由>`；标准形态 =
+  快照 + finally 恢复对。门：`tests/integration/test_sys_modules_tree_rules.py`
+  扫描整个 `tests/` 树（不限 unit 层）。
 
 ## 2. markers（SPEC-505 §5，全部 strict 注册于 pyproject）
 

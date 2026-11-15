@@ -34,25 +34,33 @@ from application.errors import (
     SemanticValidationError,
     ServiceUnavailableError,
 )
+from application.observation.errors import OBS_STORAGE_UNAVAILABLE
 from application.observation.metrics.errors import (
     OBS_METRIC_CARDINALITY_EXCEEDED,
     OBS_METRIC_DIMENSION_REJECTED,
     OBS_METRIC_NOT_FOUND,
+    OBS_QUERY_RANGE_TOO_LARGE,
     MetricError,
 )
 from application.observation.timeline.errors import OBS_CURSOR_EXPIRED, TimelineError
+from domain.observation.errors import EnvelopeErrorCode
 
 #: SPEC-300 §13 reused codes (the query plane raises them; per-code
 #: registration text lives in SPEC-300 §13 via the #53 scoped append).
-OBS_STORAGE_UNAVAILABLE = "OBS_STORAGE_UNAVAILABLE"
-OBS_QUERY_RANGE_TOO_LARGE = "OBS_QUERY_RANGE_TOO_LARGE"
-#: Clock-domain semantic failures (missing/mixed/misplaced query shapes) —
-#: the #51 timeline precedent for domain-shape misuse (422 row).
-OBS_INVALID_TIME_DOMAIN = "OBS_INVALID_TIME_DOMAIN"
-#: ``OBS_CURSOR_EXPIRED`` is NOT redeclared: the code is registered by
-#: ticket #51 in :mod:`application.observation.timeline.errors` (imported
-#: above) — the query plane reuses the same constant object so a spelling
-#: fork cannot silently unhook the translation row (M4 review fix F1).
+#: None of these are re-typed literals — each imports its canonical
+#: constant object so a spelling fork cannot silently unhook the
+#: translation row (M4 retro finding A3):
+#: - ``OBS_STORAGE_UNAVAILABLE`` — registered by ticket #47 in
+#:   :mod:`application.observation.errors` (the shared plane vocabulary).
+#: - ``OBS_QUERY_RANGE_TOO_LARGE`` — raise point first registered by
+#:   ticket #50 in :mod:`application.observation.metrics.errors`.
+#: - ``OBS_INVALID_TIME_DOMAIN`` — the domain-shape vocabulary member
+#:   (:class:`domain.observation.EnvelopeErrorCode`, M3 #15 fix round);
+#:   the member is a ``str`` subclass so the translation comparison and
+#:   the guard's raise site share one object.
+#: - ``OBS_CURSOR_EXPIRED`` — registered by ticket #51 in
+#:   :mod:`application.observation.timeline.errors` (M4 review fix F1).
+OBS_INVALID_TIME_DOMAIN = EnvelopeErrorCode.OBS_INVALID_TIME_DOMAIN
 OBS_SCOPE_FORBIDDEN = "OBS_SCOPE_FORBIDDEN"
 
 

@@ -25,10 +25,21 @@ sources with :mod:`ast` (exact, no regex guessing) and reports
   documented unit-layer posture (no file I/O — see
   tests/unit/adapters/storage/test_journal.py); dynamic arguments escape
   the heuristic (conservative, like data_rules thresholds).
+- ``io_sys_modules_write`` — a direct ``sys.modules`` write (``del`` /
+  subscript assign / ``pop`` / ``clear`` / ``update`` / ``setdefault``).
+  This is state pollution, not I/O, so it is out of the unit-layer gate's
+  scope and carries its own **whole-tree** gate
+  (``tests/integration/test_sys_modules_tree_rules.py``): a purge without
+  restore mints duplicate class objects whose identity splits against
+  every pre-imported binding — order-dependent pollution (M4 retro
+  finding A2, root cause of 挂账 1). The sanctioned shape is a snapshot +
+  finally-restore pair, marked ``# sysmodules-ok:`` (grep-visible review
+  focus, same discipline as ``io-ok:``).
 
-Line-level waiver: a trailing/adjacent comment containing ``io-ok:``
-suppresses findings whose source span covers that line. Waivers must state
-a reason; they are grep-visible review focus points.
+Line-level waiver: a trailing/adjacent comment containing ``io-ok:`` (or,
+for the sys.modules rule, ``sysmodules-ok:``) suppresses findings whose
+source span covers that line. Waivers must state a reason; they are
+grep-visible review focus points.
 
 Out of scope (kept honest, not silently): wall-clock *assertions* are the
 §6/§8 determinism discipline, not the I/O rule, and are not detected here.
@@ -128,8 +139,10 @@ OS_IO_FUNCTIONS: frozenset[str] = frozenset(
 #: In-memory SQLite token (documented unit-layer posture: no file I/O).
 MEMORY_DB_TOKEN: str = ":memory:"
 
-#: Waiver comment token (must be followed by ": " + reason in practice).
+#: Waiver comment tokens (must be followed by ": " + reason in practice).
+#: ``sysmodules-ok`` covers only the sys.modules state-pollution rule.
 WAIVER_MARK: str = "io-ok"
+WAIVER_MARK_SYS_MODULES: str = "sysmodules-ok"
 
 RULE_IO_FIXTURE_REQUEST = "io_fixture_request"
 RULE_IO_BUILTIN_OPEN = "io_builtin_open"
@@ -138,6 +151,12 @@ RULE_IO_OS_FUNCTION = "io_os_function"
 RULE_IO_MODULE_IMPORT = "io_module_import"
 RULE_IO_MODULE_CALL = "io_module_call"
 RULE_IO_SQLITE_FILE = "io_sqlite_file"
+RULE_IO_SYS_MODULES_WRITE = "io_sys_modules_write"
+
+#: ``sys.modules`` mutator methods (call form of the write rule).
+SYS_MODULES_MUTATORS: frozenset[str] = frozenset(
+    {"pop", "popitem", "clear", "update", "setdefault"}
+)
 
 _PROCESS_FAMILIES = ("exec", "spawn")
 
@@ -158,7 +177,9 @@ class Violation:
 def _waived(lines: list[str], node: ast.AST) -> bool:
     """True if a waiver comment covers the node's span or the line right
     after it (parenthesized expressions carry their waiver on the next
-    line) — same window discipline as the data_rules engine."""
+    line) — same window discipline as the data_rules engine. The
+    sys.modules rule accepts the dedicated ``sysmodules-ok`` token (and,
+    for one-line write+restore pairs, ``io-ok``)."""
     start = getattr(node, "lineno", None)
     end = getattr(node, "end_lineno", None) or start
     if start is None:
@@ -166,7 +187,53 @@ def _waived(lines: list[str], node: ast.AST) -> bool:
     first = start - 1
     last = min(end, len(lines))  # end (1-based) inclusive == index end
     window = range(first, last + 1)
-    return any(0 <= offset < len(lines) and WAIVER_MARK in lines[offset] for offset in window)
+    marks = (WAIVER_MARK, WAIVER_MARK_SYS_MODULES)
+    return any(
+        0 <= offset < len(lines) and any(mark in lines[offset] for mark in marks)
+        for offset in window
+    )
+
+
+def _is_sys_modules_attribute(node: ast.AST) -> bool:
+    """True for the ``sys.modules`` attribute expression itself."""
+    return (
+        isinstance(node, ast.Attribute)
+        and isinstance(node.value, ast.Name)
+        and node.value.id == "sys"
+        and node.attr == "modules"
+    )
+
+
+def _classify_sys_modules_write(node: ast.AST) -> str | None:
+    """Rule name for direct ``sys.modules`` writes, else ``None``."""
+    if isinstance(node, ast.Delete):
+        if any(
+            isinstance(target, ast.Subscript) and _is_sys_modules_attribute(target.value)
+            for target in node.targets
+        ):
+            return RULE_IO_SYS_MODULES_WRITE
+        return None
+    if isinstance(node, ast.Assign):
+        targets: list[ast.AST] = list(node.targets)
+    elif isinstance(node, ast.AugAssign):
+        targets = [node.target]
+    elif isinstance(node, ast.Call):
+        func = node.func
+        if (
+            isinstance(func, ast.Attribute)
+            and func.attr in SYS_MODULES_MUTATORS
+            and _is_sys_modules_attribute(func.value)
+        ):
+            return RULE_IO_SYS_MODULES_WRITE
+        return None
+    else:
+        return None
+    if any(
+        isinstance(target, ast.Subscript) and _is_sys_modules_attribute(target.value)
+        for target in targets
+    ):
+        return RULE_IO_SYS_MODULES_WRITE
+    return None
 
 
 def _is_io_module_import(node: ast.AST) -> bool:
@@ -262,8 +329,19 @@ def find_io_violations(source: str, *, filename: str = "<memory>") -> list[Viola
                 findings.append(
                     Violation(filename, node.lineno, RULE_IO_MODULE_IMPORT, name)
                 )
+        elif isinstance(node, (ast.Delete, ast.Assign, ast.AugAssign)):
+            rule = _classify_sys_modules_write(node)
+            if rule and not _waived(lines, node):
+                findings.append(
+                    Violation(
+                        filename,
+                        node.lineno,
+                        rule,
+                        f"sys.modules write ({type(node).__name__})",
+                    )
+                )
         elif isinstance(node, ast.Call):
-            rule = _classify_call(node)
+            rule = _classify_sys_modules_write(node) or _classify_call(node)
             if rule and not _waived(lines, node):
                 findings.append(
                     Violation(filename, node.lineno, rule, ast.dump(node)[:60])
