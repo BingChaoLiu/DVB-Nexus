@@ -214,7 +214,8 @@ Python 包必须暴露协议级接口（名称经批准的 Change Request 才可
 - `OBS_INVALID_ENVELOPE` / `OBS_UNSUPPORTED_SCHEMA` / `OBS_UNSUPPORTED_EVENT_TYPE`
 - `OBS_PAYLOAD_TOO_LARGE` / `OBS_DUPLICATE_EVENT` / `OBS_STORAGE_UNAVAILABLE`
 - `OBS_QUERY_RANGE_TOO_LARGE` / `OBS_CURSOR_EXPIRED` / `OBS_SCOPE_FORBIDDEN`
-- `OBS_CONSUMER_LAGGING` / `OBS_METRIC_NOT_FOUND` / `OBS_INVALID_TIME_DOMAIN`
+- `OBS_CONSUMER_LAGGING` / `OBS_METRIC_NOT_FOUND`
+- `OBS_INVALID_TIME_DOMAIN`（跨时钟域时间戳做比较/算术的入口显式拒绝，non-retryable；§6 时钟模型规则 1/3/5，REQ-OBS-300-004 + orchestrator #15 修复轮 scoped append 实现登记）
 - `OBS_QUEUE_FULL`（gateway 有界摄入队列已满且事件不可合并限流时的显式拒绝，retryable；§8 背压条款，[缝合批准 #12] + ticket #47 实现登记）
 
 重复提交在 API 边界是幂等成功，必须返回原 `journal_seq`。
