@@ -24,7 +24,7 @@ requirements: [REQ-UI-405-001, REQ-UI-405-002, REQ-UI-405-003]
 
 ### 2.1 In Scope
 
-- CLI 对照台页面实体（`src/features/monitor/cli-console/`，SPEC-400 §4.1 目录契约下本票 OWN 的 monitor 区子面；经路由注册表 additive 行挂载，见 §4.1）。
+- CLI 对照台页面实体（`src/features/monitor/cli-console/`，SPEC-400 §4.1 目录契约下本票 OWN 的 monitor 区子面；经 Monitor 页 tab/段切换挂载，见 §4.1）。
 - 调用记录列表（REQ-UI-405-001）：`GET /api/v1/sessions/{session_id}/tsduck/calls` 消费；`TSDuckCallDTO[]` 九字段 + `run_id` 逐列呈现（wire 字段名 snake_case 原样，SPEC-500 §4.8 表为准）；按 `started_at_utc_ms` 升序（服务端序，前端不重排）；可选 `run_id` query 过滤透传；空态 / 404 `SIM_SESSION_NOT_FOUND` / 501 未绑定三种非数据态的诚实区分呈现。
 - 调用详情（REQ-UI-405-002）：选中记录的九字段全量展开；`stderr_text` 逐字原样等宽渲染（后端已完成 GBK→UTF-8 展示解码，前端禁再解析/再解码/trim）；`exit_code` 原值与「exit 0 ≠ 有效报告」内容门标注（SPEC-308 §9 `TSDUCK_JSON_GATE_FAILED` 家族语义）**并列显式呈现**，禁用单一对号/叉号暗示。
 - source 徽章四值过滤（REQ-UI-405-003）：`generator / internal_parser / tsduck / hardware` 四值闭集过滤控件 + 每行来源徽章；来源身份按数据通道指派（§7.1），MVP 数据面唯一通道为 tsduck calls 面 ⇒ 全部记录徽章 `source=tsduck`；其余三值可选、恒诚实空态；**hardware MVP 不出现任何记录**（票面明文）。
@@ -55,9 +55,9 @@ requirements: [REQ-UI-405-001, REQ-UI-405-002, REQ-UI-405-003]
 
 ### 4.1 路由区与页面骨架
 
-页面实体挂载于 Monitor 路由区子路径 `/monitor/cli`，会话作用域 URL 约定与 Monitor 区一致（`/monitor/cli?session=<id>`；无 `session` 参数时呈现会话输入引导态）。注册方式 = `src/app/routes.tsx` 路由注册表 **additive 一行**（SPEC-400 §4.2「adding a route = one entry + one import」裁定 C 模式；导航顺序置于 Monitor 之后）；组件实体全量位于 `src/features/monitor/cli-console/`（本票 OWN 子目录），不改动 Stream Monitor 既有页面文件。
+页面实体挂载于 Monitor 路由区内，作为 `/monitor?session=<id>` 页面的**二档 tab/段切换**（「Stream Monitor」/「CLI 对照」，默认前者；无 `session` 参数时会话引导态共用，CLI 档在跟踪会话后可用）。注册方式 = `src/features/monitor/Region.tsx` **最小 additive 编辑**（tab 状态 + 条件渲染 + 一条 import；#66 批准裁定 R1，ticket #15 批准记录——`routes.tsx` 顶层三区导航结构保持不变）；CLI 组件实体全量位于 `src/features/monitor/cli-console/`（本票 OWN 子目录），Stream Monitor 既有面板 JSX 零改动（仅外层条件包裹）。
 
-页面骨架：顶部 source 过滤条（四值闭集，含「全部」视图）→ 调用记录列表（九字段列 + 来源徽章列 + 行展开/选中进详情）→ 详情面板（九字段全量 + stdout/stderr 文本块 + 内容门标注区）。单页无子路由；详情以行选中态呈现。
+页面骨架（CLI 档）：顶部 source 过滤条（四值闭集，含「全部」视图）→ 调用记录列表（九字段列 + 来源徽章列 + 行选中进详情）→ 详情面板（九字段全量 + stdout/stderr 文本块 + 内容门标注区）。单页无子路由；详情以行选中态呈现。
 
 ### 4.2 调用记录列表（REQ-UI-405-001）
 
@@ -153,7 +153,7 @@ type CliSourceValue = "generator" | "internal_parser" | "tsduck" | "hardware";  
 
 ## 9. 资源约束
 
-- 目录契约：全部新文件位于 `src/features/monitor/cli-console/`；共享面改动仅两处 additive：`src/app/routes.tsx` 一行注册（裁定 C 模式）、共享 `keys.ts` additive 行（候选，可延后）。禁动 Stream Monitor 既有文件（#64 落面 NOT-TOUCH）、禁动 `src/api/**`。
+- 目录契约：全部新文件位于 `src/features/monitor/cli-console/`；共享面改动 = `Region.tsx` 最小 additive 挂载编辑（tab 状态 + 条件渲染 + import 一条，裁定 R1；tab 切换不改变任何既有面板行为）、共享 `keys.ts` additive 行（候选，可延后）。禁动 `src/api/**`、禁动 Stream Monitor 既有面板 JSX（#64 落面，本票仅在 Region.tsx 做 R1 批准的最小包裹编辑并申报）。
 - 类型权威：`TSDuckCallDTO` 用生成类型（schema.gen），禁手写 mirror（#80 起模型可达，#61 机制）；`CliSourceValue` 闭集为本票 OWN 常量。
 - 无新增 npm 依赖；无新二进制资产（check_specs UTF-8 扫描面保持零风险）。
 - 测试纪律：断言形状（wire 字段名/枚举串/排序语义/文案锚），禁整页 DOM 快照（tests/README §6）。
@@ -165,7 +165,7 @@ type CliSourceValue = "generator" | "internal_parser" | "tsduck" | "hardware";  
 - **exit 0 标注可见性**（REQ-UI-405-002）：`exit_code: 0` fixture ⇒ 内容门标注区文本可见；断言不存在唯一性成败暗示（无 ✓/✗/「成功」单一标签绑定 exit 0）。
 - **四值过滤矩阵**（REQ-UI-405-003）：`SourceTaggedCall` fixture 覆盖四值 ⇒ 谓词矩阵逐值断言（含 "all"）；hardware 选中 ⇒ 诚实空态 + 「MVP 不产生记录」注明；空态文案断言不含「干净」暗示词。
 - **非数据态**（REQ-UI-405-001）：200+`[]` / 404 `SIM_SESSION_NOT_FOUND` / 501 / 可重试错误 四态文案可区分断言。
-- E2E（`e2e/cli-console.spec.ts`）：真实后端诚实空态冒烟（createStartedSession → `/monitor/cli?session=<id>` → 空态文案可见）；数据态交互经 Playwright route mock 注入九字段 fixture（MVP 生产栈无真实 TSDuck 数据，mock 层仅用于 UI 交互冒烟，契约锚仍归组件测试）。八步闭环共享 spec 不动（无 CLI 步）。
+- E2E（`e2e/cli-console.spec.ts`）：真实后端诚实空态冒烟（createStartedSession → `/monitor?session=<id>` → 切「CLI 对照」tab → 空态文案可见）；数据态交互经 Playwright route mock 注入九字段 fixture（mock 态在 spec 内显式标注；MVP 生产栈无真实 TSDuck 数据，mock 层仅用于 UI 交互冒烟，契约锚仍归组件测试）。八步闭环共享 spec 不动（无 CLI 步）。
 
 ## 11. 验收标准
 
@@ -186,6 +186,6 @@ type CliSourceValue = "generator" | "internal_parser" | "tsduck" | "hardware";  
 ## 13. 兼容性与交付要求
 
 - SPEC-500 §4.8 路由/DTO 为冻结面：本票零后端改动、零 `src/api/**` 改动；若发现共享面缺陷，上报不擅改（SPEC-005 协议）。
-- 路由注册 additive（裁定 C）；`routes.tsx` 数组追加一行 + lazy import，导航顺序 Monitor 之后。
+- Monitor 页挂载 additive（裁定 R1）：`Region.tsx` tab 状态 + 条件渲染 + import 一条，`routes.tsx` 顶层三区导航不变（SPEC-400 §4.2 结构保持）。
 - 交付物：SPEC-405 文本（本文件）、INDEX 行链接、`src/features/monitor/cli-console/**`、E2E spec（可选面）、IMPLEMENTATION_REPORT（首节下游接口清单 = 无直接下游，写明共享面接触点与复用导出）贴票 #66。
 - 后续增强留档：分页（additive 演进，SPEC-500 §4.8 同款路径稳定承诺）、多选过滤、generator 来源 artifact 浏览段（若获 run 列举面后重评）。
