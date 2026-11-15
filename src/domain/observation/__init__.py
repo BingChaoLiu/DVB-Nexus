@@ -16,6 +16,15 @@ Also hosts the run-scoped shared vocabulary every consumer may import
 decision 3) and the SPEC-003 section 3 status vocabulary.
 """
 
+from domain.observation.alert_record import (
+    AlertRecord,
+    AlertScope,
+    AlertSeverity,
+    AlertState,
+    AlertSuppression,
+    HealthDimension,
+    HealthStatus,
+)
 from domain.observation.artifact import ArtifactKind, TSArtifact
 from domain.observation.envelope import (
     Correlation,
@@ -83,11 +92,18 @@ from domain.observation.timeline import (
 )
 
 __all__ = [
+    "AlertRecord",
+    "AlertScope",
+    "AlertSeverity",
+    "AlertState",
+    "AlertSuppression",
     "ArtifactKind",
     "BASELINE_DIMENSIONS",
     "AggregationOperation",
     "CheckpointRecord",
     "ConfidenceKind",
+    "HealthDimension",
+    "HealthStatus",
     "HistogramSpec",
     "MetricDefinition",
     "MetricProvenance",
