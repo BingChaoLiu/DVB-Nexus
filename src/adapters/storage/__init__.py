@@ -39,6 +39,7 @@ from adapters.storage.artifact_store import (
     SinkCommit,
     StoredRef,
 )
+from adapters.storage.checkpoints import CheckpointStore, SqliteCheckpointStore
 from adapters.storage.db import BUSY_TIMEOUT_MS, connect, migrate
 from adapters.storage.errors import (
     InvalidEnvelopeError,
@@ -78,6 +79,7 @@ __all__ = [
     "ArtifactStore",
     "ArtifactTooLargeError",
     "ArtifactWriteSink",
+    "CheckpointStore",
     "EventJournal",
     "EventRow",
     "InvalidEnvelopeError",
@@ -85,6 +87,7 @@ __all__ = [
     "RunRepository",
     "SinkCommit",
     "SqliteArtifactRepository",
+    "SqliteCheckpointStore",
     "SqliteEventJournal",
     "SqliteRunRepository",
     "StoredRef",

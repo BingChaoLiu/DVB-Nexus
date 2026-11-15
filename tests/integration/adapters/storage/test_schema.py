@@ -146,13 +146,15 @@ def test_fresh_database_reaches_schema_v1(tmp_path: Path) -> None:
     conn = db.connect(tmp_path / "db.sqlite3")
     try:
         assert conn.execute("PRAGMA user_version").fetchone()[0] == 0
-        assert db.migrate(conn) == 1  # one-click upgrade, REQ-PLT-502-001
+        # ticket #47 added migration 002 (consumer_checkpoints, SPEC-300 §7);
+        # the current schema version is therefore 2.
+        assert db.migrate(conn) == 2  # one-click upgrade, REQ-PLT-502-001
     finally:
         conn.close()
     # Version state is durable across connections.
     conn = db.connect(tmp_path / "db.sqlite3")
     try:
-        assert conn.execute("PRAGMA user_version").fetchone()[0] == 1
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == 2
     finally:
         conn.close()
 

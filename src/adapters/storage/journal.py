@@ -82,7 +82,9 @@ class SqliteEventJournal(EventJournal):
         try:
             self._conn.execute("BEGIN IMMEDIATE")
         except sqlite3.Error as exc:
-            raise StorageWriteFailure("cannot begin the journal append transaction") from exc
+            raise StorageWriteFailure(
+                f"cannot begin the journal append transaction ({exc})"
+            ) from exc
         try:
             seq = self._next_seq(columns.session_id)
             stamped_json = _serialize_stamped(envelope, seq)
