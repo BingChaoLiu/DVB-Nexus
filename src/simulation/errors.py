@@ -146,6 +146,23 @@ SIM_TS_GENERATION_FAILED = "SIM_TS_GENERATION_FAILED"
 #: SPEC-203 section 8 — ArtifactSink write failed (run failed).
 SIM_TS_SINK_IO_ERROR = "SIM_TS_SINK_IO_ERROR"
 
+# --- SPEC-206 section 8 (ticket #56) -------------------------------------------
+
+#: SPEC-206 §8 — pass criteria reference an unknown criterion kind
+#: (outside the §7 MVP closed enum) or a malformed criterion declaration.
+SIM_VERIF_CRITERION_INVALID = "SIM_VERIF_CRITERION_INVALID"
+
+#: SPEC-206 §8 — mandatory evidence missing: per-criterion NOT_EVALUATED
+#: → overall INCONCLUSIVE ("没证据" is its own conclusion, §4).
+SIM_VERIF_EVIDENCE_MISSING = "SIM_VERIF_EVIDENCE_MISSING"
+
+#: SPEC-206 §8 — candidate run cannot be attributed to the scenario context
+#: (no journal events for the run in the targeted session) → 拒绝.
+SIM_VERIF_RUN_MISMATCH = "SIM_VERIF_RUN_MISMATCH"
+
+#: SPEC-206 §8 — candidate run IS the baseline → INCONCLUSIVE (§5 item 4).
+SIM_VERIF_BASELINE_REUSED = "SIM_VERIF_BASELINE_REUSED"
+
 
 class SimulationError(Exception):
     """Base class for every error owned by the simulation package.
@@ -320,3 +337,22 @@ class TSSinkIOError(SimulationError):
     """``SIM_TS_SINK_IO_ERROR``: ArtifactSink 写失败（Run failed）."""
 
     code = SIM_TS_SINK_IO_ERROR
+
+
+# --- SPEC-206 section 8 exceptions (ticket #56) --------------------------------
+
+
+class VerificationError(SimulationError):
+    """Base class for the recovery-verification error family (SPEC-206 §8)."""
+
+
+class VerificationCriterionInvalidError(VerificationError):
+    """``SIM_VERIF_CRITERION_INVALID``: 判据 kind 不在 §7 闭集（拒绝判定）."""
+
+    code = SIM_VERIF_CRITERION_INVALID
+
+
+class VerificationRunMismatchError(VerificationError):
+    """``SIM_VERIF_RUN_MISMATCH``: 候选 Run 与场景上下文不匹配（拒绝）."""
+
+    code = SIM_VERIF_RUN_MISMATCH

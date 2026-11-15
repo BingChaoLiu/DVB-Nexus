@@ -57,6 +57,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import inspect
+import json
 import threading
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -66,6 +67,8 @@ from typing import Any, Callable, Literal, Mapping, Protocol
 
 from adapters.storage.artifact_errors import ArtifactNotFoundError
 from adapters.storage.artifact_store import ArtifactStore, SinkCommit
+from faults.errors import SIM_FAULT_EXEC_FAILED, FaultExecutionError
+from faults.targets import parse_target_id
 from simulation.clock import SimulationClockConfig
 from simulation.errors import (
     SIM_TS_CANCELLED,
@@ -582,6 +585,11 @@ class TSRuntime:
             # run face) and emit ``run_started``.
             run_view = await self._runtime.start_run(prepared.session_id)
             run_id = run_view.run_id
+            if prepared.fault_plan:
+                # SPEC-204 §8.1: DEFINED = prepare validation passed — the
+                # validated plan is now SCHEDULED on this run (one
+                # ``fault.injected`` per plan fault, scope.run_id attributed).
+                self._emit_plan_injected(prepared, run_id)
 
         cancel_flag = threading.Event()
         self._cancel_flags[run_id] = cancel_flag
@@ -610,6 +618,15 @@ class TSRuntime:
             self._cancel_flags.pop(run_id, None)
 
         artifacts = self._build_artifact_refs(prepared, sink, outcome)
+        if self._runtime is not None and prepared.fault_plan:
+            # SPEC-204 §8.1 terminal states: APPLIED confirmations (L1, from
+            # the §8.2 mutation-log attribution) and the REMOVED window close
+            # at run end. A FAILED run leaves the fault in the FAILED state —
+            # no applied/cleared (the fault_inactive baseline anchor stays
+            # open on failed baseline runs by construction).
+            self._emit_fault_terminal_events(
+                prepared, run_id, outcome.status, artifacts, outcome
+            )
         await self._close_run(
             prepared.session_id,
             run_id,
@@ -688,6 +705,187 @@ class TSRuntime:
                 )
             )
         return artifacts
+
+    # --- fault.* emission points (ticket #56, SPEC-204 §8/§9) -----------------------
+
+    @staticmethod
+    def _fault_addressing(fault: FaultDefinition) -> tuple[str | None, int | None, int]:
+        """(node_id, pid, injection_index) for one plan fault.
+
+        The target slug is prepare-validated (AC-204-01); the defensive
+        ``None`` fallback only keeps a malformed slug from breaking an
+        emission. ``session_start`` opens its window at shared-frame
+        index 0 (ADR-0007 item 3).
+        """
+        try:
+            target = parse_target_id(fault.target_id)
+            node_id: str | None = target.node_id
+            pid: int | None = target.pid
+        except ValueError:
+            node_id, pid = None, None
+        injection_index = (
+            0
+            if fault.activation.kind == "session_start"
+            else fault.activation.packet_index or 0
+        )
+        return node_id, pid, injection_index
+
+    def _emit_plan_injected(self, prepared: PreparedTSRun, run_id: str) -> None:
+        """One ``fault.injected`` (SCHEDULED) per prepare-validated fault.
+
+        Fired right after the run opens: the validated plan is now bound to
+        a run identity, so the SCHEDULED state is observable per run and
+        scope.run_id attribution holds (SPEC-204 §9).
+        """
+        for fault in prepared.fault_plan:
+            node_id, pid, injection_index = self._fault_addressing(fault)
+            self._emit_fault_event_safe(
+                prepared.session_id,
+                run_id,
+                "fault.injected",
+                fault,
+                node_id,
+                pid,
+                {
+                    "fault_id": fault.fault_id,
+                    "fault_type": fault.fault_type,
+                    "injection_index": injection_index,
+                    "expected_observations": list(fault.expected_observations),
+                },
+            )
+
+    def _emit_fault_terminal_events(
+        self,
+        prepared: PreparedTSRun,
+        run_id: str,
+        status: str,
+        artifacts: list[ArtifactRef],
+        outcome: "_RunOutcome",
+    ) -> None:
+        """APPLIED confirmations + the REMOVED window close (run end).
+
+        ``fault.applied`` (L1 only) is attributed per fault from the §8.2
+        mutation-log document the tee partner produced — the runtime never
+        re-derives fault semantics. Completed AND cancelled runs close their
+        windows (REMOVED at run end, SPEC-204 §8.1); a failed run leaves the
+        fault FAILED (no applied/cleared).
+        """
+        log_artifact_id = next(
+            (ref.artifact_id for ref in artifacts if ref.kind == ARTIFACT_KIND_LOG),
+            None,
+        )
+        for fault in prepared.fault_plan:
+            node_id, pid, injection_index = self._fault_addressing(fault)
+            summary = outcome.fault_lifecycle.get(fault.fault_id)
+            if status in ("completed", "cancelled") and summary and summary.get(
+                "applied_packet_indexes"
+            ):
+                payload = {
+                    "fault_id": fault.fault_id,
+                    "fault_type": fault.fault_type,
+                    "injection_index": injection_index,
+                    "applied_packet_indexes": list(
+                        summary["applied_packet_indexes"]
+                    ),
+                }
+                if log_artifact_id is not None:
+                    payload["mutation_log_ref"] = log_artifact_id
+                self._emit_fault_event_safe(
+                    prepared.session_id,
+                    run_id,
+                    "fault.applied",
+                    fault,
+                    node_id,
+                    pid,
+                    payload,
+                )
+            if status in ("completed", "cancelled"):
+                self._emit_fault_event_safe(
+                    prepared.session_id,
+                    run_id,
+                    "fault.cleared",
+                    fault,
+                    node_id,
+                    pid,
+                    {
+                        "fault_id": fault.fault_id,
+                        "fault_type": fault.fault_type,
+                        "injection_index": injection_index,
+                        "cleared_reason": "run_end",
+                    },
+                )
+
+    def _emit_fault_event_safe(
+        self,
+        session_id: str,
+        run_id: str,
+        event_type: str,
+        fault: FaultDefinition,
+        node_id: str | None,
+        pid: int | None,
+        payload: dict[str, Any],
+    ) -> None:
+        """Emission wrapper that never breaks the run's SPEC-203 outcome.
+
+        The gateway (DELIVERY_PROTECTED handling) is the authoritative
+        non-drop point; this guard only covers the session-teardown race
+        (a vanished session between the run face and an emission), which is
+        recorded as the ticket #56 MVP posture.
+        """
+        try:
+            self._runtime.emit_fault_event(  # type: ignore[union-attr]
+                session_id,
+                run_id,
+                event_type,
+                fault_id=fault.fault_id,
+                fault_type=fault.fault_type,
+                target_node_id=node_id,
+                target_pid=pid,
+                payload=payload,
+            )
+        except Exception:  # noqa: BLE001 — teardown race only
+            pass
+
+    def _schedule_fault_activated(
+        self,
+        payload: "_RunPayload",
+        fault: FaultDefinition,
+        node_id: str | None,
+        pid: int | None,
+    ) -> None:
+        """Marshal one ``fault.activated`` to the event loop (ACTIVE).
+
+        The worker thread detects the activation-index crossing; the
+        emission runs on the loop thread (same posture as the coalesced
+        progress emission — cross-thread sink calls stay off the worker).
+        """
+        if payload.loop is None or self._runtime is None:
+            return
+        _, _, injection_index = self._fault_addressing(fault)
+
+        def _emit() -> None:
+            try:
+                self._runtime.emit_fault_event(  # type: ignore[union-attr]
+                    payload.session_id,
+                    payload.run_id,
+                    "fault.activated",
+                    fault_id=fault.fault_id,
+                    fault_type=fault.fault_type,
+                    target_node_id=node_id,
+                    target_pid=pid,
+                    payload={
+                        "fault_id": fault.fault_id,
+                        "fault_type": fault.fault_type,
+                        "injection_index": injection_index,
+                    },
+                )
+            except Exception:  # noqa: BLE001 — teardown race only
+                pass
+
+        try:
+            payload.loop.call_soon_threadsafe(_emit)
+        except RuntimeError:  # loop closed mid-run
+            pass
 
     async def _close_run(
         self,
@@ -791,6 +989,16 @@ class TSRuntime:
 
         index = 0
         batches_done = 0
+        # Activation marks (SPEC-204 §8.1: ACTIVE = window start): one
+        # crossing per plan fault, in shared-frame order.
+        marks = sorted(
+            (
+                (*self._fault_addressing(fault), fault)
+                for fault in payload.fault_plan
+            ),
+            key=lambda item: item[2],
+        )
+        mark_cursor = 0
         while True:
             if cancel_flag.is_set():
                 outcome.status = "cancelled"
@@ -800,6 +1008,10 @@ class TSRuntime:
                 outcome.status = "completed"
                 break
             for packet in batch:
+                while mark_cursor < len(marks) and marks[mark_cursor][2] <= index:
+                    node_id, pid, _, mark_fault = marks[mark_cursor]
+                    self._schedule_fault_activated(payload, mark_fault, node_id, pid)
+                    mark_cursor += 1
                 data = packet.to_bytes()
                 if not write_chunk(data, baseline_leg, "baseline"):
                     break
@@ -808,6 +1020,12 @@ class TSRuntime:
                         faulted_data = filter_instance.apply(
                             index, packet
                         ).to_bytes()
+                    except FaultExecutionError as exc:
+                        # SPEC-204 §11: a run-stage transform failure puts
+                        # the fault in FAILED; the run fails per SPEC-203
+                        # semantics with the fault code as the root cause.
+                        outcome.fail_with(_RunError.fault_exec(exc))
+                        break
                     except Exception as exc:  # noqa: BLE001 — filter faults
                         outcome.fail_with(_RunError.generation(exc))
                         break
@@ -835,6 +1053,11 @@ class TSRuntime:
             if not write_chunk(log_bytes, log_leg, "log"):
                 _abort_legs(baseline_leg, faulted_leg, log_leg)
                 return outcome
+            # APPLIED attribution (ticket #56): read back the §8.2 document
+            # the tee partner produced — per-fault identity, target and the
+            # confirmed slot list. A log without the shape (identity fakes)
+            # yields no attribution and ``fault.applied`` does not fire.
+            outcome.fault_lifecycle = _parse_fault_lifecycle(log_bytes)
         # cancelled / completed: commit the landed (partial or full) legs.
         for name, leg in (
             (ARTIFACT_KIND_GENERATED, baseline_leg),
@@ -890,6 +1113,46 @@ def _abort_legs(*legs) -> None:
             leg.abort()
         except Exception:  # noqa: BLE001 — abort is best-effort
             pass
+
+
+def _parse_fault_lifecycle(log_bytes: bytes) -> dict[str, dict[str, Any]]:
+    """Per-fault APPLIED attribution from the §8.2 log document (ticket #56).
+
+    The tee partner (production: ``SemanticFaultFilter``) owns the fault
+    semantics and documents its actual transforms per SPEC-204 §8.2; the
+    runtime only reads back that documented evidence shape. Anything
+    without the shape parses to an empty attribution — never a crash.
+    """
+    try:
+        document = json.loads(log_bytes.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError):
+        return {}
+    if not isinstance(document, Mapping):
+        return {}
+    lifecycle: dict[str, dict[str, Any]] = {}
+    entries = document.get("faults") or []
+    if not isinstance(entries, list):
+        return {}
+    for entry in entries:
+        if not isinstance(entry, Mapping):
+            continue
+        fault_id = entry.get("fault_id")
+        if not isinstance(fault_id, str) or not fault_id:
+            continue
+        target = entry.get("target")
+        target_map = target if isinstance(target, Mapping) else {}
+        applied = (entry.get("lifecycle") or {}).get("fault.applied")
+        indexes = (
+            [value for value in applied if isinstance(value, int)]
+            if isinstance(applied, list)
+            else []
+        )
+        lifecycle[fault_id] = {
+            "node_id": target_map.get("node_id"),
+            "pid": target_map.get("pid"),
+            "applied_packet_indexes": indexes,
+        }
+    return lifecycle
 
 
 def _commit_fields(commit: Any) -> dict[str, Any]:
@@ -970,6 +1233,23 @@ class _RunError:
         error.root_code = root_code
         return error
 
+    @classmethod
+    def fault_exec(cls, exc: Exception) -> "_RunError":
+        """SPEC-204 §11: a run-stage transform failure (fault FAILED).
+
+        The run keeps its SPEC-203 semantics (generation-failed public face,
+        partial artifacts marked); the fault code rides as the root cause
+        and the ``run_failed`` reason carries ``SIM_FAULT_EXEC_FAILED``.
+        """
+        error = cls(
+            "fault_exec",
+            SIM_FAULT_EXEC_FAILED,
+            f"fault transform failed during the run: {exc}",
+            exc,
+        )
+        error.root_code = SIM_FAULT_EXEC_FAILED
+        return error
+
     def raise_now(self) -> None:
         if self.kind == "sink":
             raise TSSinkIOError(self.message) from self.exc
@@ -987,6 +1267,7 @@ class _RunOutcome:
         "error",
         "warnings",
         "virtual_duration_ns",
+        "fault_lifecycle",
     )
 
     def __init__(self, run_id: str = "") -> None:
@@ -997,6 +1278,10 @@ class _RunOutcome:
         self.error: _RunError | None = None
         self.warnings: tuple[str, ...] = ()
         self.virtual_duration_ns = 0
+        #: Per-fault APPLIED attribution parsed from the §8.2 log document
+        #: (ticket #56); empty when the log lacks the shape or the run
+        #: failed before the log leg was written.
+        self.fault_lifecycle: dict[str, dict[str, Any]] = {}
 
     def fail_with(self, error: _RunError) -> None:
         self.status = "failed"

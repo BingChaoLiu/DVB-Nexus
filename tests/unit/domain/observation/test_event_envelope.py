@@ -293,8 +293,9 @@ class TestLooseEnvelopeTightPayload:
         # register their schemas over time (SPEC-301 section 13). Families
         # WITH a registered payload schema carry a minimal VALID payload
         # here (ts.* observation axes, #13 Q3-i; diagnosis.* SPEC-306 §7
-        # shared shape, ticket #54) — every still-schemaless family keeps
-        # the bare-{} posture.
+        # shared shape, ticket #54; fault.* SPEC-204 §9 + recovery.* verdict
+        # shape, ticket #56) — every still-schemaless family keeps the
+        # bare-{} posture.
         for event_type in sorted(REGISTERED_EVENT_TYPES):
             if event_type.startswith("ts."):
                 payload = {"source": "internal_parser", "confidence": "parsed"}
@@ -320,6 +321,46 @@ class TestLooseEnvelopeTightPayload:
                     "affected_node_ids": [],
                     "suggested_actions": [],
                     "evidence": {"artifact_id": "a", "pid": 0, "packet_index": 0},
+                }
+            elif event_type == "fault.injected":
+                payload = {
+                    "fault_id": "fd000000-0000-4000-8000-000000000001",
+                    "fault_type": "PAT_MISSING",
+                    "injection_index": 0,
+                    "expected_observations": ["ts.psi_section_observed"],
+                }
+            elif event_type == "fault.applied":
+                payload = {
+                    "fault_id": "fd000000-0000-4000-8000-000000000001",
+                    "fault_type": "PAT_MISSING",
+                    "injection_index": 0,
+                    "applied_packet_indexes": [12],
+                }
+            elif event_type.startswith("fault."):
+                payload = {
+                    "fault_id": "fd000000-0000-4000-8000-000000000001",
+                    "fault_type": "PAT_MISSING",
+                    "injection_index": 0,
+                }
+            elif event_type == "recovery.verification_completed":
+                payload = {
+                    "verdict": "PASS",
+                    "run_id": "run-r",
+                    "baseline_run_id": "run-b",
+                    "scenario_id": "scn-1",
+                    "scenario_version": "1.0.0",
+                    "scenario_content_hash": "a" * 64,
+                    "criteria": [
+                        {
+                            "criterion_id": "sc-01",
+                            "kind": "fault_inactive",
+                            "mandatory": True,
+                            "result": "PASS",
+                            "reason_code": None,
+                            "reason": None,
+                        }
+                    ],
+                    "summary": "all mandatory criteria passed",
                 }
             else:
                 payload = {}
