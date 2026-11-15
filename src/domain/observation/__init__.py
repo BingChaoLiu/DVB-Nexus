@@ -56,6 +56,8 @@ from domain.observation.metric_series import (
 )
 from domain.observation.model import ConfidenceKind, Observation, ObservationSource
 from domain.observation.registry import (
+    DIAGNOSIS_CONFIDENCES,
+    DIAGNOSIS_SEVERITIES,
     REGISTERED_EVENT_TYPES,
     WITHDRAWN_EVENT_TYPES,
     is_coalescable,
@@ -137,6 +139,8 @@ __all__ = [
     "RunContext",
     "RunMode",
     "SOURCE_ORDER_SORT",
+    "DIAGNOSIS_CONFIDENCES",
+    "DIAGNOSIS_SEVERITIES",
     "Scope",
     "Severity",
     "Time",

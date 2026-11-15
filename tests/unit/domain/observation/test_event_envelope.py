@@ -290,10 +290,37 @@ class TestLooseEnvelopeTightPayload:
 
     def test_every_registered_type_accepts_a_payload_object(self):
         # Envelope layer: payload is only ever an object; per-type payloads
-        # beyond ts.* register their schemas later (SPEC-301 section 13).
+        # register their schemas over time (SPEC-301 section 13). Families
+        # WITH a registered payload schema carry a minimal VALID payload
+        # here (ts.* observation axes, #13 Q3-i; diagnosis.* SPEC-306 §7
+        # shared shape, ticket #54) — every still-schemaless family keeps
+        # the bare-{} posture.
         for event_type in sorted(REGISTERED_EVENT_TYPES):
             if event_type.startswith("ts."):
                 payload = {"source": "internal_parser", "confidence": "parsed"}
+            elif event_type == "diagnosis.cleared":
+                payload = {
+                    "diagnosis_id": "3f2504e0-4f89-11d3-9a0c-0305e82c3301",
+                    "rule_id": "DIA-X",
+                    "reason": "symptom gone",
+                }
+            elif event_type.startswith("diagnosis."):
+                payload = {
+                    "diagnosis_id": "3f2504e0-4f89-11d3-9a0c-0305e82c3301",
+                    "rule_id": "DIA-X",
+                    "rule_version": "1.0.0",
+                    "code": "DIAG_X",
+                    "severity": "info",
+                    "confidence": "high",
+                    "title": "t",
+                    "summary": "s",
+                    "observation_refs": [
+                        {"journal_seq": 1, "event_type": "ts.continuity_error"}
+                    ],
+                    "affected_node_ids": [],
+                    "suggested_actions": [],
+                    "evidence": {"artifact_id": "a", "pid": 0, "packet_index": 0},
+                }
             else:
                 payload = {}
             raw = envelope_dict(
