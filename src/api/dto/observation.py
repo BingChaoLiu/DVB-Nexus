@@ -180,6 +180,68 @@ class ExportDataDTO(BaseModel):
     file_digests: dict[str, str] = Field(default_factory=dict)
 
 
+# --- per-route typed envelopes (ticket #80) ---------------------------------------
+#
+# The eight §4.5 routes declare these as ``response_model`` so every data
+# body becomes an OpenAPI-reachable component (REQ-API-500-002; the #61
+# codegen plane). They mirror the base envelope field-for-field with
+# ``data`` typed per route — composition, not inheritance: a Pydantic v2
+# subclass that overrides a field inlines every property, so inheriting
+# would neither reference the base nor change the generated shape.
+# Wire shapes are UNCHANGED: handlers already built these DTOs and returned
+# ``model_dump(mode="json")``; the response model re-validates and
+# serializes identically (the #53 contract tests pin the shapes unchanged).
+
+
+class SummaryResponseDTO(BaseModel):
+    request_id: str
+    scope: ObservationScopeDTO
+    data: SummaryDataDTO
+    meta: ObservationMetaDTO = Field(default_factory=ObservationMetaDTO)
+
+
+class EventsResponseDTO(BaseModel):
+    request_id: str
+    scope: ObservationScopeDTO
+    data: EventsDataDTO
+    meta: ObservationMetaDTO = Field(default_factory=ObservationMetaDTO)
+
+
+class TimelineResponseDTO(BaseModel):
+    request_id: str
+    scope: ObservationScopeDTO
+    data: TimelineDataDTO
+    meta: ObservationMetaDTO = Field(default_factory=ObservationMetaDTO)
+
+
+class MetricsResponseDTO(BaseModel):
+    request_id: str
+    scope: ObservationScopeDTO
+    data: MetricsDataDTO
+    meta: ObservationMetaDTO = Field(default_factory=ObservationMetaDTO)
+
+
+class AlertsResponseDTO(BaseModel):
+    request_id: str
+    scope: ObservationScopeDTO
+    data: AlertsDataDTO
+    meta: ObservationMetaDTO = Field(default_factory=ObservationMetaDTO)
+
+
+class HealthResponseDTO(BaseModel):
+    request_id: str
+    scope: ObservationScopeDTO
+    data: HealthDataDTO
+    meta: ObservationMetaDTO = Field(default_factory=ObservationMetaDTO)
+
+
+class ExportResponseDTO(BaseModel):
+    request_id: str
+    scope: ObservationScopeDTO
+    data: ExportDataDTO
+    meta: ObservationMetaDTO = Field(default_factory=ObservationMetaDTO)
+
+
 # --- record → DTO mappers (duck-typed; C6: no domain imports) ----------------------
 
 
@@ -265,21 +327,28 @@ def metric_series_dto(view: Any) -> MetricSeriesDTO:
 __all__ = [
     "AlertRecordDTO",
     "AlertsDataDTO",
+    "AlertsResponseDTO",
     "EventsDataDTO",
+    "EventsResponseDTO",
     "ExportCreateBody",
     "ExportDataDTO",
+    "ExportResponseDTO",
     "HealthDataDTO",
     "HealthDimensionDTO",
+    "HealthResponseDTO",
     "MetricPointDTO",
     "MetricSeriesDTO",
     "MetricsDataDTO",
     "MetricsQueryBody",
+    "MetricsResponseDTO",
     "ObservationMetaDTO",
     "ObservationResponseDTO",
     "ObservationScopeDTO",
     "SummaryDataDTO",
+    "SummaryResponseDTO",
     "TimelineDataDTO",
     "TimelineLaneDTO",
+    "TimelineResponseDTO",
     "alert_record_dto",
     "health_result_dto",
     "metric_series_dto",

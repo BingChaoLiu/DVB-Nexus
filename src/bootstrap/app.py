@@ -13,8 +13,11 @@ top-level package; 裁定 1: the M3 leftover composition items land here):
 - **REST/WS app**: the full SPEC-500 §4 router set (sessions/runs/
   artifacts wired, observation §4.5 switched via
   ``ServiceObservationQueryPort``, diagnosis §4.4 via
-  ``ServiceDiagnosisPort``) under the frozen ``/api/v1`` prefix plus the
-  SPEC-501 WebSocket route.
+  ``ServiceDiagnosisPort``, topology §4.1 via ``RepositoryTopologyPort``
+  over the SPEC-502 topologies table, scenario §4.7 + the solution-reveal
+  gate via ``RegistryScenarioPort``, the §4.8 TSDuck call-records face —
+  ticket #80) under the frozen ``/api/v1`` prefix plus the SPEC-501
+  WebSocket route.
 - **#44 filter factory**: the production semantic filter
   (``faults.factory.build_semantic_filter_factory()``) is the default for
   the TS runtime — the identity-filter placeholder is retired (裁定 1b).
@@ -49,6 +52,8 @@ from adapters.storage.repositories import (
     SqliteDiagnosisRepository,
     SqliteVerificationRepository,
 )
+from adapters.storage.topologies import SqliteTopologyRepository
+from adapters.storage.tsduck_calls import SqliteTSDuckCallStore
 from adapters.storage.artifact_store import ArtifactStore
 from application.analysis import AnalysisService
 from application.diagnosis import DiagnosisService, bind_run_completion_trigger
@@ -81,12 +86,22 @@ from bootstrap.backends import (
     RunIdAllocator,
     SimulationRunsBackend,
     SimulationSessionsBackend,
+    TSDuckCallsBackend,
     default_topology_provider,
 )
 from bootstrap.hints import (
     EventAppendedHintSubscriber,
     HubAlertHintEmitter,
     HubHintPublisher,
+)
+from bootstrap.scenarios import (
+    RegistryScenarioPort,
+    RegistrySolutionGate,
+    ScenarioRegistry,
+)
+from bootstrap.topologies import (
+    RepositoryTopologyPort,
+    RepositoryTopologyProvider,
 )
 
 #: The SPEC-305 §8 topic emitted after a metrics-consumer tick.
@@ -123,6 +138,10 @@ class ProductionStack:
     runs_backend: SimulationRunsBackend
     artifacts_backend: ArtifactStoreBackend
     hint_publisher: HubHintPublisher
+    topology_repository: SqliteTopologyRepository
+    topology_port: RepositoryTopologyPort
+    scenario_registry: ScenarioRegistry
+    tsduck_call_store: SqliteTSDuckCallStore
     consumers: dict[str, JournalTailingConsumer] = field(default_factory=dict)
 
     # --- driver faces (no threads; the embedder pumps deterministically) ----
@@ -264,6 +283,7 @@ def build_production_app(
     max_exports_per_session: int = 32,
     export_id_factory: Optional[Callable[[], str]] = None,
     alert_rule_set: Optional[Any] = None,
+    scenario_dir: Optional[Path] = None,
 ) -> ProductionStack:
     """Compose the full production app + observation plane.
 
@@ -271,8 +291,10 @@ def build_production_app(
         db_path: SQLite database path (migrated in place — SPEC-502 §4).
         session_directory: optional hub session-existence face (#49 MVP:
             unbound — the hub does not fabricate session truth).
-        topology_provider: optional topology resolver (MVP default:
-            ``topo-1`` empty graph — the #48 posture).
+        topology_provider: optional topology resolver override; the
+            default is the ticket #80 repository-backed provider (saved
+            SPEC-502 rows resolve to the exact (id, revision); a miss
+            falls back to the MVP ``topo-1`` empty graph).
         filter_factory: optional #44 filter factory override; the default
             is the production semantic filter (裁定 1b).
         hub_config: optional SPEC-501 transport knobs.
@@ -282,6 +304,9 @@ def build_production_app(
         max_exports_per_session: the SPEC-305 §9 export throttle budget.
         export_id_factory: injectable export id source (deterministic
             tests); default ``uuid4``.
+        scenario_dir: the SPEC-205 registry scan root (ticket #80, 裁定 F
+            fallback: repo-top-level ``scenarios/``, resolved against the
+            working directory; a missing directory is an empty registry).
     """
     db_path = Path(db_path)
     db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -376,16 +401,33 @@ def build_production_app(
         if stack is not None:
             stack.attach_session(session_id)
 
+    # --- ticket #80 faces: SPEC-502 topology persistence, the SPEC-205
+    # scenario registry (裁定 F scan root) + solution gate, and the
+    # SPEC-308 call-record store.
+    topology_repository = SqliteTopologyRepository(connection)
+    topology_port = RepositoryTopologyPort(topology_repository)
+    resolved_topology_provider = topology_provider or RepositoryTopologyProvider(
+        topology_repository, fallback=default_topology_provider
+    )
+    resolved_scenario_dir = Path(scenario_dir) if scenario_dir else Path("scenarios")
+    scenario_registry = ScenarioRegistry(resolved_scenario_dir)
+    solution_gate = RegistrySolutionGate(
+        scenario_registry, SqliteVerificationRepository(connection)
+    )
+    tsduck_call_store = SqliteTSDuckCallStore(connection)
+
     sessions_backend = SimulationSessionsBackend(
         runtime,
-        topology_provider or default_topology_provider,
+        resolved_topology_provider,
         session_specs,
         on_session_created=_on_session_created,
+        scenario_registry=scenario_registry,
     )
     runs_backend = SimulationRunsBackend(
         ts_runtime, runtime, session_specs, StoreArtifactSink(store, index=artifact_repository), allocator
     )
     artifacts_backend = ArtifactStoreBackend(store, artifact_repository)
+    tsduck_calls_backend = TSDuckCallsBackend(tsduck_call_store, journal)
 
     app = create_app(
         *build_spec500_routers(
@@ -395,6 +437,9 @@ def build_production_app(
             diagnosis_port=ServiceDiagnosisPort(diagnosis_service),
             observation_port=ServiceObservationQueryPort(query_service, tenant_id=tenant_id),
             verification_port=verification_port,
+            topology_port=topology_port,
+            scenario_port=RegistryScenarioPort(scenario_registry, solution_gate),
+            tsduck_calls_port=tsduck_calls_backend,
         )
     )
     app.include_router(build_ws_router(hub))
@@ -423,6 +468,10 @@ def build_production_app(
         runs_backend=runs_backend,
         artifacts_backend=artifacts_backend,
         hint_publisher=hint_publisher,
+        topology_repository=topology_repository,
+        topology_port=topology_port,
+        scenario_registry=scenario_registry,
+        tsduck_call_store=tsduck_call_store,
     )
     stack_holder["stack"] = stack
     return stack
