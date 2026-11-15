@@ -27,6 +27,11 @@ class EnvelopeErrorCode(str, Enum):
     #: Duplicate (producer_id, event_id) on retry — journal append layer
     #: answers with the original journal_seq (SPEC-301 §5, ticket #47).
     OBS_DUPLICATE_EVENT = "OBS_DUPLICATE_EVENT"
+    #: Comparison/arithmetic across clock domains refused (SPEC-300 §6
+    #: rules 1/3, REQ-OBS-300-004); raised by the time-domain guard
+    #: (``domain.observation.time_domain``) that M4 SPEC-302/303 wiring
+    #: binds to — declared here so every consumer shares one vocabulary.
+    OBS_INVALID_TIME_DOMAIN = "OBS_INVALID_TIME_DOMAIN"
 
 
 class EnvelopeError(Exception):

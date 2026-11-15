@@ -43,6 +43,11 @@ from domain.observation.registry import (
     validate_payload,
 )
 from domain.observation.run_context import Fidelity, RunContext, RunMode
+from domain.observation.time_domain import (
+    TimeDomainKey,
+    ensure_same_time_domain,
+    time_domain_key,
+)
 from domain.observation.status import (
     HealthState,
     LifecycleState,
@@ -75,15 +80,18 @@ __all__ = [
     "Scope",
     "Severity",
     "Time",
+    "TimeDomainKey",
     "Timepoint",
     "TSArtifact",
     "WITHDRAWN_EVENT_TYPES",
+    "ensure_same_time_domain",
     "is_coalescable",
     "is_delivery_protected",
     "is_registered",
     "is_withdrawn",
     "new_event_id",
     "parse_envelope",
+    "time_domain_key",
     "validate_event_type",
     "validate_payload",
 ]

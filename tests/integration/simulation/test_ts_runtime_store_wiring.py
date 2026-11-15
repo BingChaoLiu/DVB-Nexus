@@ -21,6 +21,7 @@ import pytest
 from ts.packet import TSPacket
 
 from adapters.storage import db
+from adapters.storage.artifact_errors import ArtifactNotFoundError
 from adapters.storage.artifact_store import ArtifactStore
 from adapters.storage.repositories import SqliteArtifactRepository
 from simulation.runtime import SimulationRuntime
@@ -174,6 +175,36 @@ class TestBaselineDedup:
             next(a.sha256 for a in second.artifacts if a.kind == "faulted_ts")
         )
         assert len(faulted_rows) == 2
+
+    def test_public_face_resolution_without_explicit_index_kwarg(
+        self, tmp_path: Path
+    ) -> None:
+        """M3 review-fix: the sink resolves the index through the store's
+        public accessor — no private-attribute poke, and dedup is never
+        silently disabled by a ``None`` fallback."""
+        store, repository = _store_with_index(tmp_path, "dedup-public-face")
+        sink = StoreArtifactSink(store)
+        runtime = TSRuntime(filter_factory=lambda plan, config: CCShiftFilter(plan))
+        prepared = runtime.prepare(make_session_spec(), make_generator_config(), _cc_plan())
+
+        first = asyncio.run(runtime.run(prepared, sink))
+        second = asyncio.run(runtime.run(prepared, sink))
+
+        first_baseline = next(a for a in first.artifacts if a.kind == "generated_ts")
+        second_baseline = next(
+            a for a in second.artifacts if a.kind == "generated_ts"
+        )
+        assert second_baseline.artifact_id == first_baseline.artifact_id
+        rows = repository.find_by_sha256(first_baseline.sha256)
+        assert len(rows) == 1  # record reused, not re-registered
+
+    def test_store_without_index_is_an_explicit_error(self, tmp_path: Path) -> None:
+        """A store without an index can never satisfy the record-level
+        dedup contract — construction fails loudly instead of silently
+        disabling baseline dedup."""
+        store = ArtifactStore(tmp_path / "dedup-no-index")
+        with pytest.raises(ArtifactNotFoundError, match="index"):
+            StoreArtifactSink(store)
 
 
 class TestLifecycleRunFace:

@@ -8,6 +8,7 @@ import pytest
 
 from faults.factory import build_semantic_filter_factory, create_fault_filter
 from faults.filters.semantic import SemanticFaultFilter
+from faults.mutation_log import lifecycle_summary
 from ts.generator.config import GeneratorConfig, ProgramConfig
 
 from tests.unit.faults._fault_builders import (
@@ -150,6 +151,27 @@ class TestMutationLogDocument:
         assert summary["expected_observations"] == ["ts.continuity_error"]
         assert summary["parameters"] == {"delta": 3}
         assert summary["parameters_schema_version"] == 1
+
+    def test_lifecycle_events_table_is_not_aliased_across_documents(self) -> None:
+        """M3 review-fix #7: each lifecycle document owns its own ``events``
+        copy — the module-level state table is never embedded by reference,
+        so mutating one returned document cannot corrupt the next."""
+        first = lifecycle_summary(
+            injected=True,
+            activated_packet_index=1,
+            applied_packet_indexes=(2,),
+            cleared=True,
+        )
+        second = lifecycle_summary(
+            injected=True,
+            activated_packet_index=1,
+            applied_packet_indexes=(2,),
+            cleared=True,
+        )
+        assert first["events"] == second["events"]
+        assert first["events"] is not second["events"]
+        first["events"]["fault.injected"] = "CORRUPTED"
+        assert second["events"]["fault.injected"] == "SCHEDULED"
 
     def test_log_is_deterministic_for_the_same_plan(self, baseline) -> None:
         def run_and_log() -> bytes:

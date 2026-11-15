@@ -19,10 +19,10 @@ index, which is the ``generated_ts``/``faulted_ts`` double reference.
 
 from __future__ import annotations
 
-import json
 from typing import Any, Mapping
 
 from faults.registry import PARAMETERS_SCHEMA_VERSION
+from ts.canonical_json import canonical_json
 
 __all__ = [
     "MUTATION_LOG_SCHEMA_VERSION",
@@ -34,6 +34,8 @@ __all__ = [
 #: additive optional fields = minor; removals/rename = major).
 MUTATION_LOG_SCHEMA_VERSION = 1
 
+# Module-level constant, frozen by declaration: every consumer receives a
+# copy (see lifecycle_summary) — the table itself is never handed out.
 _LIFECYCLE_STATE_FOR_EVENT = {
     "fault.injected": "SCHEDULED",
     "fault.activated": "ACTIVE",
@@ -82,9 +84,7 @@ def build_mutation_log_document(
 
 def serialize_mutation_log(document: Mapping[str, Any]) -> bytes:
     """Deterministic UTF-8 JSON serialization (key-sorted, compact)."""
-    return json.dumps(
-        document, sort_keys=True, separators=(",", ":"), ensure_ascii=True
-    ).encode("utf-8")
+    return canonical_json(document).encode("utf-8")
 
 
 def lifecycle_summary(
@@ -94,9 +94,15 @@ def lifecycle_summary(
     applied_packet_indexes: tuple[int, ...],
     cleared: bool,
 ) -> dict[str, Any]:
-    """§8.1 four-state lifecycle mapped to the ``fault.*`` event codes."""
+    """§8.1 four-state lifecycle mapped to the ``fault.*`` event codes.
+
+    ``events`` is a fresh copy of the module-level state table per call —
+    the shared constant is never embedded by reference into a returned
+    document (M3 review-fix #7), so mutating one summary cannot leak into
+    the next.
+    """
     return {
-        "events": _LIFECYCLE_STATE_FOR_EVENT,
+        "events": dict(_LIFECYCLE_STATE_FOR_EVENT),
         "fault.injected": injected,
         "fault.activated": activated_packet_index,
         "fault.applied": list(applied_packet_indexes),

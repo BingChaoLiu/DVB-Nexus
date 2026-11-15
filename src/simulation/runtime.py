@@ -780,6 +780,3 @@ class SimulationRuntime:
             payload=payload,
             severity=severity,
         )
-
-
-# --- connection mirror helper (kept at module bottom for readability) ---------

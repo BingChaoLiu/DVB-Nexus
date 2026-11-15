@@ -248,6 +248,16 @@ class ArtifactStore:
         self.artifacts_dir.mkdir(parents=True, exist_ok=True)
         self.tmp_dir.mkdir(parents=True, exist_ok=True)
 
+    @property
+    def index(self) -> Optional[IndexRepository]:
+        """The attached SPEC-502 index repository (read-only view).
+
+        Public face for consumers that must consult the index half
+        (record-level baseline dedup, SIM sink); ``None`` when the store
+        was constructed file-half-only.
+        """
+        return self._index
+
     # ------------------------------------------------------------------
     # write protocol
     # ------------------------------------------------------------------
