@@ -44,6 +44,7 @@ from domain.observation.registry import (
 )
 from domain.observation.run_context import Fidelity, RunContext, RunMode
 from domain.observation.time_domain import (
+    TimeDomainKey,
     ensure_same_time_domain,
     time_domain_key,
 )
