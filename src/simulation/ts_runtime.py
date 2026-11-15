@@ -65,6 +65,7 @@ from dataclasses import asdict, dataclass
 from itertools import islice
 from typing import Any, Callable, Literal, Mapping, Protocol
 
+from adapters.storage.artifact_errors import ArtifactNotFoundError
 from adapters.storage.artifact_store import ArtifactStore, SinkCommit
 from simulation.clock import SimulationClockConfig
 from simulation.errors import (
@@ -370,9 +371,20 @@ class StoreArtifactSink:
     ) -> None:
         self._store = store
         # The index half is the same repository the store registers into;
-        # injected separately because find_by_sha256 is a repository face,
-        # not a store face.
-        self._index = index if index is not None else getattr(store, "_index", None)
+        # resolved through the store's public ``index`` accessor (an
+        # explicit ``index`` kwarg still wins for composition roots that
+        # keep the repository separate). A store without any index can
+        # never satisfy the record-level dedup contract, so that case is
+        # an explicit construction error — never a silent dedup disable.
+        resolved = index if index is not None else store.index
+        if resolved is None:
+            raise ArtifactNotFoundError(
+                "StoreArtifactSink requires an index repository: attach one "
+                "to the ArtifactStore (ArtifactStore(root, index=...)) or "
+                "pass index= explicitly — baseline dedup (SPEC-203 §5.2) "
+                "cannot be silently disabled"
+            )
+        self._index = resolved
         self._ts_ext = ts_ext
         self._log_ext = log_ext
 
@@ -413,8 +425,6 @@ class StoreArtifactSink:
     def find_reusable_baseline(
         self, sha256: str, config_hash: str, packet_count: int
     ) -> str | None:
-        if self._index is None:
-            return None
         for row in self._index.find_by_sha256(sha256):
             if (
                 getattr(row, "kind", None) == ARTIFACT_KIND_GENERATED

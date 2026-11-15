@@ -317,3 +317,22 @@ class TestErrorSemantics:
         )
         with pytest.raises(ArtifactNotFoundError):
             store.read_by_artifact("00000000-0000-0000-0000-000000000000")
+
+
+class TestIndexAccessor:
+    """M3 review-fix: the attached index repository is exposed through a
+    public read-only accessor, so consumers (e.g. the SIM sink) never poke
+    the private ``_index`` attribute."""
+
+    def test_index_property_returns_attached_repository(
+        self, tmp_path: Path
+    ) -> None:
+        repository = _migrated_repository(tmp_path)
+        store = ArtifactStore(
+            tmp_path / "store", index=repository, clock=_clock
+        )
+        assert store.index is repository
+
+    def test_index_property_is_none_without_index(self, tmp_path: Path) -> None:
+        store = _make_store(tmp_path)
+        assert store.index is None
