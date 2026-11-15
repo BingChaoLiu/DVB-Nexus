@@ -66,6 +66,10 @@ export type EditorAction =
   | { type: "nodesChanged"; changes: NodeChange<TopologyFlowNode>[] }
   | { type: "edgesChanged"; changes: EdgeChange<TopologyFlowEdge>[] }
   | { type: "connected"; connection: TopologyConnectionDTO }
+  // #63 (SPEC-402 §4.2, approved additive ①): the node inspector's apply
+  // action — the ONLY way form edits enter the draft. config is the opaque
+  // wire payload verbatim (serialized per SPEC-402 §5.3); never re-derived.
+  | { type: "configApplied"; nodeId: string; config: Record<string, unknown> }
   | { type: "saveSucceeded"; topologyId: string; revision: number }
   | { type: "saveFailed"; error: EditorError }
   | { type: "loadFailed"; error: EditorError }
@@ -144,6 +148,18 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         connections: [action.connection],
       }).connections[0]!;
       return { ...state, dirty: true, connections: [...state.connections, edge] };
+    }
+
+    // #63 approved additive ① (SPEC-402 §4.2): targeted config write —
+    // unknown nodeId is a no-op (function stays total, dirty untouched).
+    case "configApplied": {
+      let applied = false;
+      const nodes = state.nodes.map((node) => {
+        if (node.id !== action.nodeId) return node;
+        applied = true;
+        return { ...node, data: { ...node.data, node: { ...node.data.node, config: action.config } } };
+      });
+      return applied ? { ...state, dirty: true, nodes } : state;
     }
 
     case "saveSucceeded":

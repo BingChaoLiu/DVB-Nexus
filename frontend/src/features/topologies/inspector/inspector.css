@@ -1,0 +1,118 @@
+/* Node inspector styles (SPEC-402 §4.1, dvb-inspector-* namespace). Single
+ * standard layout per SPEC-402 §2.2 — vertical field list + one nested
+ * program group + stream rows; no layout system, no theme hooks. */
+.dvb-inspector {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--dvb-border, #d0d4dc);
+  border-radius: 6px;
+  min-width: 260px;
+  background: var(--dvb-surface, #ffffff);
+}
+
+.dvb-inspector-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.dvb-inspector-empty {
+  margin: 0;
+  color: var(--dvb-muted, #6b7280);
+  font-size: 12px;
+}
+
+.dvb-inspector-note {
+  margin: 0;
+  color: var(--dvb-accent, #2563eb);
+  font-size: 12px;
+}
+
+.dvb-inspector-banner {
+  margin: 0;
+  padding: 4px 6px;
+  border-radius: 4px;
+  background: var(--dvb-danger-bg, #fef2f2);
+  color: var(--dvb-danger, #b91c1c);
+  font-size: 12px;
+}
+
+.dvb-inspector-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+}
+
+.dvb-inspector-field-name {
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+}
+
+.dvb-inspector-field input,
+.dvb-inspector-field select {
+  width: 100%;
+  box-sizing: border-box;
+  font-size: 12px;
+}
+
+.dvb-inspector-hint {
+  color: var(--dvb-muted, #6b7280);
+  font-size: 10px;
+}
+
+.dvb-inspector-field-error {
+  color: var(--dvb-danger, #b91c1c);
+  font-size: 11px;
+}
+
+.dvb-inspector-group {
+  border: 1px solid var(--dvb-border, #d0d4dc);
+  border-radius: 4px;
+  padding: 6px;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dvb-inspector-group legend {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 0 4px;
+}
+
+.dvb-inspector-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dvb-inspector-rows-head {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+}
+
+.dvb-inspector-row {
+  border: 1px dashed var(--dvb-border, #d0d4dc);
+  border-radius: 4px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dvb-inspector-apply,
+.dvb-inspector-add-row,
+.dvb-inspector-row button {
+  font-size: 12px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.dvb-inspector-apply {
+  align-self: flex-start;
+}
