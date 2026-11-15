@@ -43,6 +43,7 @@ from ts.packet import TS_PACKET_SIZE
 
 from tests.unit.simulation._ts_runtime_builders import (
     FakeArtifactSink,
+    GatedFakeArtifactSink,
     make_generator_config,
     make_session_spec,
 )
@@ -405,13 +406,24 @@ class TestFaultLifecycleEdges:
                 spec, make_generator_config(output_packet_count=5000), _cc_plan(10)
             )
             sink.events.clear()
-            task = asyncio.create_task(ts_runtime.run(prepared, FakeArtifactSink()))
-            for _ in range(100_000):
-                if ts_runtime.active_run_ids:
-                    break
-                await asyncio.sleep(0)
-            assert ts_runtime.active_run_ids, "run never registered"
-            ts_runtime.cancel(next(iter(ts_runtime.active_run_ids)))
+            # Deterministic cancel (GatedFakeArtifactSink): the worker is
+            # parked on its first sink write, so the cancel request cannot
+            # lose the scheduling race against generation completion (a
+            # fast Linux runner otherwise finishes the whole run first).
+            gated = GatedFakeArtifactSink()
+            task = asyncio.create_task(ts_runtime.run(prepared, gated))
+            try:
+                for _ in range(100_000):
+                    if gated.started.is_set():
+                        break
+                    await asyncio.sleep(0)
+                assert gated.started.is_set(), (
+                    "generation never reached its first sink write"
+                )
+                assert ts_runtime.active_run_ids, "run never registered"
+                ts_runtime.cancel(next(iter(ts_runtime.active_run_ids)))
+            finally:
+                gated.release.set()
             result = await task
 
             assert result.status == "cancelled"

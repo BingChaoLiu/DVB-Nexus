@@ -10,6 +10,7 @@ item 4) built from the public ``ts.packet.TSPacket`` model.
 from __future__ import annotations
 
 import json
+import threading
 from dataclasses import replace
 from typing import Any, Mapping
 
@@ -182,6 +183,45 @@ class FakeArtifactSink:
         self, sha256: str, config_hash: str, packet_count: int
     ) -> str | None:
         return self._reusable.get((sha256, config_hash, packet_count))
+
+
+class GatedFakeArtifactSink(FakeArtifactSink):
+    """Deterministic cancel gate for bounded-cancel tests (M4 CI finding).
+
+    The worker runs in a ``ThreadPoolExecutor``; on a fast Linux runner it
+    can finish all batches of a 5000-packet run before the main
+    coroutine's event-driven spin lands ``cancel`` — order-dependent,
+    platform-dependent (green on Windows, red on Linux CI). Gating the
+    first sink write removes the race: the worker cannot finish until the
+    test releases it, so the cancel request is always already registered
+    when the worker resumes and the next batch boundary answers it.
+
+    Test shape: create the task, spin on ``started`` (``asyncio.sleep(0)``
+    spins — event-driven, no wall clock), ``cancel``, ``release.set()``,
+    await the task. Always ``release.set()`` before the test ends: a
+    blocked worker thread would hang interpreter exit.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.started = threading.Event()
+        self.release = threading.Event()
+
+    def open_legs(self, *, tee: bool, run_id: str, session_id: str) -> Any:
+        holder = super().open_legs(tee=tee, run_id=run_id, session_id=session_id)
+        for leg in (holder.baseline, holder.faulted, holder.log):
+            if leg is not None:
+                leg.write = self._gated(leg.write)
+        return holder
+
+    def _gated(self, original_write):
+        def write(chunk: bytes) -> None:
+            if not self.started.is_set():
+                self.started.set()
+                self.release.wait()
+            original_write(chunk)
+
+        return write
 
 
 class CCShiftFilter:
