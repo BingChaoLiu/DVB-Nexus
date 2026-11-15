@@ -440,6 +440,10 @@ class TestImportContract:
                 if module == "ts" or module.startswith("ts."):
                     ts_imports.add(module)
         allowed = {
+            # ts.canonical_json: M3 review-fix — shared canonical JSON
+            # contract unifying the plan fingerprint with the mutation log
+            # and scenario content hash serializations.
+            "ts.canonical_json",
             "ts.errors",
             "ts.generator.config",
             "ts.generator.generator",

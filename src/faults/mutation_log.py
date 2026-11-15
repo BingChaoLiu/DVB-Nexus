@@ -19,10 +19,10 @@ index, which is the ``generated_ts``/``faulted_ts`` double reference.
 
 from __future__ import annotations
 
-import json
 from typing import Any, Mapping
 
 from faults.registry import PARAMETERS_SCHEMA_VERSION
+from ts.canonical_json import canonical_json
 
 __all__ = [
     "MUTATION_LOG_SCHEMA_VERSION",
@@ -82,9 +82,7 @@ def build_mutation_log_document(
 
 def serialize_mutation_log(document: Mapping[str, Any]) -> bytes:
     """Deterministic UTF-8 JSON serialization (key-sorted, compact)."""
-    return json.dumps(
-        document, sort_keys=True, separators=(",", ":"), ensure_ascii=True
-    ).encode("utf-8")
+    return canonical_json(document).encode("utf-8")
 
 
 def lifecycle_summary(

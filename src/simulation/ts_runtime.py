@@ -57,7 +57,6 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import inspect
-import json
 import threading
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -83,6 +82,7 @@ from simulation.errors import (
 from simulation.fault_plan import FaultDefinition, validate_fault_plan
 from simulation.runtime import ArtifactRef as SessionArtifactRef
 from simulation.runtime import SimulationRuntime, SimulationSessionSpec
+from ts.canonical_json import canonical_json
 from ts.errors import TSCoreError
 from ts.generator.config import GeneratorConfig
 from ts.generator.generator import GENERATOR_VERSION, TSGenerator
@@ -334,9 +334,7 @@ def compute_config_hash(
         "clock": asdict(clock_config),
         "fault_plan": _canonical_plan(fault_plan),
     }
-    canonical = json.dumps(
-        document, sort_keys=True, separators=(",", ":"), ensure_ascii=True
-    )
+    canonical = canonical_json(document)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 

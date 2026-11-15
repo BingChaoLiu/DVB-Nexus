@@ -50,7 +50,6 @@ from __future__ import annotations
 
 import copy
 import hashlib
-import json
 import uuid
 from dataclasses import dataclass, field
 from types import MappingProxyType
@@ -66,6 +65,7 @@ from simulation.state.graph import (
     PortSpec,
     TopologyGraph,
 )
+from ts.canonical_json import canonical_json
 
 __all__ = [
     "SCENARIO_CRITERION_KINDS",
@@ -852,12 +852,12 @@ def scan_executable_content(value: Any) -> tuple[str, ...]:
 def scenario_content_hash(data: Mapping[str, Any]) -> str:
     """SHA-256 (hex) of the canonical JSON serialization of ``data``.
 
-    Canonical form: ``sort_keys`` + compact separators + UTF-8 — the
-    version-pinning identity (SPEC-205 §5). Pure.
+    Canonical form: the shared ``ts.canonical_json`` contract —
+    ``sort_keys`` + compact separators + ASCII escaping (locale-independent
+    byte determinism, unified with the plan-fingerprint and mutation-log
+    serializations) — the version-pinning identity (SPEC-205 §5). Pure.
     """
-    canonical = json.dumps(
-        data, ensure_ascii=False, sort_keys=True, separators=(",", ":")
-    )
+    canonical = canonical_json(data)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
