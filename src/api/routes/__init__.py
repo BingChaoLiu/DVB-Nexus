@@ -18,15 +18,25 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from api.routes.artifacts import ArtifactsPort, build_artifacts_router
-from api.routes.observation import build_observation_router
-from api.routes.pending import build_pending_router
+from api.routes.observation import (
+    ObservationQueryPort,
+    build_observation_router,
+)
+from api.routes.pending import (
+    DiagnosisPort,
+    VerificationPort,
+    build_pending_router,
+)
 from api.routes.runs import RunsPort, build_runs_router
 from api.routes.sessions import SessionsPort, build_sessions_router
 
 __all__ = [
     "ArtifactsPort",
+    "DiagnosisPort",
+    "ObservationQueryPort",
     "RunsPort",
     "SessionsPort",
+    "VerificationPort",
     "build_spec500_routers",
 ]
 
@@ -36,6 +46,9 @@ def build_spec500_routers(
     sessions_port: SessionsPort,
     runs_port: RunsPort,
     artifacts_port: ArtifactsPort,
+    diagnosis_port: DiagnosisPort | None = None,
+    observation_port: ObservationQueryPort | None = None,
+    verification_port: VerificationPort | None = None,
 ) -> list[APIRouter]:
     """Assemble the complete SPEC-500 §4 router set.
 
@@ -43,11 +56,27 @@ def build_spec500_routers(
         sessions_port: the SPEC-200 lifecycle backend (§4.2, wired).
         runs_port: the run async-job backend (§4.3, wired).
         artifacts_port: the #42 artifact read boundary (§4.6, wired).
+        diagnosis_port: optional SPEC-306 backend for the §4.4 diagnosis
+          endpoints (ticket #54; ``None`` keeps their 501 freeze answers —
+          the composition root binds ``ServiceDiagnosisPort`` when the
+          diagnosis service is in the stack).
+        observation_port: optional SPEC-305 backend for the §4.5
+          observation endpoints (ticket #53; ``None`` keeps their 501
+          freeze answers — the composition root binds
+          ``ServiceObservationQueryPort`` when the query plane is in the
+          stack).
+        verification_port: optional SPEC-206 backend for the §4.4 verify
+          endpoint (ticket #56; ``None`` keeps the 501 freeze answer —
+          the composition root binds ``ServiceVerificationPort`` when the
+          verification service is in the stack).
     """
     return [
         build_sessions_router(sessions_port),
         build_runs_router(runs_port),
         build_artifacts_router(artifacts_port),
-        build_observation_router(),
-        build_pending_router(),
+        build_observation_router(query_port=observation_port),
+        build_pending_router(
+            diagnosis_port=diagnosis_port,
+            verification_port=verification_port,
+        ),
     ]

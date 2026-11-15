@@ -1,0 +1,49 @@
+{
+  "rule_id": "DIA-PAT-MISSING",
+  "rule_version": "1.0.0",
+  "code": "DIAG_PAT_MISSING",
+  "priority": 10,
+  "severity": "error",
+  "confidence": "high",
+  "title": "PAT missing in window",
+  "summary_template": "No PAT observed on PID {pid} (null substitution at packet {packet_index}); window artefact {artifact_id}",
+  "match": {
+    "event_type": "ts.psi_section_observed",
+    "predicates": [
+      {
+        "field": "correlation.pid",
+        "op": "eq",
+        "value": 0
+      },
+      {
+        "field": "payload.section",
+        "op": "eq",
+        "value": "PAT"
+      },
+      {
+        "field": "payload.present",
+        "op": "eq",
+        "value": false
+      }
+    ],
+    "group_by": [
+      "node_id",
+      "pid"
+    ],
+    "window": null
+  },
+  "suppression": {
+    "key": [
+      "code",
+      "node_id"
+    ],
+    "window": "per_run"
+  },
+  "suggested_actions": [
+    "Restore PAT emission on PID 0"
+  ],
+  "expected_evidence": [
+    "ts.psi_section_observed"
+  ],
+  "enabled": true
+}

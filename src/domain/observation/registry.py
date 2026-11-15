@@ -199,11 +199,31 @@ def is_delivery_protected(event_type: str) -> bool:
 #
 # Loose envelope, tight payload (ADR-0006 decision 4, SPEC-301 §7/§8): the
 # envelope ignores unknown optional fields, but payloads are validated per
-# event type against independently versioned payload schemas. MVP registers
-# exactly one payload obligation: observation-flavoured ``ts.*`` events carry
-# ``source`` (five-value ObservationSource) and ``confidence`` (four-value
-# ConfidenceKind) per the #13 Q3-i ruling — the diagnosis three-level rule
-# confidence (SPEC-307) is a different axis and is refused here.
+# event type against independently versioned payload schemas. Two payload
+# obligations are registered:
+#
+# - observation-flavoured ``ts.*`` events carry ``source`` (five-value
+#   ObservationSource) and ``confidence`` (four-value ConfidenceKind) per
+#   the #13 Q3-i ruling — the diagnosis three-level rule confidence is a
+#   different axis and is refused there;
+# - the ``diagnosis.*`` family carries the SPEC-306 §7 shared shape
+#   (ticket #54): raised/updated carry the full candidate shape including
+#   the evidence anchor, cleared carries only diagnosis_id + rule_id +
+#   the clear reason. The vocabularies below mirror the
+#   ``domain.diagnosis.model`` enums; they are restated here (instead of
+#   imported) because the dependency edge points diagnosis → observation,
+#   not the reverse — the ticket #54 tests cross-check the two stay
+#   identical.
+
+#: ``diagnosis.*`` payload severity vocabulary (SPEC-003 §2.6 four tiers).
+DIAGNOSIS_SEVERITIES = frozenset({"info", "warning", "error", "critical"})
+
+#: ``diagnosis.*`` payload confidence vocabulary — the diagnosis THREE-tier
+#: static declaration (SPEC-307 §3), never the observation provenance axis.
+DIAGNOSIS_CONFIDENCES = frozenset({"low", "medium", "high"})
+
+#: Correlation pid cap (13-bit DVB PID space, SPEC-301 §3 correlation.pid).
+_DIAGNOSIS_PID_MAX = 8191
 
 
 def validate_payload(event_type: str, payload: Mapping[str, Any]) -> None:
@@ -220,6 +240,12 @@ def validate_payload(event_type: str, payload: Mapping[str, Any]) -> None:
         )
     if event_type in TS_EVENT_TYPES:
         _validate_observation_axes(event_type, payload)
+    if event_type in DIAGNOSIS_EVENT_TYPES:
+        _validate_diagnosis_payload(event_type, payload)
+    if event_type in FAULT_EVENT_TYPES:
+        _validate_fault_payload(event_type, payload)
+    if event_type in RECOVERY_EVENT_TYPES:
+        _validate_recovery_payload(event_type, payload)
 
 
 def _validate_observation_axes(
@@ -247,10 +273,311 @@ def _validate_observation_axes(
             ) from None
 
 
+_CLEARED_REQUIRED_STR_FIELDS = ("diagnosis_id", "rule_id", "reason")
+_RAISED_REQUIRED_STR_FIELDS = (
+    "diagnosis_id",
+    "rule_id",
+    "rule_version",
+    "code",
+    "title",
+    "summary",
+)
+
+
+# --- fault.* payload rules (SPEC-204 §9, ticket #56) ----------------------------
+#
+# Structural evidence, NOT observation (brief §6 / SPEC-206 §6 指针句): the
+# engine lifecycle events carry no source/confidence axes and the branch
+# never demands them. Registered obligations (SPEC-204 §9): identity
+# (fault_id/fault_type) + the injection index (atomic-boundary precision,
+# ADR-0007 item 4); injected carries the prepare declaration
+# (expected_observations, SPEC-204 §11), applied (L1 only) carries the
+# confirmed-slot index list (SPEC-204 §8.1). mutation_log_ref (the
+# before-after summary pointer into the §8.2 mutation log) and
+# cleared_reason are optional — missing/unknown/not-applicable stay
+# distinguishable (SPEC-301 §3 payload three-state discipline).
+
+VERIFICATION_VERDICTS = frozenset({"PASS", "FAIL", "INCONCLUSIVE"})
+
+CRITERION_RESULTS = frozenset({"PASS", "FAIL", "NOT_EVALUATED"})
+
+
+def _validate_fault_payload(
+    event_type: str, payload: Mapping[str, Any]
+) -> None:
+    """SPEC-204 §9 shared shape (ticket #56)."""
+    for field in ("fault_id", "fault_type"):
+        _require_non_empty_str(event_type, payload, field)
+    _require_natural(event_type, payload, "injection_index")
+    if event_type == "fault.injected":
+        _require_non_empty_string_list(
+            event_type, payload, "expected_observations"
+        )
+    if event_type == "fault.applied":
+        applied = payload.get("applied_packet_indexes")
+        if not isinstance(applied, list) or not applied:
+            raise EnvelopeError(
+                EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+                f"payload 'applied_packet_indexes' for {event_type!r} must"
+                " be a non-empty list of shared-frame slot indexes"
+                " (SPEC-204 §8.1: APPLIED confirms fault bytes in the flow)",
+            )
+        for index in applied:
+            if (
+                not isinstance(index, int)
+                or isinstance(index, bool)
+                or index < 0
+            ):
+                raise EnvelopeError(
+                    EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+                    f"applied_packet_indexes entries for {event_type!r} "
+                    f"must be non-negative integers, got {index!r}",
+                )
+    for optional in ("mutation_log_ref", "cleared_reason"):
+        if optional in payload and payload[optional] is not None:
+            _require_non_empty_str(event_type, payload, optional)
+
+
+def _validate_recovery_payload(
+    event_type: str, payload: Mapping[str, Any]
+) -> None:
+    """SPEC-206 §4 verdict shape (ticket #56 declaration)."""
+    for field in (
+        "run_id",
+        "baseline_run_id",
+        "scenario_id",
+        "scenario_version",
+        "scenario_content_hash",
+        "summary",
+    ):
+        _require_non_empty_str(event_type, payload, field)
+    verdict = payload.get("verdict")
+    if verdict not in VERIFICATION_VERDICTS:
+        raise EnvelopeError(
+            EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+            f"payload 'verdict' for {event_type!r} must be one of "
+            f"{sorted(VERIFICATION_VERDICTS)}, got {verdict!r}",
+        )
+    criteria = payload.get("criteria")
+    if not isinstance(criteria, list) or not criteria:
+        raise EnvelopeError(
+            EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+            f"payload 'criteria' for {event_type!r} must be a non-empty "
+            "list of per-criterion results (SPEC-206 §4)",
+        )
+    for entry in criteria:
+        if not isinstance(entry, Mapping):
+            raise EnvelopeError(
+                EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+                f"criteria entries for {event_type!r} must be objects, "
+                f"got {entry!r}",
+            )
+        for field in ("criterion_id", "kind"):
+            _require_non_empty_str(event_type, entry, field)
+        if not isinstance(entry.get("mandatory"), bool):
+            raise EnvelopeError(
+                EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+                f"criteria 'mandatory' for {event_type!r} must be a "
+                f"boolean, got {entry.get('mandatory')!r}",
+            )
+        result = entry.get("result")
+        if result not in CRITERION_RESULTS:
+            raise EnvelopeError(
+                EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+                f"criteria 'result' for {event_type!r} must be one of "
+                f"{sorted(CRITERION_RESULTS)}, got {result!r}",
+            )
+        reason_code = entry.get("reason_code")
+        if result == "NOT_EVALUATED":
+            # SPEC-206 §5 item 2: no silent skips — the reason is mandatory.
+            _require_non_empty_str(event_type, entry, "reason_code")
+        elif reason_code is not None and (
+            not isinstance(reason_code, str) or not reason_code
+        ):
+            raise EnvelopeError(
+                EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+                f"criteria 'reason_code' for {event_type!r} must be a "
+                f"non-empty string or null when present, got {reason_code!r}",
+            )
+
+
+def _validate_diagnosis_payload(
+    event_type: str, payload: Mapping[str, Any]
+) -> None:
+    """SPEC-306 §7 shared shape (ticket #54).
+
+    ``raised``/``updated`` carry the full candidate shape; ``cleared``
+    carries only ``diagnosis_id`` + ``rule_id`` + the clear reason. The
+    registered obligations are validated; unknown additional keys stay
+    tolerated (additive payload evolution, SPEC-301 §8 — same posture as
+    the ``ts.*`` axes branch).
+    """
+    if event_type == "diagnosis.cleared":
+        for field in _CLEARED_REQUIRED_STR_FIELDS:
+            _require_non_empty_str(event_type, payload, field)
+        return
+    for field in _RAISED_REQUIRED_STR_FIELDS:
+        _require_non_empty_str(event_type, payload, field)
+    _require_vocabulary(event_type, payload, "severity", DIAGNOSIS_SEVERITIES)
+    _require_vocabulary(event_type, payload, "confidence", DIAGNOSIS_CONFIDENCES)
+    _require_observation_refs(event_type, payload)
+    _require_string_list(event_type, payload, "affected_node_ids")
+    _require_string_list(event_type, payload, "suggested_actions")
+    _require_evidence(event_type, payload)
+
+
+def _require_non_empty_str(
+    event_type: str, payload: Mapping[str, Any], field: str
+) -> None:
+    value = payload.get(field)
+    if not isinstance(value, str) or not value:
+        raise EnvelopeError(
+            EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+            f"payload field {field!r} for {event_type!r} must be a "
+            f"non-empty string, got {value!r}",
+        )
+
+
+def _require_natural(
+    event_type: str, payload: Mapping[str, Any], field: str
+) -> None:
+    value = payload.get(field)
+    if (
+        not isinstance(value, int)
+        or isinstance(value, bool)
+        or value < 0
+    ):
+        raise EnvelopeError(
+            EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+            f"payload field {field!r} for {event_type!r} must be a "
+            f"non-negative integer (shared-frame index), got {value!r}",
+        )
+
+
+def _require_non_empty_string_list(
+    event_type: str, payload: Mapping[str, Any], field: str
+) -> None:
+    values = payload.get(field)
+    if not isinstance(values, list) or not values:
+        raise EnvelopeError(
+            EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+            f"payload {field!r} for {event_type!r} must be a non-empty "
+            f"list of non-empty strings, got {values!r}",
+        )
+    _require_string_list(event_type, payload, field)
+
+
+def _require_vocabulary(
+    event_type: str,
+    payload: Mapping[str, Any],
+    field: str,
+    vocabulary: frozenset[str],
+) -> None:
+    value = payload.get(field)
+    if value not in vocabulary:
+        raise EnvelopeError(
+            EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+            f"payload {field!r} for {event_type!r} must be one of "
+            f"{sorted(vocabulary)}, got {value!r}",
+        )
+
+
+def _require_observation_refs(
+    event_type: str, payload: Mapping[str, Any]
+) -> None:
+    refs = payload.get("observation_refs")
+    if not isinstance(refs, list) or not refs:
+        raise EnvelopeError(
+            EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+            f"payload 'observation_refs' for {event_type!r} must be a "
+            "non-empty list of {journal_seq, event_type} objects "
+            "(SPEC-306 §7; REQ-DIA-306-003)",
+        )
+    for ref in refs:
+        if not isinstance(ref, Mapping):
+            raise EnvelopeError(
+                EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+                f"observation_refs entries for {event_type!r} must be "
+                f"objects, got {ref!r}",
+            )
+        journal_seq = ref.get("journal_seq")
+        if (
+            not isinstance(journal_seq, int)
+            or isinstance(journal_seq, bool)
+            or journal_seq < 1
+        ):
+            raise EnvelopeError(
+                EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+                f"observation_refs journal_seq for {event_type!r} must be "
+                "a positive integer (per-session stamp order), got "
+                f"{journal_seq!r}",
+            )
+        ref_type = ref.get("event_type")
+        try:
+            validate_event_type(ref_type)
+        except EnvelopeError:
+            raise EnvelopeError(
+                EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+                f"observation_refs event_type {ref_type!r} for "
+                f"{event_type!r} is not a registered event type",
+            ) from None
+
+
+def _require_string_list(
+    event_type: str, payload: Mapping[str, Any], field: str
+) -> None:
+    values = payload.get(field)
+    if not isinstance(values, list) or not all(
+        isinstance(item, str) and item for item in values
+    ):
+        raise EnvelopeError(
+            EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+            f"payload {field!r} for {event_type!r} must be a list of "
+            f"non-empty strings, got {values!r}",
+        )
+
+
+def _require_evidence(event_type: str, payload: Mapping[str, Any]) -> None:
+    evidence = payload.get("evidence")
+    if not isinstance(evidence, Mapping):
+        raise EnvelopeError(
+            EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+            f"payload 'evidence' for {event_type!r} must be an object "
+            "{artifact_id, pid, packet_index} (SPEC-306 §6/§7)",
+        )
+    _require_non_empty_str(event_type, evidence, "artifact_id")
+    pid = evidence.get("pid")
+    if (
+        not isinstance(pid, int)
+        or isinstance(pid, bool)
+        or not 0 <= pid <= _DIAGNOSIS_PID_MAX
+    ):
+        raise EnvelopeError(
+            EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+            f"evidence pid for {event_type!r} must be an integer in "
+            f"0..{_DIAGNOSIS_PID_MAX} (13-bit DVB PID), got {pid!r}",
+        )
+    packet_index = evidence.get("packet_index")
+    if (
+        not isinstance(packet_index, int)
+        or isinstance(packet_index, bool)
+        or packet_index < 0
+    ):
+        raise EnvelopeError(
+            EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+            f"evidence packet_index for {event_type!r} must be a "
+            "non-negative integer (ADR-0007 item 4 shared frame), got "
+            f"{packet_index!r}",
+        )
+
+
 __all__ = [
     "COALESCABLE_EVENT_TYPES",
+    "CRITERION_RESULTS",
     "DELIVERY_PROTECTED_EVENT_TYPES",
+    "DIAGNOSIS_CONFIDENCES",
     "DIAGNOSIS_EVENT_TYPES",
+    "DIAGNOSIS_SEVERITIES",
     "FAULT_EVENT_TYPES",
     "RECOVERY_EVENT_TYPES",
     "REGISTERED_EVENT_TYPES",
@@ -260,6 +587,7 @@ __all__ = [
     "SIMULATION_SESSION_EVENT_TYPES",
     "TOPOLOGY_EVENT_TYPES",
     "TS_EVENT_TYPES",
+    "VERIFICATION_VERDICTS",
     "WITHDRAWN_EVENT_TYPES",
     "WITHDRAWN_NAMESPACE_PREFIXES",
     "is_coalescable",

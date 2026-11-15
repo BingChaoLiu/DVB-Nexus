@@ -1,10 +1,10 @@
-"""Run/Artifact repositories (SPEC-502 sections 4-5).
+"""Run/Artifact/Diagnosis repositories (SPEC-502 sections 4-5).
 
 Public interfaces are expressed as ``typing.Protocol`` classes with the exact
 SPEC-502 §5 signatures (REQ-PLT-502-006); the ``Sqlite*`` classes are the
 concrete implementations. Row types are storage-owned value objects — the
 SPEC-502 §5 protocol references them by name (``EventRow`` lives in
-``journal.py``).
+``journal.py``, ``DiagnosisRecord`` here since ticket #54).
 
 ``ArtifactMeta``: SPEC-502 §5 names the register input type but does not
 define it. The artifacts table (§4) stores ``run_id / session_id``, while the
@@ -12,19 +12,25 @@ domain ``TSArtifact`` (ticket #21, not modifiable here) has no ``session_id``
 field — so the register input composes the domain model with the session id.
 
 The remaining §5 protocols (``TopologyRepository`` / ``SessionRepository`` /
-``DiagnosisRepository`` / ``AlertRepository``) are NOT implemented in this
-ticket: their signatures depend on domain types that do not exist yet
-(``SimulationSessionSpec``, ``DiagnosisRecord``, ``AlertRecord``). The tables
-themselves exist since migration 0001. Recorded as out-of-scope-with-evidence
-in the implementation report.
+``AlertRepository``) are NOT implemented: their signatures depend on domain
+types that do not exist yet (``SimulationSessionSpec``, ``AlertRecord``).
+The tables themselves exist since migration 0001. Recorded as
+out-of-scope-with-evidence in the implementation reports.
+
+Storage-owned row discipline (ticket #54): ``DiagnosisRecord`` is defined
+HERE, not in ``domain.diagnosis`` — an adapters → domain.diagnosis edge
+would put every importer of this module (e.g. ``simulation`` via the
+artifact store) on an indirect ``domain.diagnosis`` chain and break the
+frozen import-linter contracts C7/C8. Same posture as ``ArtifactRow``:
+plain strings, no domain vocabulary import.
 """
 
 from __future__ import annotations
 
 import json
 import sqlite3
-from dataclasses import dataclass
-from typing import Optional, Protocol
+from dataclasses import dataclass, field
+from typing import Any, Optional, Protocol
 
 from adapters.storage.errors import StorageConflictError
 from domain.observation.artifact import TSArtifact
@@ -34,6 +40,10 @@ from domain.observation.run_context import RunContext
 #: SPEC-502 §4 has a status column but the §5 create protocol takes no status;
 #: SPEC-003 §3 LifecycleState's first value is "created".
 _INITIAL_RUN_STATUS = "created"
+
+#: SPEC-502 §4 diagnoses.state two-value column (raised/cleared; the
+#: SPEC-304 five-state alert lifecycle is the OTHER table).
+_DIAGNOSIS_STATES = ("raised", "cleared")
 
 
 class RunRepository(Protocol):
@@ -196,7 +206,259 @@ __all__ = [
     "ArtifactMeta",
     "ArtifactRepository",
     "ArtifactRow",
+    "DiagnosisRecord",
+    "DiagnosisRepository",
     "RunRepository",
     "SqliteArtifactRepository",
+    "SqliteDiagnosisRepository",
     "SqliteRunRepository",
+    "SqliteVerificationRepository",
+    "VerdictRecord",
+    "VerificationRepository",
 ]
+
+
+# --- diagnoses (SPEC-502 §4 row 6 / §5, ticket #54) -----------------------------
+
+
+@dataclass(frozen=True)
+class DiagnosisRecord:
+    """One stored diagnoses row (SPEC-502 §4/§5 ``DiagnosisRecord``).
+
+    Storage-owned (see the module docstring): plain strings for the
+    severity/confidence vocabularies — the diagnosis enums live in
+    ``domain.diagnosis`` and adapters must not import that package (the
+    indirect-chain discipline). ``raised_at``/``cleared_at`` are epoch-ms
+    integers (ticket #23 R8); the list fields are stored as JSON TEXT.
+    """
+
+    diagnosis_id: str
+    session_id: str
+    run_id: str
+    rule_id: str
+    rule_version: str
+    code: str
+    severity: str
+    confidence: str
+    observation_refs: list[dict[str, Any]] = field(default_factory=list)
+    affected_node_ids: list[str] = field(default_factory=list)
+    suggested_actions: list[str] = field(default_factory=list)
+    state: str = "raised"
+    raised_at: int = 0
+    cleared_at: Optional[int] = None
+
+
+class DiagnosisRepository(Protocol):
+    """SPEC-502 §5 diagnoses protocol.
+
+    upsert implements REQ-DIA-306-004 (candidates upsert the table, one
+    row per ``diagnosis_id``, state raised/cleared consistent with the
+    ``diagnosis.*`` event stream).
+    """
+
+    def upsert(self, record: DiagnosisRecord) -> None: ...
+
+    def clear(self, diagnosis_id: str, *, cleared_at_utc_ms: int) -> None: ...
+
+    def query(self, session_id: str) -> list[DiagnosisRecord]: ...
+
+
+class SqliteDiagnosisRepository:
+    """SQLite implementation of :class:`DiagnosisRepository`."""
+
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        self._conn = conn
+
+    def upsert(self, record: DiagnosisRecord) -> None:
+        if record.state not in _DIAGNOSIS_STATES:
+            raise ValueError(
+                f"diagnoses.state must be one of {_DIAGNOSIS_STATES},"
+                f" got {record.state!r} (SPEC-502 §4)"
+            )
+        refs_json = json.dumps(record.observation_refs, ensure_ascii=False)
+        node_ids_json = json.dumps(record.affected_node_ids, ensure_ascii=False)
+        actions_json = json.dumps(record.suggested_actions, ensure_ascii=False)
+        try:
+            self._conn.execute(
+                "INSERT INTO diagnoses (diagnosis_id, session_id, run_id,"
+                " rule_id, rule_version, code, severity, confidence,"
+                " observation_refs_json, affected_node_ids_json,"
+                " suggested_actions_json, state, raised_at, cleared_at)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                " ON CONFLICT(diagnosis_id) DO UPDATE SET"
+                " rule_id=excluded.rule_id, rule_version=excluded.rule_version,"
+                " code=excluded.code, severity=excluded.severity,"
+                " confidence=excluded.confidence,"
+                " observation_refs_json=excluded.observation_refs_json,"
+                " affected_node_ids_json=excluded.affected_node_ids_json,"
+                " suggested_actions_json=excluded.suggested_actions_json,"
+                " state=excluded.state, raised_at=excluded.raised_at,"
+                " cleared_at=excluded.cleared_at",
+                (
+                    record.diagnosis_id,
+                    record.session_id,
+                    record.run_id,
+                    record.rule_id,
+                    record.rule_version,
+                    record.code,
+                    record.severity,
+                    record.confidence,
+                    refs_json,
+                    node_ids_json,
+                    actions_json,
+                    record.state,
+                    record.raised_at,
+                    record.cleared_at,
+                ),
+            )
+        except sqlite3.IntegrityError as exc:
+            raise StorageConflictError(
+                f"diagnosis {record.diagnosis_id!r} violates a diagnoses constraint"
+            ) from exc
+
+    def clear(self, diagnosis_id: str, *, cleared_at_utc_ms: int) -> None:
+        cursor = self._conn.execute(
+            "UPDATE diagnoses SET state = 'cleared', cleared_at = ?"
+            " WHERE diagnosis_id = ?",
+            (cleared_at_utc_ms, diagnosis_id),
+        )
+        if cursor.rowcount == 0:
+            raise LookupError(f"diagnosis {diagnosis_id!r} does not exist")
+
+    def query(self, session_id: str) -> list[DiagnosisRecord]:
+        rows = self._conn.execute(
+            "SELECT * FROM diagnoses WHERE session_id = ?"
+            " ORDER BY raised_at ASC, diagnosis_id ASC",
+            (session_id,),
+        ).fetchall()
+        return [_diagnosis_record(row) for row in rows]
+
+
+def _diagnosis_record(row: sqlite3.Row) -> DiagnosisRecord:
+    return DiagnosisRecord(
+        diagnosis_id=row["diagnosis_id"],
+        session_id=row["session_id"],
+        run_id=row["run_id"],
+        rule_id=row["rule_id"],
+        rule_version=row["rule_version"],
+        code=row["code"],
+        severity=row["severity"],
+        confidence=row["confidence"],
+        observation_refs=json.loads(row["observation_refs_json"]),
+        affected_node_ids=json.loads(row["affected_node_ids_json"]),
+        suggested_actions=json.loads(row["suggested_actions_json"]),
+        state=row["state"],
+        raised_at=row["raised_at"],
+        cleared_at=row["cleared_at"],
+    )
+
+
+# --- verification verdicts (SPEC-206 §4/§5, ticket #56) --------------------------
+#
+# Migration 003 (additive table; the SPEC-502 §4 frozen tables untouched).
+# Storage-owned row discipline (same posture as DiagnosisRecord): plain
+# strings and JSON-TEXT list projections — ``simulation.verification``
+# imports THIS module (adapters is a declared simulation edge), never the
+# reverse.
+
+
+@dataclass(frozen=True)
+class VerdictRecord:
+    """One stored verification_verdicts row (SPEC-206 §4 result structure).
+
+    ``criteria``/``evidence_refs`` are the per-criterion and evidence
+    projections stored as JSON TEXT; ``verified_at_utc_ms`` is the
+    operational verification timestamp (epoch-ms, ticket #23 R8).
+    """
+
+    verdict_id: str
+    session_id: str
+    run_id: str
+    baseline_run_id: str
+    scenario_id: str
+    scenario_version: str
+    scenario_content_hash: str
+    verdict: str
+    criteria: list[dict[str, Any]] = field(default_factory=list)
+    evidence_refs: list[dict[str, Any]] = field(default_factory=list)
+    summary: str = ""
+    verified_at_utc_ms: int = 0
+
+
+_VERDICT_STATES = ("PASS", "FAIL", "INCONCLUSIVE")
+
+
+class VerificationRepository(Protocol):
+    """The verdict persistence face (SPEC-206 §5 item 3: 事后审计与重放)."""
+
+    def save(self, record: VerdictRecord) -> None: ...
+
+    def query(self, session_id: str) -> list[VerdictRecord]: ...
+
+
+class SqliteVerificationRepository:
+    """SQLite implementation of :class:`VerificationRepository`."""
+
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        self._conn = conn
+
+    def save(self, record: VerdictRecord) -> None:
+        if record.verdict not in _VERDICT_STATES:
+            raise ValueError(
+                "verification_verdicts.verdict must be one of "
+                f"{_VERDICT_STATES}, got {record.verdict!r} (SPEC-206 §4)"
+            )
+        criteria_json = json.dumps(record.criteria, ensure_ascii=False)
+        evidence_json = json.dumps(record.evidence_refs, ensure_ascii=False)
+        try:
+            self._conn.execute(
+                "INSERT INTO verification_verdicts (verdict_id, session_id,"
+                " run_id, baseline_run_id, scenario_id, scenario_version,"
+                " scenario_content_hash, verdict, criteria_json,"
+                " evidence_refs_json, summary, verified_at_utc_ms)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    record.verdict_id,
+                    record.session_id,
+                    record.run_id,
+                    record.baseline_run_id,
+                    record.scenario_id,
+                    record.scenario_version,
+                    record.scenario_content_hash,
+                    record.verdict,
+                    criteria_json,
+                    evidence_json,
+                    record.summary,
+                    record.verified_at_utc_ms,
+                ),
+            )
+        except sqlite3.IntegrityError as exc:
+            raise StorageConflictError(
+                f"verdict {record.verdict_id!r} violates a"
+                " verification_verdicts constraint"
+            ) from exc
+
+    def query(self, session_id: str) -> list[VerdictRecord]:
+        rows = self._conn.execute(
+            "SELECT * FROM verification_verdicts WHERE session_id = ?"
+            " ORDER BY verified_at_utc_ms ASC, verdict_id ASC",
+            (session_id,),
+        ).fetchall()
+        return [_verdict_record(row) for row in rows]
+
+
+def _verdict_record(row: sqlite3.Row) -> VerdictRecord:
+    return VerdictRecord(
+        verdict_id=row["verdict_id"],
+        session_id=row["session_id"],
+        run_id=row["run_id"],
+        baseline_run_id=row["baseline_run_id"],
+        scenario_id=row["scenario_id"],
+        scenario_version=row["scenario_version"],
+        scenario_content_hash=row["scenario_content_hash"],
+        verdict=row["verdict"],
+        criteria=json.loads(row["criteria_json"]),
+        evidence_refs=json.loads(row["evidence_refs_json"]),
+        summary=row["summary"],
+        verified_at_utc_ms=row["verified_at_utc_ms"],
+    )

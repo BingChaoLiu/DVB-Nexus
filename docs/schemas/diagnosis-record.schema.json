@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Diagnosis Record Payload",
+  "$comment": "Repository-authoritative implementation schema (ticket #54, SPEC-306 section 7). The spec package has no draft schema document for the diagnosis payload — this document IS the registry entry (ruling D posture, same as ticket #50's metric-sample schema): the registry branch in domain/observation/registry.py enforces exactly the obligations below (required fields + vocabularies; unknown additional keys stay tolerated at the envelope layer per SPEC-301 section 8). Two payload variants share this document: raised/updated carry the full candidate shape; cleared carries only diagnosis_id + rule_id + the clear reason. confidence is the diagnosis THREE-tier static declaration (SPEC-307 section 3) — a different axis from the observation ConfidenceKind provenance vocabulary; the two must never be conflated (registry refuses the four-value axis here).",
+  "type": "object",
+  "oneOf": [
+    { "$ref": "#/$defs/candidate_payload" },
+    { "$ref": "#/$defs/cleared_payload" }
+  ],
+  "$defs": {
+    "observation_ref": {
+      "type": "object",
+      "required": ["journal_seq", "event_type"],
+      "properties": {
+        "journal_seq": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Per-session journal_seq of the committed observation record (SPEC-306 section 6)."
+        },
+        "event_type": {
+          "type": "string",
+          "description": "Registered SPEC-301 event type of the referenced record."
+        }
+      }
+    },
+    "candidate_payload": {
+      "type": "object",
+      "required": [
+        "diagnosis_id",
+        "rule_id",
+        "rule_version",
+        "code",
+        "severity",
+        "confidence",
+        "title",
+        "summary",
+        "observation_refs",
+        "affected_node_ids",
+        "suggested_actions",
+        "evidence"
+      ],
+      "properties": {
+        "diagnosis_id": { "type": "string", "minLength": 1, "description": "uuid4 opaque identity (ADR-0006 decision 3); raised mints it, updated keeps it." },
+        "rule_id": { "type": "string", "minLength": 1 },
+        "rule_version": { "type": "string", "minLength": 1, "description": "SPEC-307 section 7 traceability: the rule version rides the payload and the diagnoses row." },
+        "code": { "type": "string", "minLength": 1 },
+        "severity": { "enum": ["info", "warning", "error", "critical"] },
+        "confidence": {
+          "enum": ["low", "medium", "high"],
+          "description": "Static three-tier rule declaration (SPEC-307 section 3) — the engine computes no score and never claims a probability (SPEC-003 section 2.6)."
+        },
+        "title": { "type": "string", "minLength": 1 },
+        "summary": { "type": "string", "minLength": 1 },
+        "observation_refs": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/observation_ref" }
+        },
+        "affected_node_ids": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Semantic node slugs (ADR-0006 decision 3) as plain strings — the diagnosis domain does not import domain.topology."
+        },
+        "suggested_actions": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "evidence": { "$ref": "#/$defs/evidence_anchor" }
+      }
+    },
+    "evidence_anchor": {
+      "type": "object",
+      "required": ["artifact_id", "pid", "packet_index"],
+      "properties": {
+        "artifact_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Resolves through the SPEC-502 artifacts table to the SPEC-503 physical file (SPEC-306 section 6 chain terminus)."
+        },
+        "pid": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 8191,
+          "description": "13-bit DVB PID (SPEC-301 correlation.pid space)."
+        },
+        "packet_index": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Position in the ADR-0007 item 4 shared packet-order frame (baseline and faulted share one index space — same index, same slot)."
+        }
+      }
+    },
+    "cleared_payload": {
+      "type": "object",
+      "required": ["diagnosis_id", "rule_id", "reason"],
+      "properties": {
+        "diagnosis_id": { "type": "string", "minLength": 1 },
+        "rule_id": { "type": "string", "minLength": 1 },
+        "reason": { "type": "string", "minLength": 1, "description": "The clear cause (SPEC-306 section 7: symptom gone, e.g. after regeneration without the symptom)." }
+      }
+    }
+  }
+}

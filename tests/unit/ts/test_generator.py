@@ -639,23 +639,41 @@ def test_generator_clean_baseline():
     import importlib
 
     before = set(sys.modules)
-    for name in [
-        name
+    purged = {
+        name: sys.modules[name]
         for name in list(sys.modules)
         if name == "ts.generator" or name.startswith("ts.generator.")
-    ]:
+    }
+    for name in purged:
         del sys.modules[name]
-    importlib.import_module("ts.generator")
-    importlib.import_module("ts.generator.generator")
-    fresh = set(sys.modules) - before
-    offenders = [
-        name
-        for name in fresh
-        if name == "faults"
-        or name.startswith("faults.")
-        or name.startswith("adapters.")
-    ]
-    assert offenders == []
+    try:
+        importlib.import_module("ts.generator")
+        importlib.import_module("ts.generator.generator")
+        fresh = set(sys.modules) - before
+        offenders = [
+            name
+            for name in fresh
+            if name == "faults"
+            or name.startswith("faults.")
+            or name.startswith("adapters.")
+        ]
+        assert offenders == []
+    finally:
+        # Restore the pre-check module world (挂账 1, #56 known issue): the
+        # re-import mints NEW class objects for ts.generator.config et al.;
+        # leaving them in sys.modules splits class identity against every
+        # module holding a pre-check ``from ts.generator.config import
+        # ProgramConfig`` binding — order-dependent pollution that failed
+        # ~20 rest_runs/rest_artifacts tests under the explicit path order
+        # ``pytest tests/unit tests/integration ...`` (unit first). The
+        # isolation check itself is unchanged.
+        for name in [
+            name
+            for name in list(sys.modules)
+            if name == "ts.generator" or name.startswith("ts.generator.")
+        ]:
+            del sys.modules[name]
+        sys.modules.update(purged)
 
 
 # --- REQ-TS-108-007: analysis_only profile boundary ----------------------------

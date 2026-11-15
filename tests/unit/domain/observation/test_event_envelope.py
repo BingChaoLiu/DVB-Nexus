@@ -290,10 +290,78 @@ class TestLooseEnvelopeTightPayload:
 
     def test_every_registered_type_accepts_a_payload_object(self):
         # Envelope layer: payload is only ever an object; per-type payloads
-        # beyond ts.* register their schemas later (SPEC-301 section 13).
+        # register their schemas over time (SPEC-301 section 13). Families
+        # WITH a registered payload schema carry a minimal VALID payload
+        # here (ts.* observation axes, #13 Q3-i; diagnosis.* SPEC-306 §7
+        # shared shape, ticket #54; fault.* SPEC-204 §9 + recovery.* verdict
+        # shape, ticket #56) — every still-schemaless family keeps the
+        # bare-{} posture.
         for event_type in sorted(REGISTERED_EVENT_TYPES):
             if event_type.startswith("ts."):
                 payload = {"source": "internal_parser", "confidence": "parsed"}
+            elif event_type == "diagnosis.cleared":
+                payload = {
+                    "diagnosis_id": "3f2504e0-4f89-11d3-9a0c-0305e82c3301",
+                    "rule_id": "DIA-X",
+                    "reason": "symptom gone",
+                }
+            elif event_type.startswith("diagnosis."):
+                payload = {
+                    "diagnosis_id": "3f2504e0-4f89-11d3-9a0c-0305e82c3301",
+                    "rule_id": "DIA-X",
+                    "rule_version": "1.0.0",
+                    "code": "DIAG_X",
+                    "severity": "info",
+                    "confidence": "high",
+                    "title": "t",
+                    "summary": "s",
+                    "observation_refs": [
+                        {"journal_seq": 1, "event_type": "ts.continuity_error"}
+                    ],
+                    "affected_node_ids": [],
+                    "suggested_actions": [],
+                    "evidence": {"artifact_id": "a", "pid": 0, "packet_index": 0},
+                }
+            elif event_type == "fault.injected":
+                payload = {
+                    "fault_id": "fd000000-0000-4000-8000-000000000001",
+                    "fault_type": "PAT_MISSING",
+                    "injection_index": 0,
+                    "expected_observations": ["ts.psi_section_observed"],
+                }
+            elif event_type == "fault.applied":
+                payload = {
+                    "fault_id": "fd000000-0000-4000-8000-000000000001",
+                    "fault_type": "PAT_MISSING",
+                    "injection_index": 0,
+                    "applied_packet_indexes": [12],
+                }
+            elif event_type.startswith("fault."):
+                payload = {
+                    "fault_id": "fd000000-0000-4000-8000-000000000001",
+                    "fault_type": "PAT_MISSING",
+                    "injection_index": 0,
+                }
+            elif event_type == "recovery.verification_completed":
+                payload = {
+                    "verdict": "PASS",
+                    "run_id": "run-r",
+                    "baseline_run_id": "run-b",
+                    "scenario_id": "scn-1",
+                    "scenario_version": "1.0.0",
+                    "scenario_content_hash": "a" * 64,
+                    "criteria": [
+                        {
+                            "criterion_id": "sc-01",
+                            "kind": "fault_inactive",
+                            "mandatory": True,
+                            "result": "PASS",
+                            "reason_code": None,
+                            "reason": None,
+                        }
+                    ],
+                    "summary": "all mandatory criteria passed",
+                }
             else:
                 payload = {}
             raw = envelope_dict(

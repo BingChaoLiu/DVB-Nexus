@@ -42,10 +42,13 @@ from application.errors import (
     ApplicationError,
     BadRequestError,
     ConflictError,
+    ForbiddenError,
     NotFoundError,
     PayloadTooLargeError,
+    RateLimitedError,
     SemanticValidationError,
     ServiceUnavailableError,
+    UnauthorizedError,
 )
 
 #: SPEC-500 §6 mapping, one row per raisable exception category, in spec
@@ -59,6 +62,18 @@ ERROR_HTTP_MAPPING: tuple[tuple[type[Exception], int], ...] = (
     (PayloadTooLargeError, 413),
     (SemanticValidationError, 422),
     (ServiceUnavailableError, 503),
+)
+
+#: SPEC-305 §7 inventory extension (ticket #53): the three rows the
+#: observation query plane adds — 401 未认证 (no MVP raiser: Q4 无认证),
+#: 403 scope 禁止 (``OBS_SCOPE_FORBIDDEN``), 429 限流 (the export-task
+#: throttle). The SPEC-500 §6 table above stays byte-identical — it is
+#: pinned row-exact by the #24 unit contract — so the extension rides its
+#: own declarative table and the SAME registration loop.
+SPEC305_ERROR_HTTP_MAPPING: tuple[tuple[type[Exception], int], ...] = (
+    (UnauthorizedError, 401),
+    (ForbiddenError, 403),
+    (RateLimitedError, 429),
 )
 
 
@@ -162,8 +177,8 @@ def _unhandled_exception_handler(request: Request, exc: Exception) -> JSONRespon
 
 
 def register_error_handlers(app: FastAPI) -> None:
-    """Register the declarative table + framework overrides onto ``app``."""
-    for exception_class, status_code in ERROR_HTTP_MAPPING:
+    """Register the declarative tables + framework overrides onto ``app``."""
+    for exception_class, status_code in ERROR_HTTP_MAPPING + SPEC305_ERROR_HTTP_MAPPING:
         app.add_exception_handler(exception_class, _application_error_handler(status_code))
     app.add_exception_handler(RequestValidationError, _request_validation_error_handler)
     app.add_exception_handler(StarletteHTTPException, _http_exception_handler)

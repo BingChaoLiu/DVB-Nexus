@@ -1,0 +1,93 @@
+{
+  "schema_version": 1,
+  "scenario_id": "5a1e0000-0000-4000-8000-00000000e201",
+  "version": "1.0.0",
+  "title": "Fault Lab: PAT missing (null substitution)",
+  "difficulty": "beginner",
+  "required_engine_versions": {},
+  "initial_topology": {
+    "topology_id": "topo-1",
+    "revision": 1,
+    "nodes": [
+      {
+        "nodeId": "mux-0",
+        "nodeType": "muxer",
+        "config": {},
+        "ports": [
+          {
+            "portId": "out",
+            "direction": "output",
+            "plane": "MPEG_TS",
+            "maxConnections": 1
+          }
+        ]
+      }
+    ],
+    "connections": []
+  },
+  "simulation_config": {
+    "seed": 1234567,
+    "mode": "deterministic",
+    "clock": {
+      "mode": "deterministic",
+      "start_time_ns": 0,
+      "speed_num": 1,
+      "speed_den": 1,
+      "tick_quantum_ns": 1000000
+    }
+  },
+  "fault_plan": [
+    {
+      "fault_id": "fd000000-0000-4000-8000-00000000f101",
+      "fault_type": "PAT_MISSING",
+      "target_id": "mux-0:pid:0x0000",
+      "parameters": {},
+      "activation": {
+        "kind": "packet_index",
+        "packet_index": 202
+      },
+      "expected_observations": [
+        "ts.psi_section_observed"
+      ]
+    }
+  ],
+  "objectives": [
+    "Observe the PAT-window symptom through the analysis bridge",
+    "Diagnose the single attributable root cause (DIA-PAT-MISSING)",
+    "Recover with a fault-free run and verify the three-state PASS"
+  ],
+  "hints": [
+    {
+      "hint_id": "hint-pat-window",
+      "trigger": "diagnosis raised DIAG_PAT_MISSING",
+      "level": "nudge",
+      "content": "PID 0 stops carrying PAT sections from the activation slot on: the fault substitutes null packets. Check the PSI repetition supervision facts and the mutation log.",
+      "requirement_ids": [
+        "REQ-SIM-204-001"
+      ]
+    }
+  ],
+  "pass_criteria": [
+    {
+      "criterion_id": "fault-cleared",
+      "kind": "fault_inactive",
+      "mandatory": true,
+      "fault_id": "fd000000-0000-4000-8000-00000000f101"
+    },
+    {
+      "criterion_id": "pat-valid",
+      "kind": "psi_pat_valid",
+      "mandatory": true
+    },
+    {
+      "criterion_id": "pmt-valid",
+      "kind": "psi_pmt_valid",
+      "mandatory": true
+    },
+    {
+      "criterion_id": "mapping-valid",
+      "kind": "pat_pmt_mapping_valid",
+      "mandatory": true
+    }
+  ]
+}

@@ -1,0 +1,143 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Observation Alert Record",
+  "$comment": "Repository-authoritative implementation schema (ticket #52, SPEC-304 section 14). Deliberately differs from the read-only spec-package draft schemas/alert-record.schema.json (G2, brief section 8): (a) the draft state enum lacks 'inactive' and misplaces 'suppressed' INSIDE the state enum — per SPEC-304 section 5 and the approved seam ruling #12 the lifecycle is inactive/pending/firing/resolving/resolved and suppression is NOT a migration state: it is a modifier on the record carried by the 'suppression' metadata object (suppressed records stay query-visible; unsuppression restores the prior lifecycle state because the state never moved); (b) time requires clock_epoch + semantics — record-level timepoints carry explicit semantics per SPEC-300 section 6 (the ENVELOPE timepoint intentionally does not, SPEC-301 section 6; ruling #12 extends the record-level discipline to record schemas); (c) rule_version is required (the frozen alerts table column is NOT NULL, SPEC-502 section 4 / ticket #23 R8); (d) evidence_refs is bounded (maxItems 64, item maxLength 256) as the SPEC-304 section 13 alert-storm guard — refs are opaque resolvable tokens (metric:<name>:bucket-<start_ns> / journal:<seq>), never payload text. The spec-package draft is NOT edited in place (docs/spec README rule 2); the divergences are declared in the ticket #52 implementation report.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "alert_id",
+    "fingerprint",
+    "rule_id",
+    "rule_version",
+    "state",
+    "severity",
+    "scope",
+    "time",
+    "evidence_refs"
+  ],
+  "properties": {
+    "alert_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "fingerprint": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "rule_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "rule_version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "state": {
+      "enum": [
+        "inactive",
+        "pending",
+        "firing",
+        "resolving",
+        "resolved"
+      ]
+    },
+    "severity": {
+      "enum": [
+        "info",
+        "warning",
+        "error",
+        "critical"
+      ]
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tenant_id",
+        "session_id"
+      ],
+      "properties": {
+        "tenant_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "session_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      }
+    },
+    "time": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "value_ns",
+        "clock_domain",
+        "clock_epoch",
+        "semantics"
+      ],
+      "properties": {
+        "value_ns": {
+          "type": "integer"
+        },
+        "clock_domain": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "clock_epoch": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "semantics": {
+          "enum": [
+            "source",
+            "observed",
+            "derived"
+          ]
+        }
+      }
+    },
+    "summary": {
+      "type": "string",
+      "maxLength": 512
+    },
+    "evidence_refs": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 256
+      }
+    },
+    "suppression": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "reason"
+      ],
+      "properties": {
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "suppressed_by": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      }
+    }
+  }
+}

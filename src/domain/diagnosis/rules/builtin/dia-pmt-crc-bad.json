@@ -1,0 +1,49 @@
+{
+  "rule_id": "DIA-PMT-CRC-BAD",
+  "rule_version": "1.0.0",
+  "code": "DIAG_PMT_CRC_BAD",
+  "priority": 20,
+  "severity": "error",
+  "confidence": "high",
+  "title": "PMT CRC verification failed",
+  "summary_template": "PMT CRC check failed (persistent symptom) at packet {packet_index}; window artefact {artifact_id}",
+  "match": {
+    "event_type": "ts.psi_section_observed",
+    "predicates": [
+      {
+        "field": "payload.section",
+        "op": "eq",
+        "value": "PMT"
+      },
+      {
+        "field": "payload.crc_valid",
+        "op": "eq",
+        "value": false
+      }
+    ],
+    "group_by": [
+      "node_id",
+      "pid"
+    ],
+    "window": {
+      "aggregation": "count",
+      "scope": "run",
+      "min_count": 2,
+      "min_rate": null
+    }
+  },
+  "suppression": {
+    "key": [
+      "code",
+      "node_id"
+    ],
+    "window": "per_run"
+  },
+  "suggested_actions": [
+    "Re-mux the PMT with correct CRC"
+  ],
+  "expected_evidence": [
+    "ts.psi_section_observed"
+  ],
+  "enabled": true
+}
