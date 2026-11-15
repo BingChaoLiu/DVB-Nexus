@@ -102,7 +102,26 @@ def _envelope_doc(
         },
         "correlation": correlation,
         "severity": severity,
-        "payload": payload or {},
+        # fault.* carries its registered SPEC-204 §9 payload shape
+        # (ticket #56) — the filter cells exercise the whitelist, not
+        # payload laxity.
+        "payload": payload
+        or (
+            {
+                "fault_id": fault_id or "f-default",
+                "fault_type": "PAT_MISSING",
+                "injection_index": 0,
+                # fault.injected additionally carries the prepare
+                # declaration (SPEC-204 §9/§11, ticket #56 registry branch).
+                **(
+                    {"expected_observations": ["ts.psi_section_observed"]}
+                    if event_type == "fault.injected"
+                    else {}
+                ),
+            }
+            if event_type.startswith("fault.")
+            else {}
+        ),
         "tags": list(tags),
     }
 

@@ -21,8 +21,57 @@ def _raw_envelope(
     event_type: str = "simulation.run_started",
     producer_id: str = "sim-engine",
     session_id: str = "sess-1",
+    payload: dict | None = None,
 ) -> dict:
-    """Minimal SPEC-301 §2-shaped raw envelope (required fields only)."""
+    """Minimal SPEC-301 §2-shaped raw envelope (required fields only).
+
+    fault.* events carry their registered SPEC-204 §9 payload shape
+    (ticket #56) — the backpressure/dedup cells exercise delivery policy,
+    not payload laxity, so the default keeps those envelopes spec-valid.
+    """
+    if payload is None:
+        if event_type == "fault.injected":
+            payload = {
+                "fault_id": "fd000000-0000-4000-8000-000000000001",
+                "fault_type": "PAT_MISSING",
+                "injection_index": 0,
+                "expected_observations": ["ts.psi_section_observed"],
+            }
+        elif event_type == "fault.applied":
+            payload = {
+                "fault_id": "fd000000-0000-4000-8000-000000000001",
+                "fault_type": "PAT_MISSING",
+                "injection_index": 0,
+                "applied_packet_indexes": [12],
+            }
+        elif event_type.startswith("fault."):
+            payload = {
+                "fault_id": "fd000000-0000-4000-8000-000000000001",
+                "fault_type": "PAT_MISSING",
+                "injection_index": 0,
+            }
+        elif event_type == "recovery.verification_completed":
+            payload = {
+                "verdict": "PASS",
+                "run_id": "run-r",
+                "baseline_run_id": "run-b",
+                "scenario_id": "scn-1",
+                "scenario_version": "1.0.0",
+                "scenario_content_hash": "a" * 64,
+                "criteria": [
+                    {
+                        "criterion_id": "sc-01",
+                        "kind": "fault_inactive",
+                        "mandatory": True,
+                        "result": "PASS",
+                        "reason_code": None,
+                        "reason": None,
+                    }
+                ],
+                "summary": "all mandatory criteria passed",
+            }
+        else:
+            payload = {}
     return {
         "schema_version": "1.0",
         "event_id": event_id or new_event_id(),
@@ -46,7 +95,7 @@ def _raw_envelope(
             },
         },
         "severity": "info",
-        "payload": {},
+        "payload": payload,
         "tags": [],
     }
 

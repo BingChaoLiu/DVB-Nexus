@@ -19,7 +19,11 @@ from fastapi import APIRouter
 
 from api.routes.artifacts import ArtifactsPort, build_artifacts_router
 from api.routes.observation import build_observation_router
-from api.routes.pending import DiagnosisPort, build_pending_router
+from api.routes.pending import (
+    DiagnosisPort,
+    VerificationPort,
+    build_pending_router,
+)
 from api.routes.runs import RunsPort, build_runs_router
 from api.routes.sessions import SessionsPort, build_sessions_router
 
@@ -28,6 +32,7 @@ __all__ = [
     "DiagnosisPort",
     "RunsPort",
     "SessionsPort",
+    "VerificationPort",
     "build_spec500_routers",
 ]
 
@@ -38,6 +43,7 @@ def build_spec500_routers(
     runs_port: RunsPort,
     artifacts_port: ArtifactsPort,
     diagnosis_port: DiagnosisPort | None = None,
+    verification_port: VerificationPort | None = None,
 ) -> list[APIRouter]:
     """Assemble the complete SPEC-500 §4 router set.
 
@@ -49,11 +55,18 @@ def build_spec500_routers(
           endpoints (ticket #54; ``None`` keeps their 501 freeze answers —
           the composition root binds ``ServiceDiagnosisPort`` when the
           diagnosis service is in the stack).
+        verification_port: optional SPEC-206 backend for the §4.4 verify
+          endpoint (ticket #56; ``None`` keeps the 501 freeze answer —
+          the composition root binds ``ServiceVerificationPort`` when the
+          verification service is in the stack).
     """
     return [
         build_sessions_router(sessions_port),
         build_runs_router(runs_port),
         build_artifacts_router(artifacts_port),
         build_observation_router(),
-        build_pending_router(diagnosis_port=diagnosis_port),
+        build_pending_router(
+            diagnosis_port=diagnosis_port,
+            verification_port=verification_port,
+        ),
     ]

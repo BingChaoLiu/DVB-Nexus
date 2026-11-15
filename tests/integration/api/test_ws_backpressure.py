@@ -42,7 +42,13 @@ def _flood(gateway, total: int, *, protected_last: bool) -> None:
             raw["event_type"] = "fault.injected"
             raw["event_id"] = "flood-fault"
             raw["scope"]["run_id"] = "run-fault"
-            raw["payload"] = {}
+            # SPEC-204 §9 registered payload shape (ticket #56).
+            raw["payload"] = {
+                "fault_id": "fd000000-0000-4000-8000-000000000001",
+                "fault_type": "PAT_MISSING",
+                "injection_index": 0,
+                "expected_observations": ["ts.psi_section_observed"],
+            }
         assert gateway.accept(raw).outcome.value == "accepted"
         gateway.drain()
 
