@@ -24,11 +24,9 @@ import { expect, test } from "@playwright/test";
 import {
   CC_DISCONTINUITY_FAULT_PLAN,
   createStartedSession,
-  diagnoseRun,
   fetchPacket,
   queryEvents,
   submitAndAwaitRun,
-  verifyRun,
 } from "./helpers/backend";
 
 test.describe.serial("eight-step closed loop (SPEC-400 §7.3 skeleton)", () => {
@@ -44,14 +42,20 @@ test.describe.serial("eight-step closed loop (SPEC-400 §7.3 skeleton)", () => {
     expect(sessionId).toBeTruthy();
   });
 
-  test("Generate — clean baseline run completes with artifacts (driver: rest, UI owner #64)", async ({ request }) => {
-    test.info().annotations.push({ type: "driver", description: 'rest — flips to "ui" at #64' });
-    const run = await submitAndAwaitRun(request, sessionId, []);
-    baselineRunId = run.runId;
-    expect(run.status).toBe("completed");
-    const generated = run.artifacts.filter((a) => a.kind === "generated_ts");
-    expect(generated.length).toBeGreaterThanOrEqual(1);
-    generatedArtifactId = generated[0].artifact_id;
+  test("Generate — clean baseline run completes with artifacts (driver: ui, #64 Monitor)", async ({ page }) => {
+    test.info().annotations.push({ type: "driver", description: 'ui — #64 Monitor run trigger (flipped)' });
+    await page.goto(`/monitor?session=${sessionId}`);
+    await page.getByRole("button", { name: /提交 Run/ }).click();
+    // the page polls getRun and renders the status row when terminal
+    const row = page.getByTestId(/^run-row-/).first();
+    await expect(row).toHaveText(/completed/, { timeout: 30_000 });
+    baselineRunId = (await row.getAttribute("data-testid"))!.replace("run-row-", "");
+    expect(baselineRunId).toBeTruthy();
+    // artifact refs render with per-artifact test ids — no DOM text parsing
+    const artifact = page.getByTestId(/^run-artifact-/).first();
+    await expect(artifact).toContainText("generated_ts", { timeout: 10_000 });
+    generatedArtifactId = (await artifact.getAttribute("data-testid"))!.replace("run-artifact-", "");
+    expect(generatedArtifactId).toBeTruthy();
   });
 
   test("Inject — fault-plan run completes (driver: rest, UI owner #67)", async ({ request }) => {
@@ -76,17 +80,19 @@ test.describe.serial("eight-step closed loop (SPEC-400 §7.3 skeleton)", () => {
     });
   });
 
-  test("Diagnose — idempotent evaluation answers a SPEC-306 report (driver: rest, UI owner #64)", async ({ request }) => {
-    test.info().annotations.push({ type: "driver", description: 'rest — flips to "ui" at #64' });
-    const { status, json } = await diagnoseRun(request, sessionId, injectedRunId);
-    expect(status, `diagnose: ${status} ${JSON.stringify(json)}`).toBe(200);
-    // Honest shape assertion: without the Analyze bridge the ruleset sees no
-    // ts.* facts — the report may honestly carry zero candidates; the
-    // REPORT SHAPE is what this step pins.
-    expect(json.session_id).toBe(sessionId);
-    expect(json.run_id).toBe(injectedRunId);
-    expect(Array.isArray(json.candidates)).toBe(true);
-    expect(Array.isArray(json.warnings)).toBe(true);
+  test("Diagnose — idempotent evaluation answers a SPEC-306 report (driver: ui, #64 Monitor)", async ({ page }) => {
+    test.info().annotations.push({ type: "driver", description: 'ui — #64 Monitor diagnose trigger (flipped)' });
+    await page.goto(`/monitor?session=${sessionId}`);
+    // 404-until-drained tolerance rides the page's bounded retry; the assert
+    // polls past it. Report SHAPE remains the pinned object — without the
+    // Analyze bridge zero candidates is an honest answer.
+    await page.getByLabel("diagnose run id").fill(injectedRunId);
+    await page.getByRole("button", { name: "diagnose" }).click();
+    // the report line pins the REPORT SHAPE (run id + candidates/warnings
+    // counts); zero candidates stays an honest answer (no Analyze bridge).
+    await expect(
+      page.getByText(new RegExp(`report: run ${injectedRunId} · \\d+ candidates · \\d+ warnings`)),
+    ).toBeVisible({ timeout: 15_000 });
   });
 
   test("Inspect — events queryable + single packet via 188-byte Range (driver: rest, UI owner #65)", async ({ request }) => {
@@ -103,30 +109,40 @@ test.describe.serial("eight-step closed loop (SPEC-400 §7.3 skeleton)", () => {
     expect(body.length).toBe(188);
   });
 
-  test("Recover — a second clean run completes (driver: rest, UI owner #64/#67)", async ({ request }) => {
-    test.info().annotations.push({ type: "driver", description: 'rest — flips to "ui" at #64/#67' });
-    const run = await submitAndAwaitRun(request, sessionId, []);
-    recoveryRunId = run.runId;
-    expect(run.status).toBe("completed");
+  test("Recover — a second clean run completes (driver: ui, #64 Monitor / #67 scenario context)", async ({ page }) => {
+    test.info().annotations.push({ type: "driver", description: 'ui — #64 Monitor run trigger (flipped; #67 layers scenario)' });
+    await page.goto(`/monitor?session=${sessionId}`);
+    await page.getByRole("button", { name: /提交 Run/ }).click();
+    // the run registry is per-mount (in-memory page state) — after this fresh
+    // navigation there is exactly one row, and it must not be the baseline run
+    const row = page.getByTestId(/^run-row-/).first();
+    await expect(row).toHaveText(/completed/, { timeout: 30_000 });
+    recoveryRunId = (await row.getAttribute("data-testid"))!.replace("run-row-", "");
+    expect(recoveryRunId).not.toBe(baselineRunId);
   });
 
-  test("Verify — three-state verdict endpoint answers (driver: rest, UI owner #64/#67)", async ({ request }) => {
-    test.info().annotations.push({ type: "driver", description: 'rest — flips to "ui" at #64/#67' });
-    const { status, json } = await verifyRun(
-      request,
-      sessionId,
-      recoveryRunId,
-      baselineRunId,
-      CC_DISCONTINUITY_FAULT_PLAN,
-    );
-    expect(status).toBe(200);
-    // The verdict is the SERVER's SPEC-206 three-state answer — the UI never
-    // derives one locally (CONTEXT.md 通关 ban; SPEC-400 §8). Any of the
-    // three states is an honest answer for this chain shape.
-    expect(["PASS", "FAIL", "INCONCLUSIVE"]).toContain(json.verdict);
-    expect(json.session_id).toBe(sessionId);
-    expect(json.recovery_run_id).toBe(recoveryRunId);
-    expect(json.baseline_run_id).toBe(baselineRunId);
-    expect(Array.isArray(json.criteria)).toBe(true);
+  test("Verify — three-state verdict rendered from the server answer (driver: ui, #64 Monitor / #67)", async ({ page }) => {
+    test.info().annotations.push({ type: "driver", description: 'ui — #64 Monitor verify form + result card (flipped; #67 layers scenario)' });
+    await page.goto(`/monitor?session=${sessionId}`);
+    const faultId = (CC_DISCONTINUITY_FAULT_PLAN[0] as { fault_id: string }).fault_id;
+    await page.getByLabel("recovery_run_id").fill(recoveryRunId);
+    await page.getByLabel("baseline_run_id").fill(baselineRunId);
+    await page.getByLabel("scenario_id").fill("cc-discontinuity-lab");
+    await page.getByLabel("version").fill("1.0.0");
+    await page.getByLabel("content_hash").fill("e2e-smoke");
+    await page.getByLabel("criterion_id").fill("cc-ok");
+    await page.getByLabel("kind").selectOption("cc_continuous");
+    await page.getByLabel("fault_id").fill(faultId);
+    await page.getByRole("button", { name: "verify" }).click();
+    // The verdict is the SERVER's SPEC-206 three-state answer rendered
+    // verbatim — the UI never derives one locally (CONTEXT.md 通关 ban).
+    const verdict = page.getByTestId("verify-verdict");
+    await expect(verdict).toBeVisible({ timeout: 15_000 });
+    const verdictText = await verdict.textContent();
+    expect(["PASS", "FAIL", "INCONCLUSIVE"].some((v) => verdictText?.includes(v))).toBe(true);
+    const card = page.locator(".dvb-mon-verify-card");
+    await expect(card).toContainText(recoveryRunId);
+    await expect(card).toContainText(baselineRunId);
+    await expect(card).toContainText("cc_continuous");
   });
 });
