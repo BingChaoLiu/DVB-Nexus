@@ -32,6 +32,21 @@ SPEC-202 section 8 codes (ticket #40, appended — SPEC-202 §5/§8):
 - ``SIM_EVAL_NODE_FAILED``        evaluator-internal exception — the node
   is isolated as error health and the report is surfaced; the whole-graph
   evaluation never crashes (report path in ``simulation.state.evaluate``).
+
+SPEC-200 section 8 codes (ticket #41, appended — SPEC-200 §5/§6/§8):
+
+- ``SIM_SESSION_NOT_FOUND``            unknown session_id (404 semantics).
+- ``SIM_INVALID_LIFECYCLE_TRANSITION`` violates the section 5 exhaustive
+  transition table; the error carries the current legal transition set.
+- ``SIM_VALIDATION_FAILED``            session validation did not pass; the
+  SPEC-202 path-addressed ``ValidationReport`` rides on ``report``.
+- ``SIM_RESOURCE_LIMIT``               resource_limits exceeded (structure
+  frozen here; numeric values await the OPEN-006 ruling, #16).
+- ``SIM_ENGINE_ERROR``                 L0/L1/TS Core internal error with the
+  root cause attached; the session migrates to FAILED.
+- ``SIM_IO_ERROR``                     artifact/storage IO failure.
+- ``SIM_CANCELLED``                    command cancelled/timed out.
+- ``SIM_INTERNAL``                     unclassified internal error.
 """
 
 from __future__ import annotations
@@ -74,6 +89,32 @@ SIM_TOPO_CYCLE = "SIM_TOPO_CYCLE"
 #: SPEC-202 section 8 — evaluator-internal exception; the node is isolated
 #: as error health and the failure reported (never crashes the whole graph).
 SIM_EVAL_NODE_FAILED = "SIM_EVAL_NODE_FAILED"
+
+# --- SPEC-200 section 8 (ticket #41) ------------------------------------------
+
+#: SPEC-200 section 8 — session_id does not exist (404 semantics).
+SIM_SESSION_NOT_FOUND = "SIM_SESSION_NOT_FOUND"
+
+#: SPEC-200 section 8 — violates the section 5 exhaustive transition table.
+SIM_INVALID_LIFECYCLE_TRANSITION = "SIM_INVALID_LIFECYCLE_TRANSITION"
+
+#: SPEC-200 section 8 — session validation did not pass (report attached).
+SIM_VALIDATION_FAILED = "SIM_VALIDATION_FAILED"
+
+#: SPEC-200 section 8 — resource_limits exceeded (structure only; #16).
+SIM_RESOURCE_LIMIT = "SIM_RESOURCE_LIMIT"
+
+#: SPEC-200 section 8 — L0/L1/TS Core internal error; session -> FAILED.
+SIM_ENGINE_ERROR = "SIM_ENGINE_ERROR"
+
+#: SPEC-200 section 8 — artifact/storage IO failure (retryable flag set).
+SIM_IO_ERROR = "SIM_IO_ERROR"
+
+#: SPEC-200 section 8 — command cancelled or timed out (idempotent retry).
+SIM_CANCELLED = "SIM_CANCELLED"
+
+#: SPEC-200 section 8 — unclassified internal error (no stack leakage).
+SIM_INTERNAL = "SIM_INTERNAL"
 
 
 class SimulationError(Exception):
@@ -123,3 +164,84 @@ class TopologyCycleError(SimulationTopologyError):
     """``SIM_TOPO_CYCLE``: 拓扑含环，MVP 拒绝（确定性求值需要 DAG）."""
 
     code = SIM_TOPO_CYCLE
+
+
+# --- SPEC-200 section 8 exceptions (ticket #41) -------------------------------
+
+
+class SessionNotFoundError(SimulationError):
+    """``SIM_SESSION_NOT_FOUND``: session_id 不存在（404 语义）."""
+
+    code = SIM_SESSION_NOT_FOUND
+
+
+class InvalidLifecycleTransitionError(SimulationError):
+    """``SIM_INVALID_LIFECYCLE_TRANSITION``: 违反 SPEC-200 §5 迁移表.
+
+    Carries the offending pair (``current`` / ``target``); the message lists
+    the current legal transition set (SPEC-200 §8 拒绝，返回当前合法迁移集).
+    """
+
+    code = SIM_INVALID_LIFECYCLE_TRANSITION
+
+    def __init__(
+        self,
+        current: object,
+        target: object,
+        allowed: object = None,
+    ) -> None:
+        allowed_values = (
+            sorted(
+                str(getattr(item, "value", item)) for item in allowed
+            )
+            if allowed
+            else []
+        )
+        super().__init__(
+            f"illegal lifecycle transition {current} -> {target}; allowed "
+            f"targets from {current}: {allowed_values} (SPEC-200 section 5 "
+            "exhaustive table)"
+        )
+        self.current = current
+        self.target = target
+        self.allowed = allowed
+
+
+class SimulationValidationError(SimulationError):
+    """``SIM_VALIDATION_FAILED``: 会话验证不通过（附 ValidationReport）."""
+
+    code = SIM_VALIDATION_FAILED
+
+    def __init__(self, message: str, report: object = None) -> None:
+        super().__init__(message)
+        self.report = report
+
+
+class SimulationResourceLimitError(SimulationError):
+    """``SIM_RESOURCE_LIMIT``: 超出 resource_limits（取值口径随 #16）."""
+
+    code = SIM_RESOURCE_LIMIT
+
+
+class SimulationEngineError(SimulationError):
+    """``SIM_ENGINE_ERROR``: L0/L1/TS Core 内部错误（附根因，迁移 FAILED）."""
+
+    code = SIM_ENGINE_ERROR
+
+
+class SimulationIOError(SimulationError):
+    """``SIM_IO_ERROR``: Artifact/存储 IO 失败（区分 retryable）."""
+
+    code = SIM_IO_ERROR
+
+
+class SimulationCancelledError(SimulationError):
+    """``SIM_CANCELLED``: 命令被取消/超时（幂等可重试）."""
+
+    code = SIM_CANCELLED
+
+
+class SimulationInternalError(SimulationError):
+    """``SIM_INTERNAL``: 未分类内部错误（记录诊断，不外泄堆栈细节）."""
+
+    code = SIM_INTERNAL

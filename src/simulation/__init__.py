@@ -47,6 +47,31 @@ Event emission (``simulation.clock_advanced``, the overload diagnostic and
 hooks/diffs only and emit nothing themselves. Wall clock, random numbers,
 paths and session IDs never participate in virtual time, event ordering or
 evaluation results (CONTEXT.md 确定性复现).
+
+SPEC-200 (ticket #41) contributes the Runtime lifecycle surface:
+
+- :mod:`simulation.lifecycle` — the nine-state
+  :class:`simulation.lifecycle.LifecycleState` vocabulary plus the
+  exhaustive section 5 transition table (``ALLOWED_TRANSITIONS``); every
+  unlisted transition raises
+  :class:`simulation.errors.InvalidLifecycleTransitionError` with the
+  current legal set attached.
+- :class:`simulation.runtime.SimulationRuntime` — the SPEC-200 section 6
+  command face (create/validate/start/pause/resume/stop/dispose +
+  ``get_snapshot`` pull API), per-session command serialization, stop
+  idempotency with bounded shutdown-timeout escalation, and the §5.1
+  pause/resume + clock same-critical-section coupling. The section 7.4
+  event obligation flows through the injected
+  :class:`simulation.runtime.SessionEventSink` (structural protocol — the
+  composition root wires the #47 gateway/publisher; this package never
+  imports ``application``) and is built by
+  :mod:`simulation.events` as schema-validated SPEC-301 envelopes
+  (``sim:<session_id>`` / ``wall:utc`` dual clock, producers never fill
+  ``journal_seq``).
+- :class:`simulation.runtime.SimulationSnapshot` — the full-replacement
+  pull view with the ``journal_seq`` cursor echo (SPEC-200 section 4;
+  documented in :mod:`simulation.snapshot`).
+- :mod:`simulation.errors` — the SPEC-200 section 8 codes (appended).
 """
 
 from simulation.clock import SimulationClock, SimulationClockConfig
@@ -60,10 +85,17 @@ from simulation.clock_convert import (
     virtual_to_pts90,
 )
 from simulation.errors import (
+    SIM_CANCELLED,
     SIM_CLOCK_CONFIG_INVALID,
     SIM_CLOCK_PAUSED,
     SIM_CLOCK_TIME_BACKWARDS,
+    SIM_ENGINE_ERROR,
+    SIM_INTERNAL,
+    SIM_INVALID_LIFECYCLE_TRANSITION,
+    SIM_IO_ERROR,
+    SIM_RESOURCE_LIMIT,
     SIM_SCHEDULER_OVERLOAD,
+    SIM_SESSION_NOT_FOUND,
     SIM_TOPO_CARDINALITY,
     SIM_TOPO_CYCLE,
     SIM_TOPO_DIRECTION_INVALID,
@@ -72,19 +104,51 @@ from simulation.errors import (
     SIM_TOPO_ENDPOINT_MISSING,
     SIM_TOPO_MEDIA_INCOMPATIBLE,
     SIM_TOPO_SELF_LOOP,
+    SIM_VALIDATION_FAILED,
+    InvalidLifecycleTransitionError,
+    SessionNotFoundError,
+    SimulationCancelledError,
     SimulationClockError,
     SimulationConfigError,
+    SimulationEngineError,
     SimulationError,
+    SimulationIOError,
+    SimulationInternalError,
     SimulationPausedError,
+    SimulationResourceLimitError,
     SimulationSchedulerError,
     SimulationTimeBackwardsError,
     SimulationTopologyError,
+    SimulationValidationError,
     TopologyCycleError,
+)
+from simulation.lifecycle import (
+    ALLOWED_TRANSITIONS,
+    FINAL_STATES,
+    LifecycleState,
+    allowed_transitions,
+    can_transition,
+    require_transition,
 )
 from simulation.scheduler import (
     DeterministicScheduler,
     OverloadReport,
     ScheduledCallback,
+)
+from simulation.runtime import (
+    ArtifactRef,
+    ConnectionView,
+    FaultView,
+    NodeState,
+    ResourceLimits,
+    RunView,
+    SessionEventSink,
+    SessionView,
+    SimulationRuntime,
+    SimulationSessionSpec,
+    SimulationSnapshot,
+    ValidationReport,
+    new_session_spec,
 )
 from simulation.state import (
     CauseRef,
@@ -175,4 +239,41 @@ __all__ = [
     "severity_rank",
     "SimulationTopologyError",
     "TopologyCycleError",
+    # runtime lifecycle (SPEC-200, ticket #41)
+    "ALLOWED_TRANSITIONS",
+    "FINAL_STATES",
+    "LifecycleState",
+    "allowed_transitions",
+    "can_transition",
+    "require_transition",
+    "SimulationRuntime",
+    "SimulationSessionSpec",
+    "new_session_spec",
+    "SessionView",
+    "SimulationSnapshot",
+    "ValidationReport",
+    "RunView",
+    "NodeState",
+    "ConnectionView",
+    "FaultView",
+    "ArtifactRef",
+    "ResourceLimits",
+    "SessionEventSink",
+    # SPEC-200 section 8 codes
+    "SIM_SESSION_NOT_FOUND",
+    "SIM_INVALID_LIFECYCLE_TRANSITION",
+    "SIM_VALIDATION_FAILED",
+    "SIM_RESOURCE_LIMIT",
+    "SIM_ENGINE_ERROR",
+    "SIM_IO_ERROR",
+    "SIM_CANCELLED",
+    "SIM_INTERNAL",
+    "InvalidLifecycleTransitionError",
+    "SessionNotFoundError",
+    "SimulationValidationError",
+    "SimulationResourceLimitError",
+    "SimulationEngineError",
+    "SimulationIOError",
+    "SimulationCancelledError",
+    "SimulationInternalError",
 ]
