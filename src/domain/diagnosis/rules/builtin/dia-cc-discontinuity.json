@@ -1,0 +1,44 @@
+{
+  "rule_id": "DIA-CC-DISCONTINUITY",
+  "rule_version": "1.0.0",
+  "code": "DIAG_CC_DISCONTINUITY",
+  "priority": 30,
+  "severity": "warning",
+  "confidence": "high",
+  "title": "Continuity counter discontinuity",
+  "summary_template": "CC discontinuity on PID {pid}: expected {expected_cc}, got {actual_cc} at packet {packet_index} (relative offset persists); artefact {artifact_id}",
+  "match": {
+    "event_type": "ts.continuity_error",
+    "predicates": [
+      {
+        "field": "payload.expected_cc",
+        "op": "exists",
+        "value": null
+      },
+      {
+        "field": "payload.actual_cc",
+        "op": "exists",
+        "value": null
+      }
+    ],
+    "group_by": [
+      "node_id",
+      "pid"
+    ],
+    "window": null
+  },
+  "suppression": {
+    "key": [
+      "code",
+      "node_id"
+    ],
+    "window": "per_run"
+  },
+  "suggested_actions": [
+    "Inspect the upstream multiplex for packet loss"
+  ],
+  "expected_evidence": [
+    "ts.continuity_error"
+  ],
+  "enabled": true
+}

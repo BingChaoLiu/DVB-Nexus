@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Diagnostic Rule Declaration",
+  "$comment": "Repository-authoritative implementation schema (ticket #55, SPEC-307 section 12: '规则声明 JSON schema 随实现落地'). The declarative red line (SPEC-307 section 4) is structural: MatchSpec is a FINITE primitive set (event_type selector; eq/gt/lt/exists field predicates over payload/correlation; count/rate window aggregates; pid/node_id grouping keys) and there is NO user-defined Python or expression string anywhere — additionalProperties:false at every object level plus the pydantic validators in domain/diagnosis/rules/model.py enforce exactly the obligations below (unregistered event types, duplicate rule_id/code and JSON/Python dual-form divergence fail the startup per SPEC-307 section 8 rows 1-2). The shipped builtin declarations (src/domain/diagnosis/rules/builtin/*.json) are the canonical model_dump of their Python dual form (declarations.py). confidence is the diagnosis THREE-tier static declaration (SPEC-307 section 3) — never the observation ConfidenceKind provenance axis.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "rule_id",
+    "rule_version",
+    "code",
+    "priority",
+    "severity",
+    "confidence",
+    "title",
+    "summary_template",
+    "match",
+    "suppression",
+    "suggested_actions",
+    "expected_evidence"
+  ],
+  "properties": {
+    "rule_id": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9_]*(-[A-Z0-9_]+)*$",
+      "description": "Semantic slug, e.g. DIA-PAT-MISSING (SPEC-307 section 3); unique across the ruleset."
+    },
+    "rule_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Semver; a rule-set change is a NEW rule_version, never an in-place semantic edit (SPEC-307 section 7). Traceable into the SPEC-502 diagnoses table and the diagnosis.* event payloads."
+    },
+    "code": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9_]*$",
+      "description": "Diagnosis code, e.g. DIAG_PAT_MISSING; unique across the ruleset and the MVP suppression-key head (SPEC-307 section 5)."
+    },
+    "priority": {
+      "type": "integer",
+      "description": "Ordering key, smaller first — orthogonal to severity (SPEC-307 section 5)."
+    },
+    "severity": {
+      "enum": ["info", "warning", "error", "critical"],
+      "description": "Display tier (SPEC-003 section 2.6 four-value vocabulary)."
+    },
+    "confidence": {
+      "enum": ["low", "medium", "high"],
+      "description": "Static three-tier rule declaration (#13 Q3-ii); the engine computes no score."
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "summary_template": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Explanation template; placeholders are PLAIN payload keys only — attribute/index access is refused at load (declarative red line)."
+    },
+    "match": {
+      "$ref": "#/$defs/match_spec"
+    },
+    "suppression": {
+      "$ref": "#/$defs/suppression_spec"
+    },
+    "suggested_actions": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "expected_evidence": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Observation event codes this rule's evidence must come from — interlocked with FaultDefinition.expected_observations (SPEC-307 section 6, ADR-0007 item 5); every entry must be a SPEC-301 section 4 registered event type."
+    },
+    "enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Runtime disable switch (SPEC-307 section 7); disabled rules are skipped at evaluation — a non-error (section 8 row 3)."
+    }
+  },
+  "$defs": {
+    "match_spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["event_type"],
+      "properties": {
+        "event_type": {
+          "type": "string",
+          "description": "Observation-class selector; must be a SPEC-301 section 4 registered type — otherwise the startup fails fast (SPEC-307 section 8 row 2)."
+        },
+        "predicates": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/field_predicate" }
+        },
+        "group_by": {
+          "type": "array",
+          "items": { "enum": ["pid", "node_id"] },
+          "minItems": 1,
+          "description": "Grouping keys (correlation addressing, ADR-0006 decision 3); window aggregates compute per group. Default [node_id]."
+        },
+        "window": {
+          "oneOf": [{ "$ref": "#/$defs/window_aggregate" }, { "type": "null" }]
+        }
+      }
+    },
+    "field_predicate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["field", "op"],
+      "properties": {
+        "field": {
+          "type": "string",
+          "pattern": "^(payload|correlation)\\.[A-Za-z_][A-Za-z0-9_]*$",
+          "description": "One-level dotted path into the payload object or the correlation addressing dual form (node_id/pid)."
+        },
+        "op": {
+          "enum": ["eq", "gt", "lt", "exists"],
+          "description": "The finite SPEC-307 section 4 operator set; no user-defined code or expression strings."
+        },
+        "value": {
+          "description": "Comparison value for eq (JSON scalar) / gt / lt (number); exists carries no value (null)."
+        }
+      }
+    },
+    "window_aggregate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["aggregation"],
+      "properties": {
+        "aggregation": {
+          "enum": ["count", "rate"]
+        },
+        "scope": {
+          "enum": ["run"],
+          "description": "MVP window scope fixed to per-run (the evaluation batch); virtual-time intervals are a future additive extension."
+        },
+        "min_count": {
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "description": "count aggregation: minimum qualifying records per group."
+        },
+        "min_rate": {
+          "type": ["number", "null"],
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "description": "rate aggregation: minimum qualifying share among the group's records of the rule's event type."
+        }
+      }
+    },
+    "suppression_spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "window"],
+      "properties": {
+        "key": {
+          "const": ["code", "node_id"],
+          "description": "MVP-fixed suppression key (SPEC-307 section 5, #13 Q3-iii)."
+        },
+        "window": {
+          "const": "per_run",
+          "description": "MVP-fixed suppression window: one raised per (code, node_id) per run; further hits accumulate as updated."
+        }
+      }
+    }
+  }
+}
