@@ -2,12 +2,33 @@
 // apply → gate-gated save → reload echo, and the config_schema=null honest
 // state — in a real browser through the same-origin proxy. Asserts visible
 // disabled states and wire echo (never DOM snapshots; tests/README §6).
+//
+// #65 race face (same family as the PR #81 e2e-smoke incident): the page
+// auto-loads the first-listed topology (a late `loaded` dispatch REPLACES the
+// draft nodes wholesale) and `dvb-topo-handle-<port_id>` testids are only
+// unique within one node. Every test therefore settles the auto-load network
+// chain before cutting a fresh draft, asserts the canvas is empty/isolated
+// after the drop, scopes handle testids to `[data-node-id]`, and re-settles
+// after each reload. Single-node drops need no further viewport machinery.
 import { expect, test, type Page } from "@playwright/test";
 
-async function dragPaletteItemToCanvas(page: Page, nodeType: string, position: { x: number; y: number }) {
+async function dragPaletteItemToCanvas(page: Page, nodeType: string, nodeId: string, position: { x: number; y: number }) {
   await page.dragAndDrop(`[data-node-type="${nodeType}"]`, '[data-testid="dvb-topo-canvas"] .react-flow__pane', {
     targetPosition: position,
   });
+  // Draft integrity: THIS node rendered, and it is the only one (a late
+  // auto-load clobber would displace the deterministic `<prefix>-<n>` ids).
+  await expect(page.locator(`[data-node-id="${nodeId}"]`)).toBeVisible();
+  await expect(page.locator(".react-flow__node")).toHaveCount(1);
+}
+
+/** Open the editor and settle the first-listed-topology auto-load chain (GET
+ * list → GET topology → POST validate) before cutting a fresh draft. */
+async function openFreshDraft(page: Page): Promise<void> {
+  await page.goto("/topologies");
+  await page.waitForLoadState("networkidle");
+  await page.getByRole("button", { name: "新建拓扑" }).click();
+  await expect(page.locator(".react-flow__node")).toHaveCount(0);
 }
 
 async function selectNode(page: Page, nodeId: string) {
@@ -35,9 +56,8 @@ async function fillMinimalGeneratorConfig(page: Page) {
 }
 
 test("generator gate: empty config keeps save disabled → fill & apply → save → reload echo (AC-402-04/05)", async ({ page }) => {
-  await page.goto("/topologies");
-  await page.getByRole("button", { name: "新建拓扑" }).click();
-  await dragPaletteItemToCanvas(page, "ts_generator", { x: 200, y: 120 });
+  await openFreshDraft(page);
+  await dragPaletteItemToCanvas(page, "ts_generator", "gen-0", { x: 200, y: 120 });
 
   // G1 (配置待填): save entry visibly disabled with the incomplete generator.
   const save = page.getByRole("button", { name: /保存为新 revision/ });
@@ -76,8 +96,9 @@ test("generator gate: empty config keeps save disabled → fill & apply → save
   // null-schema node then re-enables save, proving the GATE (not merely
   // dirty=false) is open after the reload.
   await page.reload();
+  await page.waitForLoadState("networkidle"); // settle the post-reload auto-load before re-selecting
   await page.locator('[aria-label="选择拓扑"]').selectOption(topologyId);
-  await expect(page.getByTestId("dvb-topo-handle-ts_out")).toBeVisible();
+  await expect(page.locator('[data-node-id="gen-0"]').getByTestId("dvb-topo-handle-ts_out")).toBeVisible();
   await selectNode(page, "gen-0");
   const inspectorAfterReload = page.getByRole("region", { name: "节点属性表单" });
   await expect(inspectorAfterReload.getByLabel("seed", { exact: true })).toHaveValue("20260101");
@@ -87,9 +108,8 @@ test("generator gate: empty config keeps save disabled → fill & apply → save
 });
 
 test("config_schema=null node shows the honest no-fields state (AC-402-01)", async ({ page }) => {
-  await page.goto("/topologies");
-  await page.getByRole("button", { name: "新建拓扑" }).click();
-  await dragPaletteItemToCanvas(page, "ts_monitor", { x: 240, y: 160 });
+  await openFreshDraft(page);
+  await dragPaletteItemToCanvas(page, "ts_monitor", "mon-0", { x: 240, y: 160 });
   await selectNode(page, "mon-0");
   const inspector = page.getByRole("region", { name: "节点属性表单" });
   await expect(inspector.getByText("该类型无配置字段（config 恒 {}）")).toBeVisible();
