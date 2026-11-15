@@ -1,0 +1,144 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dvb-nexus.dev/schemas/timeline-export-manifest.schema.json",
+  "title": "Timeline Export Manifest",
+  "description": "SPEC-303 \u00a77 export manifest (ticket #51, REQ-OBS-303-005). Repository implementation authority for the manifest document produced by application.observation.timeline.export.build_export. The manifest carries the export ID and creation time (generation metadata \u2014 the only fields allowed to differ between reproducible exports of the same immutable journal interval), the requesting scope and filters, the clock domain and bounds, per-kind record counts, the schema version, the redaction policy + version, and the SHA-256 of every CONTENT file (timeline.jsonl / timeline.csv / redaction-report.json). The manifest does not hash itself; the ZIP container's digest rides on the export result's file digests. Additive evolution: new optional properties only; a major version bump is a new $id document (SPEC-301 \u00a78 compatibility posture).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "export_id",
+    "created_at",
+    "scope",
+    "filters",
+    "clock_domain",
+    "start_ns",
+    "end_ns",
+    "record_counts_by_kind",
+    "total_records",
+    "redaction_policy",
+    "redaction_policy_version",
+    "files"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0",
+      "description": "Manifest document family version; 1.x evolves additively with a new $id, major bumps are breaking."
+    },
+    "export_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "Opaque export identifier (generation metadata)."
+    },
+    "created_at": {
+      "$ref": "#/$defs/timepoint",
+      "description": "Export creation reading (generation metadata); semantics is observed for wall-clock creation readings."
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tenant_id", "session_id"],
+      "properties": {
+        "tenant_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "session_id": { "type": "string", "minLength": 1, "maxLength": 128 }
+      }
+    },
+    "filters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["record_kinds", "clock_domain", "start_ns", "end_ns"],
+      "properties": {
+        "record_kinds": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "event",
+              "snapshot",
+              "annotation",
+              "checkpoint",
+              "bookmark",
+              "export_manifest"
+            ]
+          }
+        },
+        "clock_domain": {
+          "type": ["string", "null"],
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "start_ns": { "type": ["integer", "null"] },
+        "end_ns": { "type": ["integer", "null"] }
+      }
+    },
+    "clock_domain": {
+      "type": ["string", "null"],
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "The single clock domain of the exported interval; null marks a cross-domain export (lanes), which never claims one merged time order (SPEC-303 \u00a74)."
+    },
+    "start_ns": { "type": ["integer", "null"] },
+    "end_ns": { "type": ["integer", "null"] },
+    "record_counts_by_kind": {
+      "type": "object",
+      "description": "Record count per SPEC-303 \u00a73 kind present in this export.",
+      "additionalProperties": { "type": "integer", "minimum": 0 },
+      "propertyNames": {
+        "enum": [
+          "event",
+          "snapshot",
+          "annotation",
+          "checkpoint",
+          "bookmark",
+          "export_manifest"
+        ]
+      },
+      "minProperties": 1
+    },
+    "total_records": { "type": "integer", "minimum": 0 },
+    "redaction_policy": {
+      "enum": ["none", "strip_payloads"],
+      "description": "Redaction applied before serialization; strip_payloads replaces payload bodies with a redaction marker while keeping event_id/journal_seq (REQ-OBS-303-001)."
+    },
+    "redaction_policy_version": { "const": "1" },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "record_format", "bytes", "sha256"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Artifact file name (e.g. timeline.jsonl)."
+          },
+          "record_format": {
+            "enum": ["jsonl", "csv_index", "redaction_report"]
+          },
+          "bytes": { "type": "integer", "minimum": 0 },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "description": "SHA-256 of the exact file bytes (lowercase hex)."
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "timepoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value_ns", "clock_domain", "clock_epoch", "semantics"],
+      "description": "Record-level timepoint (SPEC-300 \u00a76; ticket #12 ruling): explicit value_ns + clock_domain + clock_epoch + semantics.",
+      "properties": {
+        "value_ns": { "type": "integer" },
+        "clock_domain": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "clock_epoch": { "type": "integer", "minimum": 0 },
+        "semantics": { "enum": ["source", "observed", "derived"] }
+      }
+    }
+  }
+}
