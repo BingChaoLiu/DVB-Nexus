@@ -16,13 +16,38 @@ plus the error-code-family mapping for each class.
 from __future__ import annotations
 
 
+def _message_code(message: str) -> str | None:
+    """The error-code head of a ``"CODE: message"``-shaped string.
+
+    The raise-site convention across ``ts.*`` prefixes every coded error
+    message with its error code and ``": "``. A head containing spaces is
+    prose, not a code — return ``None`` instead of guessing.
+    """
+    head = message.split(":", 1)[0]
+    return head if head and " " not in head else None
+
+
 class TSCoreError(Exception):
     """所有 TS Core 可预期错误的基类（契约 §7）。
 
     Base class of every expected TS Core error. Callers that want to handle
     any ts-core failure catch this; unexpected (non-TSCore) exceptions must
     never be masked by it.
+
+    ``.code`` (M3 review-fix, additive): the structured error code extracted
+    at construction from the ``"CODE: message"`` message-head convention —
+    ``None`` when the message carries no code head. Consumers read ``.code``
+    instead of parsing ``str(exc)``. Construction behavior is unchanged
+    (``str(exc)`` / ``args`` / subclass semantics untouched).
     """
+
+    #: Structured error code (see class docstring); ``None`` when absent.
+    code: str | None
+
+    def __init__(self, *args: object) -> None:
+        super().__init__(*args)
+        first = args[0] if args else None
+        self.code = _message_code(first) if isinstance(first, str) else None
 
 
 class InvalidPacketError(TSCoreError):

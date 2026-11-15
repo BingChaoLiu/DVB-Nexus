@@ -965,12 +965,7 @@ class _RunError:
 
     @classmethod
     def generation(cls, exc: Exception) -> "_RunError":
-        root_code = None
-        if isinstance(exc, TSCoreError):
-            text = str(exc)
-            head = text.split(":", 1)[0]
-            if head and " " not in head:
-                root_code = head
+        root_code = exc.code if isinstance(exc, TSCoreError) else None
         error = cls("generation", SIM_TS_GENERATION_FAILED, str(exc), exc)
         error.root_code = root_code
         return error

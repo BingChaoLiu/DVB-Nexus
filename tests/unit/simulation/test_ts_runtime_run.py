@@ -222,6 +222,51 @@ class TestFailureSemantics:
             _run_now(runtime, prepared, sink)
         assert excinfo.value.code == SIM_TS_GENERATION_FAILED
 
+    def test_ts_core_error_code_travels_as_root_code(self) -> None:
+        """A TSCoreError raised mid-generation carries its structured
+        ``.code`` into ``TSGenerationFailedError.root_code`` — the runtime
+        reads the structured attribute, never parses the message."""
+        from ts.errors import GenerationError
+
+        class CodedFilter:
+            def apply(self, index, packet):
+                raise GenerationError(
+                    "GENERATOR_MEDIA_CLOCK_INVALID: media clock infeasible"
+                )
+
+            def mutation_log(self):
+                return b""
+
+        runtime = _make_runtime(
+            filter_factory=lambda plan, config: CodedFilter()
+        )
+        prepared = _prepare(runtime, plan=_cc_plan())
+        sink = FakeArtifactSink()
+        with pytest.raises(TSGenerationFailedError) as excinfo:
+            _run_now(runtime, prepared, sink)
+        assert excinfo.value.code == SIM_TS_GENERATION_FAILED
+        assert excinfo.value.root_code == "GENERATOR_MEDIA_CLOCK_INVALID"
+
+    def test_non_ts_error_yields_no_root_code(self) -> None:
+        """A plain (non-TSCore) exception must not invent a root code."""
+
+        class ExplodingFilter:
+            def apply(self, index, packet):
+                raise RuntimeError("filter blew up")
+
+            def mutation_log(self):
+                return b""
+
+        runtime = _make_runtime(
+            filter_factory=lambda plan, config: ExplodingFilter()
+        )
+        prepared = _prepare(runtime, plan=_cc_plan())
+        sink = FakeArtifactSink()
+        with pytest.raises(TSGenerationFailedError) as excinfo:
+            _run_now(runtime, prepared, sink)
+        assert excinfo.value.code == SIM_TS_GENERATION_FAILED
+        assert excinfo.value.root_code is None
+
 
 def _failing_legs_factory(*, tee: bool, run_id: str, session_id: str):
     """A legs holder whose baseline leg fails on the first write."""
