@@ -45,12 +45,20 @@ function asEnvelope(body: unknown): components["schemas"]["ErrorResponse"] | nul
   return body as components["schemas"]["ErrorResponse"];
 }
 
-export async function errorFromResponse(response: Response): Promise<ApiError> {
-  let body: unknown = null;
-  try {
-    body = await response.json();
-  } catch {
-    // non-JSON body (proxy/infra pages) — fall through to HTTP_<status>
+// `preparsedBody`: openapi-fetch consumes the body of every non-ok response
+// itself (coreFetch's error branch does response.text() → the body is used up
+// and a re-read via response.json() always rejects, degrading every real-flow
+// ApiError to the HTTP_<status> fallback with envelope keys lost). Callers
+// holding the already-parsed error payload pass it here; the re-read runs only
+// when no preparsed body was handed over (ticket #62, ruling I on #15).
+export async function errorFromResponse(response: Response, preparsedBody?: unknown): Promise<ApiError> {
+  let body: unknown = preparsedBody;
+  if (body === undefined) {
+    try {
+      body = await response.json();
+    } catch {
+      // non-JSON body (proxy/infra pages) — fall through to HTTP_<status>
+    }
   }
   const envelope = asEnvelope(body);
   if (envelope) {
@@ -82,5 +90,7 @@ interface FetchResultLike<TData> {
 export async function unwrap<TData>(promise: Promise<FetchResultLike<TData>>): Promise<TData> {
   const result = await promise;
   if (result.response.ok) return result.data as TData;
-  throw await errorFromResponse(result.response);
+  // result.error is the body openapi-fetch already parsed for non-ok
+  // responses — hand it over instead of re-reading the used-up body (#62/裁定 I).
+  throw await errorFromResponse(result.response, result.error);
 }

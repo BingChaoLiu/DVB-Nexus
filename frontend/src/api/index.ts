@@ -20,5 +20,6 @@ export * from "./endpoints/diagnosis";
 export * from "./endpoints/observation";
 export * from "./endpoints/runs";
 export * from "./endpoints/sessions";
+export * from "./endpoints/topologies";
 export * from "./endpoints/verification";
 export type { components, paths } from "./schema.gen";
