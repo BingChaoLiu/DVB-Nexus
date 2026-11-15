@@ -15,19 +15,23 @@ import { envWithTreeSrc, resolvePython, TREE_ROOT } from "./lib/python.mjs";
 const output = process.argv[2] ?? null;
 
 // Keep this string in sync with the M5 brief §3.1 verified command.
+// ensure_ascii stays at its True default: the dump travels through a spawned
+// pipe whose encoding is locale-dependent (Windows cp936 vs CI UTF-8) — pure
+// ASCII JSON is byte-identical on every platform, so the drift lock compares
+// semantics, not console encodings (PR #81 dto-drift-lock red, 2026-11-15).
 const DUMP_CODE = [
   "import json,sys",
   "sys.path.insert(0,'src')",
   "from api.app import create_app",
   "from api.routes import build_spec500_routers",
   "app = create_app(*build_spec500_routers(sessions_port=None, runs_port=None, artifacts_port=None))",
-  "json.dump(app.openapi(), sys.stdout, indent=2, ensure_ascii=False)",
+  "json.dump(app.openapi(), sys.stdout, indent=2)",
 ].join("; ");
 
 const result = spawnSync(resolvePython(), ["-I", "-c", DUMP_CODE], {
   cwd: TREE_ROOT,
   encoding: "utf8",
-  env: envWithTreeSrc(),
+  env: envWithTreeSrc({ PYTHONUTF8: "1" }),
 });
 
 if (result.status !== 0 || result.error) {

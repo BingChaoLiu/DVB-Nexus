@@ -607,7 +607,7 @@ export interface components {
         };
         /**
          * ArtifactMetaDTO
-         * @description ``GET /artifacts/{artifact_id}`` metadata (SPEC-003 ��2.7).
+         * @description ``GET /artifacts/{artifact_id}`` metadata (SPEC-003 §2.7).
          */
         ArtifactMetaDTO: {
             /** Artifact Id */
@@ -639,7 +639,7 @@ export interface components {
         };
         /**
          * ArtifactRefDTO
-         * @description Latest-artifact reference (identity only �� #42/#43 seam).
+         * @description Latest-artifact reference (identity only — #42/#43 seam).
          */
         ArtifactRefDTO: {
             /** Artifact Id */
@@ -651,7 +651,7 @@ export interface components {
         };
         /**
          * ClockConfigDTO
-         * @description SPEC-201 ��4 ``SimulationClockConfig`` (exact field set).
+         * @description SPEC-201 §4 ``SimulationClockConfig`` (exact field set).
          */
         ClockConfigDTO: {
             /**
@@ -699,7 +699,7 @@ export interface components {
         };
         /**
          * CreateSessionRequest
-         * @description ``POST /sessions`` request body (SPEC-500 ��4.2 row 1).
+         * @description ``POST /sessions`` request body (SPEC-500 §4.2 row 1).
          */
         CreateSessionRequest: {
             /** Topology Id */
@@ -723,7 +723,7 @@ export interface components {
         };
         /**
          * CriterionResultDTO
-         * @description One per-criterion result (SPEC-206 ��4: PASS/FAIL/NOT_EVALUATED).
+         * @description One per-criterion result (SPEC-206 §4: PASS/FAIL/NOT_EVALUATED).
          */
         CriterionResultDTO: {
             /** Criterion Id */
@@ -741,7 +741,7 @@ export interface components {
         };
         /**
          * DiagnosisCandidateDTO
-         * @description One root-cause candidate (SPEC-306 ��5/��7 candidate view).
+         * @description One root-cause candidate (SPEC-306 §5/§7 candidate view).
          */
         DiagnosisCandidateDTO: {
             /** Diagnosis Id */
@@ -774,7 +774,7 @@ export interface components {
         };
         /**
          * DiagnosisDTO
-         * @description One diagnoses-table row (SPEC-502 ��4; state raised/cleared).
+         * @description One diagnoses-table row (SPEC-502 §4; state raised/cleared).
          */
         DiagnosisDTO: {
             /** Diagnosis Id */
@@ -820,7 +820,7 @@ export interface components {
         };
         /**
          * DiagnosisObservationRefDTO
-         * @description One evidence hop (SPEC-306 ��6 chain: the committed record).
+         * @description One evidence hop (SPEC-306 §6 chain: the committed record).
          */
         DiagnosisObservationRefDTO: {
             /** Journal Seq */
@@ -830,7 +830,7 @@ export interface components {
         };
         /**
          * DiagnosisReportDTO
-         * @description The batch evaluation answer (SPEC-306 ��5 ``DiagnosisReport``).
+         * @description The batch evaluation answer (SPEC-306 §5 ``DiagnosisReport``).
          */
         DiagnosisReportDTO: {
             /** Session Id */
@@ -846,7 +846,7 @@ export interface components {
         };
         /**
          * ElementaryStreamDTO
-         * @description SPEC-108 ��4 ``ElementaryStreamConfig`` (exact field set).
+         * @description SPEC-108 §4 ``ElementaryStreamConfig`` (exact field set).
          */
         ElementaryStreamDTO: {
             /** Pid */
@@ -870,7 +870,7 @@ export interface components {
         };
         /**
          * ErrorDetail
-         * @description The ``error`` object of the unified envelope (SPEC-305 ��7).
+         * @description The ``error`` object of the unified envelope (SPEC-305 §7).
          */
         ErrorDetail: {
             /** Error Code */
@@ -889,7 +889,7 @@ export interface components {
         };
         /**
          * ErrorResponse
-         * @description Top level of every error response body (SPEC-305 ��7 shape).
+         * @description Top level of every error response body (SPEC-305 §7 shape).
          */
         ErrorResponse: {
             error: components["schemas"]["ErrorDetail"];
@@ -915,8 +915,8 @@ export interface components {
         };
         /**
          * ExportCreateBody
-         * @description ``POST .../exports`` �� creates ONLY an Observation export task
-         *     (read-only discipline, SPEC-305 ��4).
+         * @description ``POST .../exports`` — creates ONLY an Observation export task
+         *     (read-only discipline, SPEC-305 §4).
          */
         ExportCreateBody: {
             /** Formats */
@@ -964,7 +964,7 @@ export interface components {
         };
         /**
          * FaultActivationDTO
-         * @description SPEC-204 ��3 ``FaultActivation`` (MVP: packet_index + session_start).
+         * @description SPEC-204 §3 ``FaultActivation`` (MVP: packet_index + session_start).
          *
          *     ADR-0007 item 3 narrows activation to ``packet_index`` (shared packet
          *     frame) and ``session_start`` (whole run); virtual-time and manual
@@ -982,7 +982,7 @@ export interface components {
         };
         /**
          * FaultDefinitionDTO
-         * @description SPEC-204 ��3 ``FaultDefinition`` (wire shape, plan element).
+         * @description SPEC-204 §3 ``FaultDefinition`` (wire shape, plan element).
          */
         FaultDefinitionDTO: {
             /** Fault Id */
@@ -1011,9 +1011,9 @@ export interface components {
         };
         /**
          * GeneratorConfigDTO
-         * @description SPEC-108 ��4 ``GeneratorConfig`` (exact field set, wire shape).
+         * @description SPEC-108 §4 ``GeneratorConfig`` (exact field set, wire shape).
          *
-         *     Defaults are the ruling-#72 out-of-phase periods �� identical to the
+         *     Defaults are the ruling-#72 out-of-phase periods — identical to the
          *     domain dataclass defaults so the JSON default and the code default can
          *     never drift.
          */
@@ -1167,7 +1167,7 @@ export interface components {
         };
         /**
          * MetricsQueryBody
-         * @description ``POST .../metrics/query`` �� the SPEC-302 ��8 / SPEC-305 ��5 flat
+         * @description ``POST .../metrics/query`` — the SPEC-302 §8 / SPEC-305 §5 flat
          *     body (mirrors examples/metric-query-example.json).
          */
         MetricsQueryBody: {
@@ -1205,7 +1205,7 @@ export interface components {
         };
         /**
          * NodeStateDTO
-         * @description One node's snapshot-facing state (SPEC-003 ��3 vocabulary).
+         * @description One node's snapshot-facing state (SPEC-003 §3 vocabulary).
          */
         NodeStateDTO: {
             /** Node Id */
@@ -1241,7 +1241,7 @@ export interface components {
         };
         /**
          * PassCriterionDTO
-         * @description One pass-criterion declaration (SPEC-205 ��3; SPEC-206 consumes).
+         * @description One pass-criterion declaration (SPEC-205 §3; SPEC-206 consumes).
          */
         PassCriterionDTO: {
             /** Criterion Id */
@@ -1258,7 +1258,7 @@ export interface components {
         };
         /**
          * PortStateDTO
-         * @description One evaluated port state (SPEC-202 ��6.1 / SPEC-003 ��3).
+         * @description One evaluated port state (SPEC-202 §6.1 / SPEC-003 §3).
          */
         PortStateDTO: {
             /** Port Id */
@@ -1268,9 +1268,9 @@ export interface components {
         };
         /**
          * ProgramDTO
-         * @description SPEC-108 ��4 ``ProgramConfig`` (exact field set).
+         * @description SPEC-108 §4 ``ProgramConfig`` (exact field set).
          *
-         *     ``program_descriptors`` arrives hex encoded (SPEC-500 ��5: bytes �� hex);
+         *     ``program_descriptors`` arrives hex encoded (SPEC-500 §5: bytes → hex);
          *     the empty string is the default (no descriptors).
          */
         ProgramDTO: {
@@ -1294,7 +1294,7 @@ export interface components {
         };
         /**
          * ResourceLimitsDTO
-         * @description SPEC-200 ��4 ``ResourceLimits`` (optional caps; ranges�� OPEN-006).
+         * @description SPEC-200 §4 ``ResourceLimits`` (optional caps; ranges随 OPEN-006).
          */
         ResourceLimitsDTO: {
             /** Bitrate Bps */
@@ -1322,7 +1322,7 @@ export interface components {
         };
         /**
          * RunArtifactDTO
-         * @description One landed artifact reference (SPEC-203 ��5.2 ``ArtifactRef``).
+         * @description One landed artifact reference (SPEC-203 §5.2 ``ArtifactRef``).
          */
         RunArtifactDTO: {
             /** Artifact Id */
@@ -1346,7 +1346,7 @@ export interface components {
         };
         /**
          * RunStatusDTO
-         * @description ``GET .../runs/{run_id}`` answer (SPEC-203 ��5.2 ``TSRunResult``).
+         * @description ``GET .../runs/{run_id}`` answer (SPEC-203 §5.2 ``TSRunResult``).
          *
          *     ``status`` is the async-job state: ``running`` while scheduled; the
          *     terminal values mirror the SPEC-203 result statuses. Result count
@@ -1377,10 +1377,10 @@ export interface components {
         };
         /**
          * RunSubmitRequest
-         * @description ``POST /sessions/{session_id}/runs`` request body (SPEC-500 ��4.3).
+         * @description ``POST /sessions/{session_id}/runs`` request body (SPEC-500 §4.3).
          *
-         *     ``config`` = the SPEC-108 ��4 ``TSGeneratorConfig`` wire shape;
-         *     ``fault_plan`` = SPEC-204 ��3 ``FaultDefinition`` list bound at prepare
+         *     ``config`` = the SPEC-108 §4 ``TSGeneratorConfig`` wire shape;
+         *     ``fault_plan`` = SPEC-204 §3 ``FaultDefinition`` list bound at prepare
          *     (ADR-0007 item 2). An empty list is a valid plan (no tee legs).
          */
         RunSubmitRequest: {
@@ -1390,7 +1390,7 @@ export interface components {
         };
         /**
          * ScenarioDetailDTO
-         * @description ``GET /scenarios/{id}`` �� the exported document (hidden
+         * @description ``GET /scenarios/{id}`` — the exported document (hidden
          *     reference solution absent by construction; ``initial_topology`` keeps
          *     its authored camelCase keys, the #45 canonical-example authority).
          */
@@ -1434,7 +1434,7 @@ export interface components {
         };
         /**
          * ScenarioIdentityDTO
-         * @description The SPEC-205 ��5 version-pinning identity (���ؼ�����).
+         * @description The SPEC-205 §5 version-pinning identity (加载即钉扎).
          */
         ScenarioIdentityDTO: {
             /** Scenario Id */
@@ -1448,7 +1448,7 @@ export interface components {
          * ScenarioSolutionDTO
          * @description ``GET /scenarios/{id}/solution`` answer (the gated reveal;
          *     ``hidden_reference_solution`` is null when the scenario declares no
-         *     hidden field �� orchestrator OQ-3).
+         *     hidden field — orchestrator OQ-3).
          */
         ScenarioSolutionDTO: {
             /** Scenario Id */
@@ -1472,7 +1472,7 @@ export interface components {
         };
         /**
          * SessionValidationDTO
-         * @description ``POST /sessions/{id}/validate`` answer (SPEC-200 ��6 report).
+         * @description ``POST /sessions/{id}/validate`` answer (SPEC-200 §6 report).
          */
         SessionValidationDTO: {
             /** Ok */
@@ -1482,7 +1482,7 @@ export interface components {
         };
         /**
          * SessionViewDTO
-         * @description The per-command session answer (SPEC-200 ��4 ``SessionView``).
+         * @description The per-command session answer (SPEC-200 §4 ``SessionView``).
          */
         SessionViewDTO: {
             /** Session Id */
@@ -1506,10 +1506,10 @@ export interface components {
         };
         /**
          * SnapshotDTO
-         * @description Full replacement view + ``journal_seq_cursor`` echo (SPEC-200 ��4).
+         * @description Full replacement view + ``journal_seq_cursor`` echo (SPEC-200 §4).
          *
          *     The cursor echoes the client-supplied pull cursor verbatim (``None``
-         *     when the request omitted it) �� it is never server-authored here.
+         *     when the request omitted it) — it is never server-authored here.
          */
         SnapshotDTO: {
             /** Session Id */
@@ -1566,7 +1566,7 @@ export interface components {
         };
         /**
          * TSDuckCallDTO
-         * @description One TSDuck invocation record (SPEC-308 ��7, SPEC-001 ��7).
+         * @description One TSDuck invocation record (SPEC-308 §7, SPEC-001 §7).
          */
         TSDuckCallDTO: {
             /** Version */
@@ -1624,7 +1624,7 @@ export interface components {
         };
         /**
          * TopologyConnectionDTO
-         * @description One port-level four-tuple link (SPEC-202 ��4 ``Connection`` mirror,
+         * @description One port-level four-tuple link (SPEC-202 §4 ``Connection`` mirror,
          *     ADR-0005 decision 5).
          */
         TopologyConnectionDTO: {
@@ -1649,7 +1649,7 @@ export interface components {
          * @description ``POST /topologies`` / ``PUT /topologies/{id}`` request body.
          *
          *     PUT semantics = a NEW immutable revision row (SPEC-502); the revision
-         *     is never client-chosen (�������ø��� is the server's composite key).
+         *     is never client-chosen (防旧配置覆盖 is the server's composite key).
          */
         TopologyCreateRequest: {
             /** Nodes */
@@ -1673,7 +1673,7 @@ export interface components {
         };
         /**
          * TopologyNodeDTO
-         * @description One node (SPEC-202 ��4 ``NodeConfig`` mirror; ``config`` is opaque).
+         * @description One node (SPEC-202 §4 ``NodeConfig`` mirror; ``config`` is opaque).
          */
         TopologyNodeDTO: {
             /** Node Id */
@@ -1689,7 +1689,7 @@ export interface components {
         };
         /**
          * TopologyPortDTO
-         * @description One named port (SPEC-202 ��4 ``PortSpec`` mirror).
+         * @description One named port (SPEC-202 §4 ``PortSpec`` mirror).
          */
         TopologyPortDTO: {
             /** Port Id */
@@ -1719,9 +1719,9 @@ export interface components {
         };
         /**
          * TopologyValidationDTO
-         * @description ``POST /topologies/{id}/validate`` answer (SPEC-202 ��5
-         *     path-addressed report; ok=false reports, session VALIDATING rejects ��
-         *     the SPEC-200 ��6 posture). Violations reuse the session-dimension
+         * @description ``POST /topologies/{id}/validate`` answer (SPEC-202 §5
+         *     path-addressed report; ok=false reports, session VALIDATING rejects —
+         *     the SPEC-200 §6 posture). Violations reuse the session-dimension
          *     violation DTO: the same ``{code, path, message}`` triple.
          */
         TopologyValidationDTO: {
@@ -1732,7 +1732,7 @@ export interface components {
         };
         /**
          * TopologyViolationDTO
-         * @description One path-addressed rejection (SPEC-202 ��5: code + path + message).
+         * @description One path-addressed rejection (SPEC-202 §5: code + path + message).
          */
         TopologyViolationDTO: {
             /** Code */
@@ -1757,7 +1757,7 @@ export interface components {
         };
         /**
          * VerificationResultDTO
-         * @description The three-state verdict answer (SPEC-206 ��4 result structure).
+         * @description The three-state verdict answer (SPEC-206 §4 result structure).
          */
         VerificationResultDTO: {
             /** Session Id */
@@ -1782,7 +1782,7 @@ export interface components {
         };
         /**
          * VerifyRunRequest
-         * @description The verify request body (SPEC-500 ��4.4; ticket #56 declaration).
+         * @description The verify request body (SPEC-500 §4.4; ticket #56 declaration).
          */
         VerifyRunRequest: {
             /** Baseline Run Id */
@@ -2236,7 +2236,7 @@ export interface operations {
                     "application/json": components["schemas"]["SummaryResponseDTO"];
                 };
             };
-            /** @description SPEC-500 ��6 row 400 */
+            /** @description SPEC-500 §6 row 400 */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -2245,7 +2245,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 404 */
+            /** @description SPEC-500 §6 row 404 */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -2254,7 +2254,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 409 */
+            /** @description SPEC-500 §6 row 409 */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -2263,7 +2263,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 422 */
+            /** @description SPEC-500 §6 row 422 */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -2272,7 +2272,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 501 */
+            /** @description SPEC-500 §6 row 501 */
             501: {
                 headers: {
                     [name: string]: unknown;
@@ -2281,7 +2281,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 503 */
+            /** @description SPEC-500 §6 row 503 */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -2324,7 +2324,7 @@ export interface operations {
                     "application/json": components["schemas"]["EventsResponseDTO"];
                 };
             };
-            /** @description SPEC-500 ��6 row 400 */
+            /** @description SPEC-500 §6 row 400 */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -2333,7 +2333,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 404 */
+            /** @description SPEC-500 §6 row 404 */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -2342,7 +2342,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 409 */
+            /** @description SPEC-500 §6 row 409 */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -2351,7 +2351,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 422 */
+            /** @description SPEC-500 §6 row 422 */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -2360,7 +2360,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 501 */
+            /** @description SPEC-500 §6 row 501 */
             501: {
                 headers: {
                     [name: string]: unknown;
@@ -2369,7 +2369,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 503 */
+            /** @description SPEC-500 §6 row 503 */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -2418,7 +2418,7 @@ export interface operations {
                     "application/json": components["schemas"]["TimelineResponseDTO"];
                 };
             };
-            /** @description SPEC-500 ��6 row 400 */
+            /** @description SPEC-500 §6 row 400 */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -2427,7 +2427,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 404 */
+            /** @description SPEC-500 §6 row 404 */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -2436,7 +2436,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 409 */
+            /** @description SPEC-500 §6 row 409 */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -2445,7 +2445,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 422 */
+            /** @description SPEC-500 §6 row 422 */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -2454,7 +2454,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 501 */
+            /** @description SPEC-500 §6 row 501 */
             501: {
                 headers: {
                     [name: string]: unknown;
@@ -2463,7 +2463,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 503 */
+            /** @description SPEC-500 §6 row 503 */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -2498,7 +2498,7 @@ export interface operations {
                     "application/json": components["schemas"]["MetricsResponseDTO"];
                 };
             };
-            /** @description SPEC-500 ��6 row 400 */
+            /** @description SPEC-500 §6 row 400 */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -2507,7 +2507,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 404 */
+            /** @description SPEC-500 §6 row 404 */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -2516,7 +2516,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 409 */
+            /** @description SPEC-500 §6 row 409 */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -2525,7 +2525,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 422 */
+            /** @description SPEC-500 §6 row 422 */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -2534,7 +2534,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 501 */
+            /** @description SPEC-500 §6 row 501 */
             501: {
                 headers: {
                     [name: string]: unknown;
@@ -2543,7 +2543,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 503 */
+            /** @description SPEC-500 §6 row 503 */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -2581,7 +2581,7 @@ export interface operations {
                     "application/json": components["schemas"]["AlertsResponseDTO"];
                 };
             };
-            /** @description SPEC-500 ��6 row 400 */
+            /** @description SPEC-500 §6 row 400 */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -2590,7 +2590,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 404 */
+            /** @description SPEC-500 §6 row 404 */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -2599,7 +2599,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 409 */
+            /** @description SPEC-500 §6 row 409 */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -2608,7 +2608,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 422 */
+            /** @description SPEC-500 §6 row 422 */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -2617,7 +2617,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 501 */
+            /** @description SPEC-500 §6 row 501 */
             501: {
                 headers: {
                     [name: string]: unknown;
@@ -2626,7 +2626,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 503 */
+            /** @description SPEC-500 §6 row 503 */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -2661,7 +2661,7 @@ export interface operations {
                     "application/json": components["schemas"]["HealthResponseDTO"];
                 };
             };
-            /** @description SPEC-500 ��6 row 400 */
+            /** @description SPEC-500 §6 row 400 */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -2670,7 +2670,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 404 */
+            /** @description SPEC-500 §6 row 404 */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -2679,7 +2679,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 409 */
+            /** @description SPEC-500 §6 row 409 */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -2688,7 +2688,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 422 */
+            /** @description SPEC-500 §6 row 422 */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -2697,7 +2697,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 501 */
+            /** @description SPEC-500 §6 row 501 */
             501: {
                 headers: {
                     [name: string]: unknown;
@@ -2706,7 +2706,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 503 */
+            /** @description SPEC-500 §6 row 503 */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -2738,7 +2738,7 @@ export interface operations {
                     "application/json": components["schemas"]["ExportResponseDTO"];
                 };
             };
-            /** @description SPEC-500 ��6 row 400 */
+            /** @description SPEC-500 §6 row 400 */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -2747,7 +2747,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 404 */
+            /** @description SPEC-500 §6 row 404 */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -2756,7 +2756,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 409 */
+            /** @description SPEC-500 §6 row 409 */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -2765,7 +2765,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 422 */
+            /** @description SPEC-500 §6 row 422 */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -2774,7 +2774,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-305 ��9 export throttle */
+            /** @description SPEC-305 §9 export throttle */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -2783,7 +2783,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 501 */
+            /** @description SPEC-500 §6 row 501 */
             501: {
                 headers: {
                     [name: string]: unknown;
@@ -2792,7 +2792,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 503 */
+            /** @description SPEC-500 §6 row 503 */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -2827,7 +2827,7 @@ export interface operations {
                     "application/json": components["schemas"]["ExportResponseDTO"];
                 };
             };
-            /** @description SPEC-500 ��6 row 400 */
+            /** @description SPEC-500 §6 row 400 */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -2836,7 +2836,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 404 */
+            /** @description SPEC-500 §6 row 404 */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -2845,7 +2845,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 409 */
+            /** @description SPEC-500 §6 row 409 */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -2854,7 +2854,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 422 */
+            /** @description SPEC-500 §6 row 422 */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -2863,7 +2863,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-305 ��9 export throttle */
+            /** @description SPEC-305 §9 export throttle */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -2872,7 +2872,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 501 */
+            /** @description SPEC-500 §6 row 501 */
             501: {
                 headers: {
                     [name: string]: unknown;
@@ -2881,7 +2881,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 503 */
+            /** @description SPEC-500 §6 row 503 */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -2912,7 +2912,7 @@ export interface operations {
                     "application/json": components["schemas"]["TopologySummaryDTO"][];
                 };
             };
-            /** @description SPEC-500 ��6 row 400 */
+            /** @description SPEC-500 §6 row 400 */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -2921,7 +2921,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 404 */
+            /** @description SPEC-500 §6 row 404 */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -2930,7 +2930,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 409 */
+            /** @description SPEC-500 §6 row 409 */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -2939,7 +2939,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 422 */
+            /** @description SPEC-500 §6 row 422 */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -2948,7 +2948,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 501 */
+            /** @description SPEC-500 §6 row 501 */
             501: {
                 headers: {
                     [name: string]: unknown;
@@ -2957,7 +2957,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 503 */
+            /** @description SPEC-500 §6 row 503 */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -2990,7 +2990,7 @@ export interface operations {
                     "application/json": components["schemas"]["TopologyDTO"];
                 };
             };
-            /** @description SPEC-500 ��6 row 400 */
+            /** @description SPEC-500 §6 row 400 */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -2999,7 +2999,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 404 */
+            /** @description SPEC-500 §6 row 404 */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -3008,7 +3008,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 409 */
+            /** @description SPEC-500 §6 row 409 */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -3017,7 +3017,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 422 */
+            /** @description SPEC-500 §6 row 422 */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -3026,7 +3026,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 501 */
+            /** @description SPEC-500 §6 row 501 */
             501: {
                 headers: {
                     [name: string]: unknown;
@@ -3035,7 +3035,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 503 */
+            /** @description SPEC-500 §6 row 503 */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -3068,7 +3068,7 @@ export interface operations {
                     "application/json": components["schemas"]["TopologyDTO"];
                 };
             };
-            /** @description SPEC-500 ��6 row 400 */
+            /** @description SPEC-500 §6 row 400 */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -3077,7 +3077,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 404 */
+            /** @description SPEC-500 §6 row 404 */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -3086,7 +3086,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 409 */
+            /** @description SPEC-500 §6 row 409 */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -3095,7 +3095,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 422 */
+            /** @description SPEC-500 §6 row 422 */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -3104,7 +3104,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 501 */
+            /** @description SPEC-500 §6 row 501 */
             501: {
                 headers: {
                     [name: string]: unknown;
@@ -3113,7 +3113,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 503 */
+            /** @description SPEC-500 §6 row 503 */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -3148,7 +3148,7 @@ export interface operations {
                     "application/json": components["schemas"]["TopologyDTO"];
                 };
             };
-            /** @description SPEC-500 ��6 row 400 */
+            /** @description SPEC-500 §6 row 400 */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -3157,7 +3157,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 404 */
+            /** @description SPEC-500 §6 row 404 */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -3166,7 +3166,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 409 */
+            /** @description SPEC-500 §6 row 409 */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -3175,7 +3175,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 422 */
+            /** @description SPEC-500 §6 row 422 */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -3184,7 +3184,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 501 */
+            /** @description SPEC-500 §6 row 501 */
             501: {
                 headers: {
                     [name: string]: unknown;
@@ -3193,7 +3193,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 503 */
+            /** @description SPEC-500 §6 row 503 */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -3226,7 +3226,7 @@ export interface operations {
                     "application/json": components["schemas"]["TopologyValidationDTO"];
                 };
             };
-            /** @description SPEC-500 ��6 row 400 */
+            /** @description SPEC-500 §6 row 400 */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -3235,7 +3235,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 404 */
+            /** @description SPEC-500 §6 row 404 */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -3244,7 +3244,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 409 */
+            /** @description SPEC-500 §6 row 409 */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -3253,7 +3253,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 422 */
+            /** @description SPEC-500 §6 row 422 */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -3262,7 +3262,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 501 */
+            /** @description SPEC-500 §6 row 501 */
             501: {
                 headers: {
                     [name: string]: unknown;
@@ -3271,7 +3271,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 503 */
+            /** @description SPEC-500 §6 row 503 */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -3300,7 +3300,7 @@ export interface operations {
                     "application/json": components["schemas"]["ScenarioSummaryDTO"][];
                 };
             };
-            /** @description SPEC-500 ��6 row 400 */
+            /** @description SPEC-500 §6 row 400 */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -3309,7 +3309,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 404 */
+            /** @description SPEC-500 §6 row 404 */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -3318,7 +3318,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 409 */
+            /** @description SPEC-500 §6 row 409 */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -3327,7 +3327,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 422 */
+            /** @description SPEC-500 §6 row 422 */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -3336,7 +3336,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 501 */
+            /** @description SPEC-500 §6 row 501 */
             501: {
                 headers: {
                     [name: string]: unknown;
@@ -3345,7 +3345,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 503 */
+            /** @description SPEC-500 §6 row 503 */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -3376,7 +3376,7 @@ export interface operations {
                     "application/json": components["schemas"]["ScenarioDetailDTO"];
                 };
             };
-            /** @description SPEC-500 ��6 row 400 */
+            /** @description SPEC-500 §6 row 400 */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -3385,7 +3385,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 404 */
+            /** @description SPEC-500 §6 row 404 */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -3394,7 +3394,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 409 */
+            /** @description SPEC-500 §6 row 409 */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -3403,7 +3403,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 422 */
+            /** @description SPEC-500 §6 row 422 */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -3412,7 +3412,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 501 */
+            /** @description SPEC-500 §6 row 501 */
             501: {
                 headers: {
                     [name: string]: unknown;
@@ -3421,7 +3421,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 503 */
+            /** @description SPEC-500 §6 row 503 */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -3454,7 +3454,7 @@ export interface operations {
                     "application/json": components["schemas"]["ScenarioSolutionDTO"];
                 };
             };
-            /** @description SPEC-500 ��6 row 400 */
+            /** @description SPEC-500 §6 row 400 */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -3463,7 +3463,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 403 */
+            /** @description SPEC-500 §6 row 403 */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -3472,7 +3472,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 404 */
+            /** @description SPEC-500 §6 row 404 */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -3481,7 +3481,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 409 */
+            /** @description SPEC-500 §6 row 409 */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -3490,7 +3490,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 422 */
+            /** @description SPEC-500 §6 row 422 */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -3499,7 +3499,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 501 */
+            /** @description SPEC-500 §6 row 501 */
             501: {
                 headers: {
                     [name: string]: unknown;
@@ -3508,7 +3508,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 503 */
+            /** @description SPEC-500 §6 row 503 */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -3541,7 +3541,7 @@ export interface operations {
                     "application/json": components["schemas"]["TSDuckCallDTO"][];
                 };
             };
-            /** @description SPEC-500 ��6 row 400 */
+            /** @description SPEC-500 §6 row 400 */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -3550,7 +3550,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 404 */
+            /** @description SPEC-500 §6 row 404 */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -3559,7 +3559,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 409 */
+            /** @description SPEC-500 §6 row 409 */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -3568,7 +3568,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 422 */
+            /** @description SPEC-500 §6 row 422 */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -3577,7 +3577,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 501 */
+            /** @description SPEC-500 §6 row 501 */
             501: {
                 headers: {
                     [name: string]: unknown;
@@ -3586,7 +3586,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description SPEC-500 ��6 row 503 */
+            /** @description SPEC-500 §6 row 503 */
             503: {
                 headers: {
                     [name: string]: unknown;
