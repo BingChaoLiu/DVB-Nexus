@@ -35,7 +35,7 @@ validator for ``record_kind == EVENT``.
 """
 
 from enum import Enum
-from typing import Annotated, Any, Optional, Tuple
+from typing import Annotated, Any, NamedTuple, Optional, Tuple
 
 from pydantic import Field, StringConstraints, model_validator
 
@@ -178,26 +178,61 @@ SOURCE_ORDER_SORT = "source_order(clock_domain,timestamp,source_id,source_seq)"
 DEFAULT_SORT_DESCRIPTOR = f"{JOURNAL_SEQ_SORT}+{SOURCE_ORDER_SORT}"
 
 
-def timeline_record_sort_key(record: TimelineRecord) -> tuple:
+class TimelineRecordSortKey(NamedTuple):
+    """§4 order key shape (M4 review fix F3): an explicitly named
+    two-segment structure instead of two ad-hoc variable-length tuples.
+
+    Being a tuple subclass, comparison semantics are IDENTICAL to the
+    previous plain-tuple form: the leading ``segment`` label partitions
+    the key space, so later fields only ever compare within one segment
+    (segment 0 ignores the source-segment fields, which carry fixed
+    neutral padding — ``""`` / ``0``).
+    """
+
+    #: Segment 0 = journal-sourced (§4 line 1); segment 1 = cross-source
+    #: (§4 line 2). Never merged into one claimed time order.
+    segment: int
+    #: Segment 0 only: the gateway-stamped per-session total order.
+    journal_seq: int
+    #: Segment 1 only: the ``(clock_domain, clock_epoch)`` prefix groups
+    #: incompatible clock bases by KEY (§4 line 3 — deterministic, not a
+    #: cross-domain time claim).
+    clock_domain: str
+    clock_epoch: int
+    #: Segment 1 only: the §4 line-2 timestamp component.
+    value_ns: int
+    #: Segment 1 only: cross-source identity/sequence.
+    source_id: str
+    source_seq: int
+
+
+def timeline_record_sort_key(record: TimelineRecord) -> TimelineRecordSortKey:
     """Deterministic §4 order key (two labeled segments, never time-merged).
 
-    Segment 0 — journal-sourced records, keyed ``(0, journal_seq)``.
-    Segment 1 — cross-source records, keyed
-    ``(1, clock_domain, clock_epoch, value_ns, source_id, source_seq)``;
-    the ``(domain, epoch)`` prefix groups incompatible clock bases by KEY
-    (deterministic, not a cross-domain time claim — §4 line 3).
+    Segment 0 — journal-sourced records, keyed ``(segment=0,
+    journal_seq)`` with neutral padding on the source-segment fields.
+    Segment 1 — cross-source records, keyed ``(segment=1, journal_seq=0,
+    clock_domain, clock_epoch, value_ns, source_id, source_seq)``.
     """
     if record.journal_seq is not None:
-        return (0, record.journal_seq, 0, 0, "", 0)
+        return TimelineRecordSortKey(
+            segment=0,
+            journal_seq=record.journal_seq,
+            clock_domain="",
+            clock_epoch=0,
+            value_ns=0,
+            source_id="",
+            source_seq=0,
+        )
     timepoint = record.timepoint
-    return (
-        1,
-        0,
-        timepoint.clock_domain,
-        timepoint.clock_epoch,
-        timepoint.value_ns,
-        record.source_id,
-        record.source_seq if record.source_seq is not None else 0,
+    return TimelineRecordSortKey(
+        segment=1,
+        journal_seq=0,
+        clock_domain=timepoint.clock_domain,
+        clock_epoch=timepoint.clock_epoch,
+        value_ns=timepoint.value_ns,
+        source_id=record.source_id,
+        source_seq=record.source_seq if record.source_seq is not None else 0,
     )
 
 
@@ -214,6 +249,7 @@ __all__ = [
     "ProducerStateVersion",
     "TimelineRecord",
     "TimelineRecordKind",
+    "TimelineRecordSortKey",
     "TimelineTimepoint",
     "TimepointSemantics",
     "record_time_domain_key",

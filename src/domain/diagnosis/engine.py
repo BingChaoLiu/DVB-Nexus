@@ -47,6 +47,7 @@ from domain.observation.envelope import new_event_id
 from domain.observation.registry import validate_payload
 
 __all__ = [
+    "DiagnosisEvaluator",
     "EvaluationRule",
     "EvaluationOutcome",
     "GroupedCandidate",

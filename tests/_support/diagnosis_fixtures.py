@@ -4,16 +4,16 @@ SPEC-307 §9 shared-fixture duty; consumed by ticket #55).
 This module is the sanctioned shared-constructor area for the diagnosis
 axis. Three kinds of material:
 
-1. **Fixture rules** — in-memory rules whose DECLARATIVE SHAPE mirrors
-   SPEC-307 §3 ``DiagnosticRule`` (rule_id/rule_version/code/priority/
-   severity/confidence/title/summary_template/match/suppression/
-   suggested_actions/expected_evidence) plus a ``match`` verdict the
-   SPEC-306 evaluator consumes structurally. Ticket #55 owns the REAL
-   declarative model + loader (``domain.diagnosis.rules``); these
-   stand-ins exist so the #54 engine is testable before the rules
-   package lands, and #55 reuses the same observation programs and
-   cross-validation material (SPEC-307 §9) instead of inventing
-   parallel fixtures.
+1. **Builtin ruleset delegate** — the four fault-mirroring rules are the
+   PRODUCTION builtin set, built by the production loader
+   (``domain.diagnosis.rules.load_builtin_rules``) from the shipped JSON
+   declarations. The fixture tree keeps NO parallel rule model or match
+   interpreter: the former ``FixtureDiagnosticRule`` stand-ins existed
+   so the #54 engine was testable before the #55 rules package landed;
+   since #55 they are a drift risk (M0 double-implementation lesson),
+   so M4 review fix F2 collapsed them into this thin delegate and the
+   interlock test pins fixture ≡ production (``tests/unit/domain/
+   diagnosis/test_dia_rules_interlock.py``).
 
 2. **Observation programs** — deterministic parsed-record programs whose
    payload keys mirror the ADR-0007 item 5 single-symptom signatures of
@@ -28,8 +28,8 @@ axis. Three kinds of material:
 
 3. **Fault-definition interlock** — real ``FaultDefinition`` objects
    (canonical ``faults`` package) whose ``expected_observations`` are
-   exactly the fixture rules' ``expected_evidence`` (ADR-0007 item 5
-   interlock; SPEC-307 §6).
+   exactly the paired builtin rule's ``expected_evidence`` (ADR-0007
+   item 5 interlock; SPEC-307 §6).
 
 Axis discipline: every ``ts.*`` envelope/payload built here carries the
 mandatory observation axes (``source`` / ``confidence``, #13 Q3-i); the
@@ -39,11 +39,10 @@ rules' ``confidence`` is the diagnosis THREE-tier static axis
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any, Sequence
+from typing import Any
 
-from domain.diagnosis.engine import ObservationRecord, RuleMatch
-from domain.diagnosis.report import EvidenceRef
+from domain.diagnosis.engine import ObservationRecord
+from domain.diagnosis.rules import DiagnosticRule, load_builtin_rules
 from faults.definition import FaultActivation, FaultDefinition
 
 # --- constants -----------------------------------------------------------------
@@ -78,214 +77,21 @@ PMT_CRC_INDEX = 7000
 PMT_MISMATCH_INDEX = 9000
 
 
-# --- fixture rule model (SPEC-307 §3 declarative shape) ------------------------
+# --- builtin ruleset (thin delegate to the production loader) ------------------
 
 
-@dataclass(frozen=True)
-class FixtureSuppressionSpec:
-    """SPEC-307 §5 MVP-fixed suppression declaration."""
+def builtin_fixture_rules() -> tuple[DiagnosticRule, ...]:
+    """The four fault-mirroring rules (SPEC-307 §6: one rule per MVP fault)
+    — the PRODUCTION builtin set, not a fixture copy.
 
-    key: tuple[str, ...] = ("code", "node_id")
-    window: str = "per_run"
-
-
-@dataclass(frozen=True)
-class FixtureMatchSpec:
-    """SPEC-307 §4 declarative primitives (fixture subset).
-
-    ``event_type`` selector + ``eq`` field predicates on payload keys +
-    ``exists`` predicates + a minimal ``count`` window aggregate (a match
-    needs at least ``min_count`` qualifying records per run).
+    Thin delegate (M4 review fix F2): rules come from the production
+    loader (``domain.diagnosis.rules.load_builtin_rules``) over the
+    shipped JSON declarations, in the §5 output ordering. The fixture
+    tree keeps no parallel rule model or match interpreter (the M0
+    double-implementation lesson); rule semantics live in
+    ``domain.diagnosis.rules`` (ticket #55, REQ-DIA-307-003).
     """
-
-    event_type: str
-    payload_equals: tuple[tuple[str, Any], ...] = ()
-    payload_exists: tuple[str, ...] = ()
-    min_count: int = 1
-
-
-@dataclass(frozen=True)
-class FixtureDiagnosticRule:
-    """SPEC-307 §3 ``DiagnosticRule`` shape (fixture stand-in for #55).
-
-    The ``match`` verdict interprets the declarative
-    :class:`FixtureMatchSpec`; production rules are #55's declarative
-    model compiled by its loader — this fixture never defines rule
-    semantics for production use.
-    """
-
-    rule_id: str
-    rule_version: str
-    code: str
-    priority: int
-    severity: str
-    confidence: str
-    title: str
-    summary_template: str
-    match: FixtureMatchSpec
-    suppression: FixtureSuppressionSpec = field(default_factory=FixtureSuppressionSpec)
-    suggested_actions: tuple[str, ...] = ()
-    expected_evidence: tuple[str, ...] = ()
-
-    def matches(
-        self, records: Sequence[ObservationRecord]
-    ) -> tuple[RuleMatch, ...]:
-        """Evaluation verdict (SPEC-306 EvaluationRule face). Named
-        ``matches`` because ``match`` is the declarative SPEC-307 §3
-        field."""
-        qualifying = [
-            record
-            for record in records
-            if record.event_type == self.match.event_type
-            and self._predicates_hold(record)
-            and _evidence_of(record) is not None
-        ]
-        if len(qualifying) < self.match.min_count:
-            return ()
-        return tuple(_match_of(self, record) for record in qualifying)
-
-    # -- predicate interpreter (SPEC-307 §4: eq / exists on payload) ----
-
-    def _predicates_hold(self, record: ObservationRecord) -> bool:
-        for key, expected in self.match.payload_equals:
-            if record.payload.get(key) != expected:
-                return False
-        for key in self.match.payload_exists:
-            if key not in record.payload:
-                return False
-        return True
-
-
-def _evidence_of(record: ObservationRecord) -> EvidenceRef | None:
-    """Extract the artifact anchor from the fixture payload keys.
-
-    Records lacking the full evidence triple produce no match (the
-    SPEC-306 §6 chain requires every candidate to anchor to an artifact).
-    """
-    artifact_id = record.payload.get("artifact_id")
-    pid = record.payload.get("pid")
-    packet_index = record.payload.get("packet_index")
-    if not (
-        isinstance(artifact_id, str)
-        and artifact_id
-        and isinstance(pid, int)
-        and 0 <= pid <= 8191
-        and isinstance(packet_index, int)
-        and packet_index >= 0
-    ):
-        return None
-    return EvidenceRef(artifact_id=artifact_id, pid=pid, packet_index=packet_index)
-
-
-def _match_of(rule: FixtureDiagnosticRule, record: ObservationRecord) -> RuleMatch:
-    evidence = _evidence_of(record)
-    assert evidence is not None  # match() pre-filtered on the triple
-    try:
-        summary = rule.summary_template.format(**record.payload)
-    except (KeyError, IndexError):
-        summary = rule.summary_template
-    return RuleMatch(
-        journal_seq=record.journal_seq,
-        event_type=record.event_type,
-        evidence=evidence,
-        affected_node_ids=[record.node_id] if record.node_id else [],
-        summary=summary,
-    )
-
-
-# --- builtin fixture rule set (SPEC-307 §6 table mirror) -----------------------
-
-
-def builtin_fixture_rules() -> tuple[FixtureDiagnosticRule, ...]:
-    """The four fault-mirroring rules (SPEC-307 §6: one rule per MVP fault).
-
-    Field values follow the SPEC-307 §6 table (priority/severity/
-    confidence); the declarative predicates pin the single-symptom
-    signatures of ADR-0007 item 5 at fixture level — the REAL rules and
-    the four-fault cross-validation are ticket #55's REQ-DIA-307-003.
-    """
-    return (
-        FixtureDiagnosticRule(
-            rule_id="DIA-PAT-MISSING",
-            rule_version="1.0.0",
-            code="DIAG_PAT_MISSING",
-            priority=10,
-            severity="error",
-            confidence="high",
-            title="PAT missing in window",
-            summary_template=(
-                "No PAT observed on PID {pid} (null substitution at packet"
-                " {packet_index}); window artefact {artifact_id}"
-            ),
-            match=FixtureMatchSpec(
-                event_type="ts.psi_section_observed",
-                payload_equals=(("section", "PAT"), ("present", False)),
-            ),
-            suggested_actions=("Restore PAT emission on PID 0",),
-            expected_evidence=("ts.psi_section_observed",),
-        ),
-        FixtureDiagnosticRule(
-            rule_id="DIA-PMT-CRC-BAD",
-            rule_version="1.0.0",
-            code="DIAG_PMT_CRC_BAD",
-            priority=20,
-            severity="error",
-            confidence="high",
-            title="PMT CRC verification failed",
-            summary_template=(
-                "PMT CRC check failed (persistent symptom) at packet"
-                " {packet_index}; window artefact {artifact_id}"
-            ),
-            match=FixtureMatchSpec(
-                event_type="ts.psi_section_observed",
-                payload_equals=(("section", "PMT"), ("crc_valid", False)),
-                min_count=2,  # persistent mode: the symptom is stable
-            ),
-            suggested_actions=("Re-mux the PMT with correct CRC",),
-            expected_evidence=("ts.psi_section_observed",),
-        ),
-        FixtureDiagnosticRule(
-            rule_id="DIA-CC-DISCONTINUITY",
-            rule_version="1.0.0",
-            code="DIAG_CC_DISCONTINUITY",
-            priority=30,
-            severity="warning",
-            confidence="high",
-            title="Continuity counter discontinuity",
-            summary_template=(
-                "CC discontinuity on PID {pid}: expected {expected_cc},"
-                " got {actual_cc} at packet {packet_index} (relative"
-                " offset persists); artefact {artifact_id}"
-            ),
-            match=FixtureMatchSpec(
-                event_type="ts.continuity_error",
-                payload_exists=("expected_cc", "actual_cc"),
-            ),
-            suggested_actions=("Inspect the upstream multiplex for packet loss",),
-            expected_evidence=("ts.continuity_error",),
-        ),
-        FixtureDiagnosticRule(
-            rule_id="DIA-PMT-PID-MISMATCH",
-            rule_version="1.0.0",
-            code="DIAG_PMT_PID_MISMATCH",
-            priority=40,
-            severity="error",
-            confidence="medium",
-            title="PAT points at a PMT PID with no PMT",
-            summary_template=(
-                "PAT declares program_map_pid {actual_program_map_pid} but"
-                " the PMT sits on {expected_program_map_pid} (orphan PMT)"
-                " at packet {packet_index}; artefact {artifact_id}"
-            ),
-            match=FixtureMatchSpec(
-                event_type="ts.psi_section_observed",
-                payload_equals=(("section", "PAT"),),
-                payload_exists=("expected_program_map_pid",),
-            ),
-            suggested_actions=("Correct the PAT program_map_pid entry",),
-            expected_evidence=("ts.psi_section_observed",),
-        ),
-    )
+    return load_builtin_rules()
 
 
 # --- observation programs (ADR-0007 item 5 single-symptom signatures) ----------
@@ -480,8 +286,8 @@ FIXTURE_FAULT_TYPES: tuple[str, ...] = (
 )
 
 
-def fixture_rule_for_fault(fault_type: str) -> FixtureDiagnosticRule:
-    """The SPEC-307 §6 one-rule-per-fault pairing."""
+def fixture_rule_for_fault(fault_type: str) -> DiagnosticRule:
+    """The SPEC-307 §6 one-rule-per-fault pairing (production rules)."""
     pairing = {
         "PAT_MISSING": "DIA-PAT-MISSING",
         "PMT_INVALID_CRC": "DIA-PMT-CRC-BAD",
@@ -496,7 +302,7 @@ def fixture_rule_for_fault(fault_type: str) -> FixtureDiagnosticRule:
 
 
 def fixture_fault_definition(fault_type: str) -> FaultDefinition:
-    """A real ``FaultDefinition`` interlocked with the fixture rule.
+    """A real ``FaultDefinition`` interlocked with the paired builtin rule.
 
     ``expected_observations`` = the pairing rule's ``expected_evidence``
     (ADR-0007 item 5 interlock — SPEC-307 §6 table); target follows the
@@ -526,9 +332,6 @@ __all__ = [
     "CC_LANDING_INDEX",
     "CC_PID",
     "FIXTURE_FAULT_TYPES",
-    "FixtureDiagnosticRule",
-    "FixtureMatchSpec",
-    "FixtureSuppressionSpec",
     "NODE_ID",
     "PAT_WINDOW_START_INDEX",
     "PSI_PID",

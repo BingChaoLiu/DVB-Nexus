@@ -484,6 +484,25 @@ class TestErrorTranslation:
         assert isinstance(translated, ConflictError)
         assert translated.error_code == "OBS_CURSOR_EXPIRED"
 
+    def test_cursor_expired_code_is_the_timeline_registered_constant(self) -> None:
+        """M4 review fix F1: the query plane must NOT redeclare
+        ``OBS_CURSOR_EXPIRED`` — it reuses the #51 registration-place
+        constant object, so a spelling fork cannot silently unhook the
+        409 translation row."""
+        import application.observation.query.errors as query_errors
+        import application.observation.timeline.errors as timeline_errors
+        from application.observation.timeline.errors import TimelineError
+
+        assert query_errors.OBS_CURSOR_EXPIRED is (
+            timeline_errors.OBS_CURSOR_EXPIRED
+        )
+        # And the raised-then-translated chain runs on that same object.
+        translated = translate_service_error(
+            TimelineError(timeline_errors.OBS_CURSOR_EXPIRED, "stale cursor")
+        )
+        assert isinstance(translated, ConflictError)
+        assert translated.error_code is query_errors.OBS_CURSOR_EXPIRED
+
     def test_sqlite_failure_translates_to_503_storage_unavailable(self) -> None:
         import sqlite3
 

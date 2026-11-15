@@ -135,12 +135,14 @@ class TestOrdering:
             expected_evidence=(),
         )
         base.update(overrides)
-        from tests._support.diagnosis_fixtures import (
-            FixtureDiagnosticRule,
-            FixtureMatchSpec,
-        )
+        # Synthetic ordering probes — NOT the default ruleset (非默认规则
+        # 集): ad-hoc REAL DiagnosticRule objects so the engine's §5 sort
+        # matrix is exercised in isolation. All match the shared CC hit
+        # shape through the production declarative interpreter (M4 review
+        # fix F2: the fixture rule stand-ins are gone).
+        from domain.diagnosis.rules import DiagnosticRule, FieldPredicate, MatchSpec
 
-        return FixtureDiagnosticRule(
+        return DiagnosticRule(
             rule_id=base["rule_id"],
             rule_version=base["rule_version"],
             code=base["code"],
@@ -149,10 +151,12 @@ class TestOrdering:
             confidence=base["confidence"],
             title=base["title"],
             summary_template=base["summary_template"],
-            # All ordering-test rules match the shared CC hit shape.
-            match=FixtureMatchSpec(
+            match=MatchSpec(
                 event_type="ts.continuity_error",
-                payload_exists=("expected_cc", "actual_cc"),
+                predicates=(
+                    FieldPredicate(field="payload.expected_cc", op="exists"),
+                    FieldPredicate(field="payload.actual_cc", op="exists"),
+                ),
             ),
             suggested_actions=base["suggested_actions"],
             expected_evidence=base["expected_evidence"],
@@ -349,13 +353,9 @@ class TestDisabledRules:
 
     def test_disabled_rule_produces_no_candidate(self):
         rule = fixture_rule_for_fault("PAT_MISSING")
-
-        class DisabledRule:
-            pass
-
-        disabled = DisabledRule()
-        disabled.__dict__.update(rule.__dict__)
-        disabled.enabled = False
+        # The runtime disable switch mints the disabled view exactly the
+        # way the production ruleset does (BuiltinRuleSet.rules()).
+        disabled = rule.model_copy(update={"enabled": False})
         outcome = _evaluate(
             fault_observation_program("PAT_MISSING"), rules=(disabled,)
         )

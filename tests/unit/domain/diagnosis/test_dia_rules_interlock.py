@@ -161,8 +161,9 @@ def _predicates(match: MatchSpec) -> tuple:
 
 class TestOrderingMatrix:
     """SPEC-307 §5: priority asc → severity desc → code lexicographic,
-    no preemption — exercised with REAL DiagnosticRule objects (the #54
-    suite pins the same matrix via fixture rules)."""
+    no preemption — exercised with REAL DiagnosticRule objects (since M4
+    review fix F2 the #54 suite pins the same matrix with real objects
+    too; the fixture rule stand-ins are gone)."""
 
     def _rule(self, *, rule_id, code, priority, severity) -> DiagnosticRule:
         return DiagnosticRule(
@@ -234,19 +235,20 @@ class TestOrderingMatrix:
         assert [rule.priority for rule in rules] == [10, 20, 30, 40]
 
     def test_fixture_rules_and_real_rules_agree_on_the_pairing(self):
-        """The #54 fixture pairing (used by the engine suite) and the
-        real §6 pairing are the same table — the two suites cannot
-        drift apart."""
+        """互锁 (M4 review fix F2): the fixture ruleset IS the production
+        builtin declaration — ``tests._support.diagnosis_fixtures`` keeps
+        NO parallel rule copy, so the #54 and #55 suites cannot drift
+        apart. The delegate must hand out the very objects the
+        production loader built, and the pairing table must stay the
+        SPEC-307 §6 one-rule-per-fault mapping."""
         fixture_pairing = {
             fault: fixture_rule_for_fault(fault).rule_id
             for fault in FIXTURE_FAULT_TYPES
         }
         real_pairing = dict(PAIRING)
         assert fixture_pairing == real_pairing
-        fixture_rules = {rule.rule_id: rule for rule in builtin_fixture_rules()}
-        for rule in load_builtin_rules():
-            fixture = fixture_rules[rule.rule_id]
-            assert fixture.code == rule.code
-            assert fixture.priority == rule.priority
-            assert fixture.severity == rule.severity.value
-            assert fixture.confidence == rule.confidence.value
+        fixture_rules = builtin_fixture_rules()
+        real_rules = load_builtin_rules()
+        assert len(fixture_rules) == len(real_rules)
+        for fixture, real in zip(fixture_rules, real_rules):
+            assert fixture is real
