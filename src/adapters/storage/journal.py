@@ -160,6 +160,22 @@ class SqliteEventJournal(EventJournal):
         ).fetchone()
         return (row[0] or 0) + 1
 
+    def max_seq(self, session_id: str) -> int:
+        """The session's journal watermark (SPEC-300 §8 消费者滞后).
+
+        Ticket #50: both consumption protocols already declared this method
+        (``application.observation.gateway.EventJournal`` and
+        ``application.observation.consumer.TailableJournal`` — the
+        ``JournalTailingConsumer.lag`` data source for the
+        ``observation.consumer_lag_events`` metric); this additive
+        implementation completes the declared surface (0 for an unknown
+        session).
+        """
+        row = self._conn.execute(
+            "SELECT MAX(journal_seq) FROM events WHERE session_id = ?", (session_id,)
+        ).fetchone()
+        return int(row[0]) if row is not None and row[0] is not None else 0
+
     def _original_seq(self, producer_id: str, event_id: str) -> Optional[int]:
         row = self._conn.execute(
             "SELECT journal_seq FROM events WHERE producer_id = ? AND event_id = ?",

@@ -31,6 +31,20 @@ from domain.observation.envelope import (
 from domain.observation.errors import EnvelopeError, EnvelopeErrorCode
 from domain.observation.ids import Identifier, OpaqueEntityId
 from domain.observation.metric import Metric, MetricQuality
+from domain.observation.metric_series import (
+    BASELINE_DIMENSIONS,
+    AggregationOperation,
+    HistogramSpec,
+    MetricDefinition,
+    MetricProvenance,
+    MetricSample,
+    MetricSampleTimepoint,
+    MetricTemporality,
+    MetricValueType,
+    QualityPolicy,
+    SampleSemantics,
+    SeriesQuality,
+)
 from domain.observation.model import ConfidenceKind, Observation, ObservationSource
 from domain.observation.registry import (
     REGISTERED_EVENT_TYPES,
@@ -57,7 +71,19 @@ from domain.observation.status import (
 
 __all__ = [
     "ArtifactKind",
+    "BASELINE_DIMENSIONS",
+    "AggregationOperation",
     "ConfidenceKind",
+    "HistogramSpec",
+    "MetricDefinition",
+    "MetricProvenance",
+    "MetricSample",
+    "MetricSampleTimepoint",
+    "MetricTemporality",
+    "MetricValueType",
+    "QualityPolicy",
+    "SampleSemantics",
+    "SeriesQuality",
     "Correlation",
     "EnvelopeError",
     "EnvelopeErrorCode",
