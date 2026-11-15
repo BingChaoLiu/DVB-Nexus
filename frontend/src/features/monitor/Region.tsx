@@ -12,7 +12,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router";
-import type { DiagnosisReportDTO, RunStatusDTO, VerificationResultDTO } from "./types";
+import type { DiagnosisEvidenceDTO, DiagnosisReportDTO, RunStatusDTO, VerificationResultDTO } from "./types";
 import {
   diagnoseRun,
   getRun,
@@ -35,6 +35,12 @@ import { Panel } from "../../components/ui";
 import { qk } from "../../query/keys";
 import { Badge } from "../../components/ui";
 import { AlertsPanel } from "./alerts/AlertsPanel";
+// SPEC-404 packet inspector (ticket #65, approved plan D1): minimal additive
+// mount per the #66 R1 precedent — one import + drill-down state + the
+// onEvidenceSelect prop line + a conditional panel inside the diagnosis
+// Panel. SPEC-403's frozen onEvidenceSelect signature is consumed verbatim;
+// the region only holds the locator triple (no navigation, no derivation).
+import { PacketInspectorSection } from "./packet-inspector/PacketInspectorSection";
 import { DiagnosisCandidateList, DiagnosisList } from "./diagnosis/DiagnosisList";
 import { JournalTail } from "./journal/JournalTail";
 import { ControlBar } from "./lifecycle/ControlBar";
@@ -113,6 +119,9 @@ function SessionGuide({ onTrack }: { onTrack: (sessionId: string) => void }) {
 function MonitorPage({ sessionId, onUntrack }: { sessionId: string; onUntrack: () => void }) {
   const queryClient = useQueryClient();
   const wsStatus = useSessionStream(sessionId);
+  // SPEC-404 §4.2 deep-link entry: read-only (the tracker owns the param
+  // surface; this page never writes inspect_* params back).
+  const [searchParams] = useSearchParams();
   // SPEC-405 mount (R1): stream = the SPEC-403 panels (default, unchanged);
   // cli = the #66 CLI console section. Only the tab bar + conditional wrap
   // below are additive; every existing panel is untouched.
@@ -213,6 +222,23 @@ function MonitorPage({ sessionId, onUntrack }: { sessionId: string; onUntrack: (
   const [diagnoseBusy, setDiagnoseBusy] = useState(false);
   const [report, setReport] = useState<DiagnosisReportDTO | null>(null);
   const [diagnoseError, setDiagnoseError] = useState<string | null>(null);
+  // SPEC-404 drill-down: the evidence locator triple verbatim (SPEC-403 §6
+  // frozen callback); the panel's close action clears it. No derivation.
+  // Deep-link entry (SPEC-404 §4.2): inspect_artifact/inspect_pid/
+  // inspect_packet seed the same panel without a candidate row — the UI
+  // diagnose chain has no ts.* facts while the analyze REST face stays
+  // frozen 501 (M4 裁定 B), so candidates are honestly zero there. Malformed
+  // params seed nothing (honest absence, no fabricated locator).
+  const [drillDown, setDrillDown] = useState<DiagnosisEvidenceDTO | null>(() => {
+    const artifact = searchParams.get("inspect_artifact");
+    const pidRaw = searchParams.get("inspect_pid");
+    const packetRaw = searchParams.get("inspect_packet");
+    if (artifact === null || pidRaw === null || packetRaw === null) return null;
+    const pid = Number.parseInt(pidRaw, 10);
+    const packetIndex = Number.parseInt(packetRaw, 10);
+    if (!Number.isInteger(pid) || pid < 0 || !Number.isInteger(packetIndex) || packetIndex < 0) return null;
+    return { artifact_id: artifact, pid, packet_index: packetIndex };
+  });
 
   const triggerDiagnose = useCallback(async () => {
     if (diagnoseRunId.trim() === "") return;
@@ -359,9 +385,10 @@ function MonitorPage({ sessionId, onUntrack }: { sessionId: string; onUntrack: (
               report: run {report.run_id} · {report.candidates.length} candidates ·{" "}
               {report.warnings?.length ?? 0} warnings
             </p>
-            <DiagnosisCandidateList candidates={report.candidates} />
+            <DiagnosisCandidateList candidates={report.candidates} onEvidenceSelect={setDrillDown} />
           </section>
         )}
+        <PacketInspectorSection locator={drillDown} onClose={() => setDrillDown(null)} />
         <DiagnosisList diagnoses={diagnosesQuery.data ?? []} />
       </Panel>
 
