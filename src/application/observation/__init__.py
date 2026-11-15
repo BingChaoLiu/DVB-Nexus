@@ -10,6 +10,26 @@ journal itself stays in :mod:`adapters.storage` (the unique ``journal_seq``
 stamp point, ADR-0006 decision 2).
 """
 
+from application.observation.alerts import (
+    ACTIVE_STATES,
+    ALERT_CHANGED_TOPIC,
+    AlertError,
+    AlertEvaluationResult,
+    AlertHint,
+    AlertHintEmitter,
+    AlertListRequest,
+    AlertPage,
+    AlertService,
+    AlertStore,
+    DimensionHealth,
+    HealthResult,
+    HealthRule,
+    HealthRuleSet,
+    OBS_RULE_INPUT_STALE,
+    OBS_RULE_INVALID,
+    default_rule_set,
+    roll_up,
+)
 from application.observation.consumer import ConsumerConfig, JournalTailingConsumer
 from application.observation.errors import OBS_QUEUE_FULL, OBS_STORAGE_UNAVAILABLE
 from application.observation.gateway import (
@@ -40,14 +60,28 @@ from application.observation.metrics import (
 from application.observation.queue import BoundedEventQueue, QueueFullError
 
 __all__ = [
+    "ACTIVE_STATES",
+    "ALERT_CHANGED_TOPIC",
+    "AlertError",
+    "AlertEvaluationResult",
+    "AlertHint",
+    "AlertHintEmitter",
+    "AlertListRequest",
+    "AlertPage",
+    "AlertService",
+    "AlertStore",
     "BoundedEventQueue",
     "CATALOG_METRIC_NAMES",
     "ConsumerConfig",
+    "DimensionHealth",
     "EventGateway",
     "EventJournal",
     "EventPublisher",
     "GatewayConfig",
     "GatewayMetrics",
+    "HealthResult",
+    "HealthRule",
+    "HealthRuleSet",
     "IngestFailure",
     "IngestOutcome",
     "IngestResult",
@@ -58,6 +92,8 @@ __all__ = [
     "MetricsEngineConfig",
     "MetricsService",
     "OBS_METRIC_CARDINALITY_EXCEEDED",
+    "OBS_RULE_INPUT_STALE",
+    "OBS_RULE_INVALID",
     "OBS_METRIC_DIMENSION_REJECTED",
     "OBS_METRIC_NOT_FOUND",
     "OBS_QUEUE_FULL",
@@ -67,4 +103,6 @@ __all__ = [
     "PublishableEvent",
     "QueueFullError",
     "default_catalog",
+    "default_rule_set",
+    "roll_up",
 ]
