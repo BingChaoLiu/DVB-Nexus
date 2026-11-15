@@ -1,0 +1,106 @@
+/* SPEC-404 packet inspector panel — monitor.css conventions (dvb-pi- prefix,
+ * dvb-mon-row/dvb-mon-line family look; #64 owns monitor.css, this file is
+ * packet-inspector-scoped so monitor.css stays untouched). */
+.dvb-pi-panel {
+  border: 1px solid var(--dvb-border, #d0d4dc);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-top: 8px;
+  background: var(--dvb-bg-panel, #fafbfd);
+}
+
+.dvb-pi-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.dvb-pi-title {
+  font-weight: 600;
+}
+
+.dvb-pi-locator {
+  font-family: monospace;
+  font-size: 0.85rem;
+  color: var(--dvb-fg-muted, #55606e);
+}
+
+.dvb-pi-close {
+  margin-inline-start: auto;
+}
+
+.dvb-pi-line,
+.dvb-pi-note {
+  font-size: 0.85rem;
+  margin: 6px 0;
+}
+
+.dvb-pi-note {
+  color: var(--dvb-fg-muted, #55606e);
+}
+
+.dvb-pi-error {
+  font-size: 0.85rem;
+  margin: 6px 0;
+  color: var(--dvb-fg-error, #a12727);
+  font-family: monospace;
+}
+
+.dvb-pi-hex {
+  font-family: monospace;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  overflow-x: auto;
+  padding: 4px 0;
+  border-block: 1px dashed var(--dvb-border, #d0d4dc);
+}
+
+.dvb-pi-hex-row {
+  display: flex;
+  gap: 10px;
+  white-space: pre;
+}
+
+.dvb-pi-hex-offset {
+  color: var(--dvb-fg-muted, #55606e);
+}
+
+.dvb-pi-hex-cells {
+  letter-spacing: 0.12em;
+}
+
+.dvb-pi-hex-header-byte {
+  font-weight: 700;
+  text-decoration: underline;
+}
+
+.dvb-pi-hex-ascii {
+  color: var(--dvb-fg-muted, #55606e);
+}
+
+.dvb-pi-section {
+  font-size: 0.85rem;
+  margin: 8px 0 4px;
+}
+
+.dvb-pi-field {
+  display: flex;
+  gap: 10px;
+  font-size: 0.8rem;
+  font-family: monospace;
+  line-height: 1.6;
+}
+
+.dvb-pi-field-name {
+  min-width: 24ch;
+  color: var(--dvb-fg-muted, #55606e);
+}
+
+.dvb-pi-field-value {
+  font-weight: 600;
+}
+
+.dvb-pi-field-note {
+  color: var(--dvb-fg-muted, #55606e);
+}
