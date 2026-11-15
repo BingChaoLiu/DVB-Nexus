@@ -44,8 +44,13 @@ from adapters.storage.alerts import SqliteAlertStore
 from adapters.storage.checkpoints import SqliteCheckpointStore
 from adapters.storage.db import connect, migrate
 from adapters.storage.journal import SqliteEventJournal
-from adapters.storage.repositories import SqliteArtifactRepository, SqliteDiagnosisRepository
+from adapters.storage.repositories import (
+    SqliteArtifactRepository,
+    SqliteDiagnosisRepository,
+    SqliteVerificationRepository,
+)
 from adapters.storage.artifact_store import ArtifactStore
+from application.analysis import AnalysisService
 from application.diagnosis import DiagnosisService, bind_run_completion_trigger
 from application.observation.alerts.rules import default_rule_set
 from application.observation.alerts.service import AlertService
@@ -62,11 +67,12 @@ from domain.observation.registry import is_coalescable
 from faults.factory import build_semantic_filter_factory
 from simulation.runtime import SimulationRuntime
 from simulation.ts_runtime import StoreArtifactSink, TSRuntime
+from simulation.verification import VerificationService
 
 from api.app import create_app
 from api.routes import build_spec500_routers
 from api.routes.observation import ServiceObservationQueryPort
-from api.routes.pending import ServiceDiagnosisPort
+from api.routes.pending import ServiceDiagnosisPort, ServiceVerificationPort
 from api.ws.hub import SessionHub, WsConfig
 from api.ws.router import build_ws_router
 
@@ -107,6 +113,7 @@ class ProductionStack:
     diagnosis_service: DiagnosisService
     query_service: ObservationQueryService
     exports: ExportTaskRegistry
+    analysis_service: AnalysisService
     runtime: SimulationRuntime
     ts_runtime: TSRuntime
     store: ArtifactStore
@@ -339,7 +346,21 @@ def build_production_app(
     )
     bind_run_completion_trigger(gateway, diagnosis_service.evaluate)
 
-    runtime = SimulationRuntime()
+    # The 裁定 A analysis bridge (ticket #58): run artifacts → ts.* events
+    # over the real ts semantic layer. The 裁定 B in-process Analyze anchor
+    # — the REST analyze route stays frozen (SPEC-500 §4.6); callers drive
+    # this service face (no threads; publish-then-drain discipline).
+    analysis_service = AnalysisService(gateway, store=store, now_wall_ns=wall_ns)
+
+    # The SPEC-206 verification service (ticket #56) behind the verify
+    # endpoint (ticket #58 composition binding, orchestrator 批复: the
+    # #56-report composition bound here additively — the unbound port used
+    # to keep the 501 freeze answer).
+    verification_port = ServiceVerificationPort(
+        VerificationService(journal, gateway, SqliteVerificationRepository(connection))
+    )
+
+    runtime = SimulationRuntime(event_sink=gateway)
     session_specs: dict[str, Any] = {}
     allocator = RunIdAllocator(runtime)
     ts_runtime = TSRuntime(
@@ -373,6 +394,7 @@ def build_production_app(
             artifacts_port=artifacts_backend,
             diagnosis_port=ServiceDiagnosisPort(diagnosis_service),
             observation_port=ServiceObservationQueryPort(query_service, tenant_id=tenant_id),
+            verification_port=verification_port,
         )
     )
     app.include_router(build_ws_router(hub))
@@ -391,6 +413,7 @@ def build_production_app(
         diagnosis_service=diagnosis_service,
         query_service=query_service,
         exports=exports,
+        analysis_service=analysis_service,
         runtime=runtime,
         ts_runtime=ts_runtime,
         store=store,
