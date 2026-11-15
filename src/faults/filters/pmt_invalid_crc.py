@@ -27,7 +27,7 @@ from typing import Any, Mapping
 from ts.packet import TSPacket
 
 from faults.definition import FaultDefinition
-from faults.filters.base import FaultTransform
+from faults.filters.base import FaultTransform, psi_section_header
 
 __all__ = ["PmtInvalidCrcTransform"]
 
@@ -77,12 +77,9 @@ class PmtInvalidCrcTransform(FaultTransform):
         if packet.payload_unit_start_indicator and (
             self._mode == "persistent" or self._instances_done == 0
         ):
-            pointer = buffer[0]
-            start = 1 + pointer
-            if start + 3 <= len(buffer):
-                section_length = (
-                    (buffer[start + 1] & 0x0F) << 8
-                ) | buffer[start + 2]
+            header = psi_section_header(buffer)
+            if header is not None:
+                start, section_length = header
                 crc_offset = start + 3 + section_length - 4
                 for offset in range(crc_offset, crc_offset + 4):
                     if offset < len(buffer):

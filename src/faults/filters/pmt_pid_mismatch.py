@@ -21,7 +21,7 @@ from ts.packet import TSPacket
 
 from faults.definition import FaultDefinition
 from faults.errors import FaultExecutionError
-from faults.filters.base import FaultTransform
+from faults.filters.base import FaultTransform, psi_section_header
 
 __all__ = ["PmtPidMismatchTransform"]
 
@@ -44,12 +44,12 @@ class PmtPidMismatchTransform(FaultTransform):
         payload = packet.payload
         if payload is None or not packet.payload_unit_start_indicator:
             return packet
-        start = 1 + payload[0]  # pointer_field offset (PUSI payload)
-        if start + 3 > len(payload):
+        header = psi_section_header(payload)
+        if header is None:
             return packet  # not enough header bytes: leave the slot alone
+        start, section_length = header
         if payload[start] != _PAT_TABLE_ID:
             return packet  # a PSI section on PID 0 that is not a PAT
-        section_length = ((payload[start + 1] & 0x0F) << 8) | payload[start + 2]
         end = start + 3 + section_length
         if end > len(payload):
             raise FaultExecutionError(

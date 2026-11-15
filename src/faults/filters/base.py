@@ -27,6 +27,7 @@ from faults.targets import FaultTarget, parse_target_id
 __all__ = [
     "FaultTransform",
     "MutationRecord",
+    "psi_section_header",
     "summarize_packet",
 ]
 
@@ -61,6 +62,25 @@ def summarize_packet(packet: TSPacket) -> dict[str, Any]:
         "pusi": packet.payload_unit_start_indicator,
         "slot_sha256": hashlib.sha256(packet.to_bytes()).hexdigest(),
     }
+
+
+def psi_section_header(payload: "bytes | bytearray") -> "tuple[int, int] | None":
+    """Decode the first PSI section header of a PUSI payload slot.
+
+    SPEC-102 PSI framing: byte 0 of a payload_unit_start_indicator payload
+    is the ``pointer_field``; the section starts at ``1 + pointer_field``
+    and its 3-byte header is table_id + a 12-bit ``section_length`` (the
+    reserved high nibble of the length byte is masked off). Returns
+    ``(section_start, section_length)``, or ``None`` when the slot does not
+    hold the full header. Shared by the PSI-header rewriter transforms
+    (M3 review-fix #5: the pointer/length arithmetic lived duplicated in
+    PMT_INVALID_CRC and PMT_PID_MISMATCH); byte-level transform behavior
+    is unchanged — the oracle golden pair stays the authority.
+    """
+    start = 1 + payload[0]
+    if start + 3 > len(payload):
+        return None
+    return start, ((payload[start + 1] & 0x0F) << 8) | payload[start + 2]
 
 
 class FaultTransform:
