@@ -31,6 +31,9 @@ export async function getArtifactContent(
   const url = `${apiBaseUrl()}/api/v1/artifacts/${encodeURIComponent(artifactId)}/content`;
   const headers: Record<string, string> = {};
   if (options.range !== undefined) headers.Range = options.range;
+  // Authorized seam: openapi-fetch returns no byte body (octet-stream here),
+  // so the api barrel owns this one raw fetch — SPEC-404 AC-404-6「禁自拼
+  // fetch」binds feature code; this endpoint function is the授权缝.
   const response = await fetch(url, { headers });
   if (!response.ok) throw await errorFromResponse(response);
   const bytes = new Uint8Array(await response.arrayBuffer());

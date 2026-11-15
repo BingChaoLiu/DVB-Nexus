@@ -101,7 +101,11 @@ export default function LabRegion() {
     return (
       <>
         <h2>Lab</h2>
+        {/* key={sessionId} remounts the console on a ?session= switch —
+            SPEC-406 §7.5 rule 4: 面板复位锁定 + 已取文本丢弃（禁跨会话
+            残留；same per-session remount posture as the Monitor 区 key）. */}
         <ExperimentConsole
+          key={sessionId}
           scenarioId={scenarioId}
           sessionId={sessionId}
           onBack={() => openDetail(scenarioId)}
