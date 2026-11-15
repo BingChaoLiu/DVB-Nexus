@@ -222,6 +222,8 @@ Python 包必须暴露协议级接口（名称经批准的 Change Request 才可
 - `HTTP_RANGE_MALFORMED`（Range 头语法不合单区间 MVP 姿势的显式拒绝，non-retryable；HTTP 400——raise 头 `api/routes/artifacts.py` 下载路由 Range 解析；ticket #53 实现登记）
 - `HTTP_501`（StarletteHTTPException 回退惯例码 `HTTP_<status>` 之 501 特例：SPEC-500 §4 冻结表已挂载但组合根未绑定后端的路由（topology/scenario、未绑定的 observation/diagnosis/verify）统一经该惯例渲染统一信封，non-retryable；ticket #53 实现登记）
 - `HTTP_416`（单区间 Range 起点越出资源末端的显式拒绝（RFC 9110 §14.2），non-retryable；HTTP 416 + `Content-Range: bytes */<size>`——raise 头 `api/routes/artifacts.py` 下载路由；同为 `HTTP_<status>` 回退惯例；ticket #53 实现登记）
+- `SIM_TOPOLOGY_NOT_FOUND`（未知 topology_id/revision 的显式拒绝，non-retryable；HTTP 404——raise 头 `bootstrap/backends.py` topology provider（已存行 miss 与 MVP 'topo-1' 注册表 miss 同码）；ticket #80 追溯登记）
+- `SIM_SCENARIO_NOT_FOUND`（未知 scenario_id 的显式拒绝，non-retryable；HTTP 404——raise 头 场景注册表查询（REST 详情/solution/按场景建 session）；ticket #80 实现登记）
 
 重复提交在 API 边界是幂等成功，必须返回原 `journal_seq`。
 

@@ -7,7 +7,7 @@ phase: MVP
 owner: Platform
 priority: P0
 depends_on: [SPEC-001, SPEC-003]
-requirements: [REQ-API-500-001, REQ-API-500-002, REQ-API-500-003, REQ-API-500-004, REQ-API-500-005, REQ-API-500-006, REQ-API-500-007]
+requirements: [REQ-API-500-001, REQ-API-500-002, REQ-API-500-003, REQ-API-500-004, REQ-API-500-005, REQ-API-500-006, REQ-API-500-007, REQ-API-500-008, REQ-API-500-009]
 ---
 
 # SPEC-500 — REST API
@@ -112,6 +112,30 @@ requirements: [REQ-API-500-001, REQ-API-500-002, REQ-API-500-003, REQ-API-500-00
 |---|---|---|
 | GET | `/api/v1/scenarios` | 内置实验包列表（只读，SPEC-205） |
 | GET | `/api/v1/scenarios/{id}` | 实验包详情（目标/提示/步骤/pass_criteria） |
+| GET | `/api/v1/scenarios/{id}/solution` | 参考解 reveal 门控（additive，ticket #80 / orchestrator 裁定 F 留档 #15）：query `session_id` 必填（缺 → 400 `REQUEST_BODY_INVALID`）；该 session+scenario 存在 verdict=PASS 的 SPEC-206 判定（读 SPEC-502 `verification_verdicts` 表）方回 200 `{scenario_id, hidden_reference_solution}`，否则 403 `SIM_SCENARIO_SOLUTION_LEAK`（SPEC-205 §7 row 6，拒绝并审计）；未知 scenario id → 404 `SIM_SCENARIO_NOT_FOUND`。响应 DTO `ScenarioSolutionDTO`：`{scenario_id: str, hidden_reference_solution: str|null}`（场景未声明 hidden 字段时 null） |
+
+### 4.8 TSDuck 调用记录（SPEC-308 §7 九字段的只读 REST 面；additive，ticket #80 批准追加）
+
+| Method | Path | 语义 |
+|---|---|---|
+| GET | `/api/v1/sessions/{id}/tsduck/calls` | 该 session 的调用记录列表，按 `started_at_utc_ms` 升序；可选 query `run_id` 过滤；响应 = `TSDuckCallDTO[]`（session-scoped list，对齐 `GET .../diagnoses` 房法；MVP 不分页——单机单用户、记录量有界，完整 cursor 分页留 additive 演进） |
+
+`TSDuckCallDTO`（snake_case，SPEC-308 §7 九字段逐字段 + 可选 `run_id` 关联；失败路径字段显式 null，不伪造——SPEC-308 §7）：
+
+| 字段 | 类型 | 语义 |
+|---|---|---|
+| `version` | string\|null | TSDuck 版本 |
+| `executable_path` | string\|null | 可执行路径 |
+| `argv` | string[] | 白名单 argv（数组原样，无 shell 拼接） |
+| `started_at_utc_ms` | integer | 起始时间（epoch-ms，R8 操作时间戳惯例；`TSDuckCallRecord.started_at` epoch 秒 ×1000 入库） |
+| `finished_at_utc_ms` | integer | 结束时间 |
+| `exit_code` | integer\|null | 退出码（进程未退到可回收码时 null） |
+| `stdout_text` | string\|null | stdout 展示文本 |
+| `stderr_text` | string\|null | stderr 展示文本（GBK 只展示不解析，UTF-8 decode errors="replace"） |
+| `input_artifact_sha256` | string\|null | 输入 Artifact SHA-256 |
+| `run_id` | string\|null | 关联 run（有则填） |
+
+错误映射（§6 行）：404 `SIM_SESSION_NOT_FOUND`（存在性判定 = 无存储记录且 journal 空，`GET .../diagnoses` 同款）、503 存储不可用。生产栈 MVP 无真实 TSDuck 调用（grep 实证零调用点）——契约测试以 fixture 种子驱动（ticket #80）。
 
 ## 5. DTO 纪律
 
@@ -153,6 +177,8 @@ requirements: [REQ-API-500-001, REQ-API-500-002, REQ-API-500-003, REQ-API-500-00
 - `REQ-API-500-005`：错误信封统一且 HTTP 映射与 §6 一致。
 - `REQ-API-500-006`：SPEC-305 八条观测端点原样落路由、扁平查询基准一致。
 - `REQ-API-500-007`：部署姿态符合 Q4（127.0.0.1、无认证、tenant_id=local）。
+- `REQ-API-500-008`：TSDuck 调用记录九字段（SPEC-308 §7）持久化并可经 §4.8 只读路由按 session 检索；MVP 无真实调用，fixture 契约测试逐字段断言（ticket #80 批准追加）。
+- `REQ-API-500-009`：`GET /scenarios/{id}/solution` reveal 门控——session+scenario 存在 verdict=PASS 方回 200 `{scenario_id, hidden_reference_solution}`，否则 403 `SIM_SCENARIO_SOLUTION_LEAK`；无 PASS 不泄露（SPEC-205 §4 reveal 政策 + §7 row 6）（ticket #80 批准追加）。
 
 ## 9. 非目标与风险
 

@@ -42,15 +42,10 @@ pytestmark = pytest.mark.integration
 #: now demands a real handler.
 ALLOWED_501: frozenset[tuple[str, str]] = frozenset(
     {
-        # SPEC-500 §4.1 topology — pending.py stubs (topology engine未派票)
-        ("POST", "/api/v1/topologies"),
-        ("GET", "/api/v1/topologies"),
-        ("GET", "/api/v1/topologies/{}"),
-        ("PUT", "/api/v1/topologies/{}"),
-        ("POST", "/api/v1/topologies/{}/validate"),
-        # SPEC-500 §4.7 scenario — pending.py stubs (#45 loader 有,REST 面未挂)
-        ("GET", "/api/v1/scenarios"),
-        ("GET", "/api/v1/scenarios/{}"),
+        # SPEC-500 §4.1 topology ×5 and §4.7 scenario ×2 went LIVE with
+        # ticket #80 (SPEC-502 persistence / SPEC-205 registry + the
+        # solution-reveal gate) — their ALLOWED_501 rows were REMOVED
+        # (shrink-only: implementing a row deletes it).
         # SPEC-500 §4.6 analyze — SPEC-308 un-ticketed (M4 裁定 B: e2e 走
         # 进程内分析桥,本路由保持 501)
         ("POST", "/api/v1/artifacts/{}/analyze"),
