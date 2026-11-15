@@ -102,6 +102,7 @@ root_packages = [
     "faults",
     "simulation",
     "knowledge",
+    "bootstrap",
 ]
 include_external_packages = true
 
@@ -250,3 +251,28 @@ forbidden_modules = ["api"]
 # ADR-0005 D4-5: "observation 为统一事件交换接口" — positive hub statement:
 # any package may import domain.observation, so no outgoing-edge contract is
 # added for it beyond the domain purity contracts above.
+
+# Ticket #53 (裁定 K): the production composition root. bootstrap points
+# DOWN only — it may import api/application/adapters/simulation/faults/ts/
+# domain (the composition), never knowledge — and NO package may import
+# bootstrap back (the closure guard: the composition root is a leaf).
+[[tool.importlinter.contracts]]
+name = "bootstrap composition root: no package imports it back (ticket #53 裁定 K closure guard)"
+type = "forbidden"
+source_modules = [
+    "api",
+    "application",
+    "adapters",
+    "domain",
+    "ts",
+    "faults",
+    "simulation",
+    "knowledge",
+]
+forbidden_modules = ["bootstrap"]
+
+[[tool.importlinter.contracts]]
+name = "bootstrap composition root: downward imports only (ticket #53 裁定 K — the seven packages, not knowledge)"
+type = "forbidden"
+source_modules = ["bootstrap"]
+forbidden_modules = ["knowledge"]

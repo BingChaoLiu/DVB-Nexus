@@ -217,6 +217,11 @@ Python 包必须暴露协议级接口（名称经批准的 Change Request 才可
 - `OBS_CONSUMER_LAGGING` / `OBS_METRIC_NOT_FOUND`
 - `OBS_INVALID_TIME_DOMAIN`（跨时钟域时间戳做比较/算术的入口显式拒绝，non-retryable；§6 时钟模型规则 1/3/5，REQ-OBS-300-004 + orchestrator #15 修复轮 scoped append 实现登记）
 - `OBS_QUEUE_FULL`（gateway 有界摄入队列已满且事件不可合并限流时的显式拒绝，retryable；§8 背压条款，[缝合批准 #12] + ticket #47 实现登记）
+- `OBS_SCOPE_FORBIDDEN`（查询面访问越出 tenant/session scope 的显式拒绝，non-retryable；HTTP 403；§9 scope 划界，SPEC-305 §7 行 403——MVP raiser：跨 session 读导出任务；ticket #53 实现登记）
+- `PLT_ARTIFACT_NOT_FOUND`（artifact 元数据未知记录的显式拒绝，non-retryable；HTTP 404——raise 处 `api/routes/artifacts.py` 元数据端口返回 None；同码复用：SPEC-305 导出任务未知 id 404（导出 manifest = 导出产物的元数据记录族）；ticket #53 实现登记）
+- `HTTP_RANGE_MALFORMED`（Range 头语法不合单区间 MVP 姿势的显式拒绝，non-retryable；HTTP 400——raise 头 `api/routes/artifacts.py` 下载路由 Range 解析；ticket #53 实现登记）
+- `HTTP_501`（StarletteHTTPException 回退惯例码 `HTTP_<status>` 之 501 特例：SPEC-500 §4 冻结表已挂载但组合根未绑定后端的路由（topology/scenario、未绑定的 observation/diagnosis/verify）统一经该惯例渲染统一信封，non-retryable；ticket #53 实现登记）
+- `HTTP_416`（单区间 Range 起点越出资源末端的显式拒绝（RFC 9110 §14.2），non-retryable；HTTP 416 + `Content-Range: bytes */<size>`——raise 头 `api/routes/artifacts.py` 下载路由；同为 `HTTP_<status>` 回退惯例；ticket #53 实现登记）
 
 重复提交在 API 边界是幂等成功，必须返回原 `journal_seq`。
 
