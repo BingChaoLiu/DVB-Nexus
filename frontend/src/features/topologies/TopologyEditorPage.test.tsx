@@ -77,13 +77,17 @@ describe("TopologyEditorPage — shell (§7.6)", () => {
 });
 
 describe("TopologyEditorPage — click-to-add and the fixed-step save flow (§7.4)", () => {
+  // #63 accommodation (approved AC-402-04): the save entry is gate-gated now,
+  // so the flow leg uses a config_schema=null node (trivially complete); the
+  // generator gate behavior is pinned by the dedicated test below and the
+  // inspector suite.
   it("palette click adds a registry node; save POSTs then validates then clears dirty", async () => {
     const user = userEvent.setup();
     mocked.createTopology.mockResolvedValue(SAVED);
     renderPage();
 
-    await user.click(await screen.findByRole("button", { name: /TS 生成器/ }));
-    const canvasNode = await screen.findByText("ts_generator", { selector: ".dvb-topo-node-type" });
+    await user.click(await screen.findByRole("button", { name: /TS 监测器/ }));
+    const canvasNode = await screen.findByText("ts_monitor", { selector: ".dvb-topo-node-type" });
     expect(canvasNode).toBeInTheDocument();
 
     const save = screen.getByRole("button", { name: /保存为新 revision/ });
@@ -93,15 +97,27 @@ describe("TopologyEditorPage — click-to-add and the fixed-step save flow (§7.
     await waitFor(() => expect(mocked.createTopology).toHaveBeenCalledTimes(1));
     const body = mocked.createTopology.mock.calls[0]![0];
     expect(body.nodes).toHaveLength(1);
-    expect(body.nodes![0]).toMatchObject({ node_id: "gen-0", node_type: "ts_generator" });
+    expect(body.nodes![0]).toMatchObject({ node_id: "mon-0", node_type: "ts_monitor" });
     expect(body.nodes![0]!.ports).toEqual([
-      { port_id: "ts_out", direction: "output", plane: "MPEG_TS", max_connections: 1 },
+      { port_id: "ts_in", direction: "input", plane: "MPEG_TS", max_connections: 1 },
     ]);
     // §7.4 fixed third step: validate right after the save
     await waitFor(() => expect(mocked.validateTopology).toHaveBeenCalledWith(SAVED.topology_id, 1));
     await waitFor(() => expect(screen.getByText("无违规")).toBeInTheDocument());
     expect(mocked.saveTopologyRevision).not.toHaveBeenCalled();
     await waitFor(() => expect(screen.getByRole("button", { name: /保存为新 revision/ })).toBeDisabled());
+  });
+
+  // #63 (SPEC-402 §7.6 G1): an incomplete generator config keeps the save
+  // entry disabled — the 配置待填 edit-state gate, asserted at the page seam.
+  it("an added generator with an empty config keeps the save entry disabled (gate G1)", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: /TS 生成器/ }));
+    await screen.findByText("ts_generator", { selector: ".dvb-topo-node-type" });
+    const save = screen.getByRole("button", { name: /保存为新 revision/ });
+    expect(save).toBeDisabled();
+    expect(mocked.createTopology).not.toHaveBeenCalled();
   });
 
   it("a loaded topology saves via PUT and the panel shows path-addressed violations in place", async () => {
@@ -123,25 +139,32 @@ describe("TopologyEditorPage — click-to-add and the fixed-step save flow (§7.
         },
       ],
     });
-    mocked.validateTopology.mockResolvedValue({
-      ok: false,
-      violations: [
-        { code: "SIM_TOPO_CARDINALITY", path: "nodes[mux-0].ports[ts_in_1]", message: "port carries 2 connections, above max_connections=1" },
-      ],
-    });
+    // #63 accommodation (approved AC-402-04): with the gate live, a loaded
+    // violation report blocks the save — so the in-place display assertion
+    // moves to the post-save report (rev 4) while the PUT flow stays intact:
+    // load → validate(rev 3) clean → dirty → PUT → validate(rev 4) violation.
+    mocked.validateTopology
+      .mockResolvedValueOnce({ ok: true, violations: [] } satisfies TopologyValidationDTO)
+      .mockResolvedValueOnce({
+        ok: false,
+        violations: [
+          { code: "SIM_TOPO_CARDINALITY", path: "nodes[mux-0].ports[ts_in_1]", message: "port carries 2 connections, above max_connections=1" },
+        ],
+      } satisfies TopologyValidationDTO);
     mocked.saveTopologyRevision.mockResolvedValue({ ...SAVED, revision: 4 });
 
     renderPage();
     // auto-load the first listed topology (latest revision — no explicit pin)
     await waitFor(() => expect(mocked.getTopology).toHaveBeenCalledWith(SAVED.topology_id));
-    expect(await screen.findByText("SIM_TOPO_CARDINALITY")).toBeInTheDocument();
+    expect(await screen.findByText("无违规")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /TS 监测器/ })); // mark dirty
+    await user.click(screen.getByRole("button", { name: /TS 监测器/ })); // mark dirty (null-schema type: gate stays open)
     await user.click(screen.getByRole("button", { name: /保存为新 revision/ }));
 
     await waitFor(() => expect(mocked.saveTopologyRevision).toHaveBeenCalledTimes(1));
     expect(mocked.saveTopologyRevision.mock.calls[0]![0]).toBe(SAVED.topology_id);
     await waitFor(() => expect(mocked.validateTopology).toHaveBeenCalledWith(SAVED.topology_id, 4));
+    expect(await screen.findByText("SIM_TOPO_CARDINALITY")).toBeInTheDocument();
   });
 });
 

@@ -47,6 +47,24 @@ test("drag → connect → save → new revision walks the full canvas chain (AC
   await expect(page.getByTestId("dvb-topo-handle-ts_out")).toBeVisible(); // gen-0.ts_out
   await expect(page.getByTestId("dvb-topo-handle-ts_in")).toBeVisible(); // mon-0.ts_in
 
+  // #63 accommodation (approved AC-402-04): the save entry is gate-gated —
+  // select gen-0 and fill a minimal config through the inspector before saving.
+  await page.locator(".react-flow__node", { has: page.locator('[data-node-id="gen-0"]') }).click();
+  for (const [label, value] of [
+    ["seed", "20260101"],
+    ["initial_media_clock_27mhz", "0"],
+    ["target_bitrate_bps", "3008000"],
+    ["output_packet_count", "1000"],
+    ["program.transport_stream_id", "1"],
+    ["program.program_number", "1"],
+    ["program.pmt_pid", "4096"],
+    ["program.pcr_pid", "256"],
+    ["program.version_number", "0"],
+  ] as [string, string][]) {
+    await page.getByLabel(label, { exact: true }).fill(value);
+  }
+  await page.getByRole("button", { name: "应用到草稿" }).click();
+
   // REQ-UI-401-003: handle-to-handle connect (Strict mode, four-tuple mapping).
   await connectHandles(page, "dvb-topo-handle-ts_out", "dvb-topo-handle-ts_in");
 
@@ -89,6 +107,23 @@ test("precheck rejects connections beyond max_connections — nothing illegal re
   await dragPaletteItemToCanvas(page, "ts_generator", { x: 120, y: 100 });
   await dragPaletteItemToCanvas(page, "ts_mux", { x: 420, y: 80 });
   await dragPaletteItemToCanvas(page, "ts_demux", { x: 420, y: 300 });
+  // #63 accommodation (approved AC-402-04): the gate requires the generator
+  // config to be filled — select gen-0, fill minimal, apply before saving.
+  await page.locator(".react-flow__node", { has: page.locator('[data-node-id="gen-0"]') }).click();
+  for (const [label, value] of [
+    ["seed", "20260101"],
+    ["initial_media_clock_27mhz", "0"],
+    ["target_bitrate_bps", "3008000"],
+    ["output_packet_count", "1000"],
+    ["program.transport_stream_id", "1"],
+    ["program.program_number", "1"],
+    ["program.pmt_pid", "4096"],
+    ["program.pcr_pid", "256"],
+    ["program.version_number", "0"],
+  ] as [string, string][]) {
+    await page.getByLabel(label, { exact: true }).fill(value);
+  }
+  await page.getByRole("button", { name: "应用到草稿" }).click();
   await expect(page.getByTestId("dvb-topo-handle-ts_out").first()).toBeVisible();
 
   // Legal first link: gen-0.ts_out → mux-0.ts_in_1 (distinct handles, but each
@@ -107,7 +142,9 @@ test("precheck rejects connections beyond max_connections — nothing illegal re
   await expect(page.locator(".react-flow__edge")).toHaveCount(1);
 
   // The wire confirms exactly one connection (into the mux).
-  await page.getByRole("button", { name: /TS 生成器/ }).click(); // mark dirty (adds gen-1)
+  // #63 accommodation (approved AC-402-04): a null-schema node marks dirty
+  // without tripping the completeness gate (a second generator would).
+  await page.getByRole("button", { name: /TS 监测器/ }).click(); // mark dirty (adds mon-0)
   await page.getByRole("button", { name: /保存为新 revision/ }).click();
   await expect(page.locator(".dvb-topo-revision")).toContainText("revision 1");
   const topologyId = await page.locator('[aria-label="选择拓扑"]').inputValue();

@@ -27,6 +27,9 @@ import { nodeTypeSpec } from "./nodeTypes";
 import { NODE_TYPE_MIME, NodePalette } from "./NodePalette";
 import { TopologyNode } from "./TopologyNode";
 import { ViolationPanel } from "./ViolationPanel";
+import { computeInspectorGate } from "./inspector/inspectorGate";
+import { mapLocChain, type FieldError } from "./inspector/locChain";
+import { NodeInspector } from "./inspector/NodeInspector";
 import "./topologyEditor.css";
 
 const nodeTypes = { topology: TopologyNode };
@@ -57,6 +60,9 @@ function TopologyEditor() {
   const { screenToFlowPosition, setCenter } = useReactFlow();
   const [state, dispatch] = useReducer(editorReducer, undefined, initialEditorState);
   const [saving, setSaving] = useState(false);
+  // #63 (SPEC-402 §7.4): 口径 A backfill from a 400 save rejection — cleared
+  // on the next successful save; graph-level locs stay on the ApiError banner.
+  const [fieldErrors, setFieldErrors] = useState<FieldError[]>([]);
   const autoLoadedFor = useRef<Set<string>>(new Set());
 
   // Server facts via the query cache (§7.6 load flow).
@@ -100,11 +106,19 @@ function TopologyEditor() {
         ? await saveTopologyRevision(state.topologyId, request)
         : await createTopology(request);
       dispatch({ type: "saveSucceeded", topologyId: saved.topology_id, revision: saved.revision });
+      setFieldErrors([]); // #63: a successful save clears the loc-chain backfill
       await queryClient.invalidateQueries({ queryKey: qk.topologies() });
       // §7.4 fixed third step: the server validates the STORED graph only.
       const validation = await validateTopology(saved.topology_id, saved.revision);
       dispatch({ type: "validationSucceeded", violations: validation.violations ?? [] });
     } catch (error) {
+      // #63 (SPEC-402 §7.4): 口径 A — 400 loc chains land under form fields;
+      // every other failure keeps the banner-only channel.
+      setFieldErrors(
+        isApiError(error) && error.status === 400 && error.errorCode === "REQUEST_BODY_INVALID"
+          ? mapLocChain(error.details, state.nodes.map((n) => n.id))
+          : [],
+      );
       dispatch({
         type: "saveFailed",
         error: isApiError(error)
@@ -198,6 +212,17 @@ function TopologyEditor() {
 
   const notWired = state.error !== null && state.error.errorCode === "HTTP_501";
 
+  // #63 (SPEC-402 §7.6): three-part joint gate (G1 completeness ∧ G2 validate
+  // report ∧ G3 field errors) — reasons nonempty disables the save entry.
+  // The editor renders no session-start entry (SPEC-402 §6.2); monitor/lab
+  // adopt computeInspectorGate additively in their own tickets.
+  const gate = computeInspectorGate({
+    nodes: state.nodes.map((n) => ({ node_id: n.id, node_type: n.data.node.node_type, config: n.data.node.config })),
+    validation: state.validation,
+    fieldErrors,
+  });
+  const selected = state.nodes.find((n) => n.selected) ?? null;
+
   return (
     <div className="dvb-topo-editor">
       <h2 className="dvb-topo-region-title">Topologies</h2>
@@ -234,7 +259,8 @@ function TopologyEditor() {
           type="button"
           className="dvb-topo-save"
           onClick={() => void handleSave()}
-          disabled={!state.dirty || saving}
+          disabled={!state.dirty || saving || gate.reasons.length > 0}
+          title={gate.reasons.length > 0 ? "校验未通过：配置待填 / 存在校验违规或字段错误" : undefined}
         >
           保存为新 revision
         </button>
@@ -268,21 +294,31 @@ function TopologyEditor() {
             fitView
           />
         </div>
-        <ViolationPanel
-          entries={state.validation.entries}
-          planErrors={state.validation.planErrors}
-          validated={state.validation.status === "done"}
-          onLocate={(entry) => {
-            const target = entry.target; // const so narrowing survives the find callback
-            let located: string | undefined;
-            if (target.kind === "node" || target.kind === "port") {
-              located = target.nodeId;
-            } else if (target.kind === "edge") {
-              located = state.connections.find((e) => e.id === target.connectionId)?.source;
-            }
-            if (located) locate(located);
-          }}
-        />
+        {/* #63: inspector + violations share the third grid column (inline
+            flex wrapper keeps the approved additive face to this file only). */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, minWidth: 0 }}>
+          <NodeInspector
+            key={selected?.id ?? "none"}
+            node={selected}
+            fieldErrors={fieldErrors}
+            onApply={(nodeId, config) => dispatch({ type: "configApplied", nodeId, config })}
+          />
+          <ViolationPanel
+            entries={state.validation.entries}
+            planErrors={state.validation.planErrors}
+            validated={state.validation.status === "done"}
+            onLocate={(entry) => {
+              const target = entry.target; // const so narrowing survives the find callback
+              let located: string | undefined;
+              if (target.kind === "node" || target.kind === "port") {
+                located = target.nodeId;
+              } else if (target.kind === "edge") {
+                located = state.connections.find((e) => e.id === target.connectionId)?.source;
+              }
+              if (located) locate(located);
+            }}
+          />
+        </div>
       </div>
     </div>
   );
