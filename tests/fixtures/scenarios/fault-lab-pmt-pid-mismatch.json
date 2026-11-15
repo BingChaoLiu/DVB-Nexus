@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "scenario_id": "5a1e0000-0000-4000-8000-00000000e204",
+  "version": "1.0.0",
+  "title": "Fault Lab: PAT points at the wrong PMT PID",
+  "difficulty": "intermediate",
+  "required_engine_versions": {},
+  "initial_topology": {
+    "topology_id": "topo-1",
+    "revision": 1,
+    "nodes": [
+      {
+        "nodeId": "mux-0",
+        "nodeType": "muxer",
+        "config": {},
+        "ports": [
+          {
+            "portId": "out",
+            "direction": "output",
+            "plane": "MPEG_TS",
+            "maxConnections": 1
+          }
+        ]
+      }
+    ],
+    "connections": []
+  },
+  "simulation_config": {
+    "seed": 1234567,
+    "mode": "deterministic",
+    "clock": {
+      "mode": "deterministic",
+      "start_time_ns": 0,
+      "speed_num": 1,
+      "speed_den": 1,
+      "tick_quantum_ns": 1000000
+    }
+  },
+  "fault_plan": [
+    {
+      "fault_id": "fd000000-0000-4000-8000-00000000f104",
+      "fault_type": "PMT_PID_MISMATCH",
+      "target_id": "mux-0:pid:0x0000",
+      "parameters": {
+        "wrong_pmt_pid": 4100
+      },
+      "activation": {
+        "kind": "packet_index",
+        "packet_index": 0
+      },
+      "expected_observations": [
+        "ts.psi_section_observed"
+      ]
+    }
+  ],
+  "objectives": [
+    "Observe the orphaned-PMT mapping symptom through the analysis bridge",
+    "Diagnose the single attributable root cause (DIA-PMT-PID-MISMATCH)",
+    "Recover with a fault-free run and verify the three-state PASS"
+  ],
+  "hints": [
+    {
+      "hint_id": "hint-mapping",
+      "trigger": "diagnosis raised DIAG_PMT_PID_MISMATCH",
+      "level": "nudge",
+      "content": "The PAT declaration was rewritten to point at PID 4100 (with a recomputed CRC), so the real PMT on PID 4096 is orphaned. Compare the parsed declaration against the declared configuration.",
+      "requirement_ids": [
+        "REQ-SIM-204-004"
+      ]
+    }
+  ],
+  "pass_criteria": [
+    {
+      "criterion_id": "fault-cleared",
+      "kind": "fault_inactive",
+      "mandatory": true,
+      "fault_id": "fd000000-0000-4000-8000-00000000f104"
+    },
+    {
+      "criterion_id": "mapping-valid",
+      "kind": "pat_pmt_mapping_valid",
+      "mandatory": true
+    },
+    {
+      "criterion_id": "pat-valid",
+      "kind": "psi_pat_valid",
+      "mandatory": true
+    }
+  ]
+}

@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "scenario_id": "5a1e0000-0000-4000-8000-00000000e203",
+  "version": "1.0.0",
+  "title": "Fault Lab: continuity counter discontinuity (delta 3)",
+  "difficulty": "intermediate",
+  "required_engine_versions": {},
+  "initial_topology": {
+    "topology_id": "topo-1",
+    "revision": 1,
+    "nodes": [
+      {
+        "nodeId": "mux-0",
+        "nodeType": "muxer",
+        "config": {},
+        "ports": [
+          {
+            "portId": "out",
+            "direction": "output",
+            "plane": "MPEG_TS",
+            "maxConnections": 1
+          }
+        ]
+      }
+    ],
+    "connections": []
+  },
+  "simulation_config": {
+    "seed": 1234567,
+    "mode": "deterministic",
+    "clock": {
+      "mode": "deterministic",
+      "start_time_ns": 0,
+      "speed_num": 1,
+      "speed_den": 1,
+      "tick_quantum_ns": 1000000
+    }
+  },
+  "fault_plan": [
+    {
+      "fault_id": "fd000000-0000-4000-8000-00000000f103",
+      "fault_type": "CC_DISCONTINUITY",
+      "target_id": "mux-0:pid:0x0100",
+      "parameters": {
+        "delta": 3
+      },
+      "activation": {
+        "kind": "packet_index",
+        "packet_index": 30
+      },
+      "expected_observations": [
+        "ts.continuity_error"
+      ]
+    }
+  ],
+  "objectives": [
+    "Observe the CC relative-offset symptom through the analysis bridge",
+    "Diagnose the single attributable root cause (DIA-CC-DISCONTINUITY)",
+    "Recover with a fault-free run and verify the three-state PASS"
+  ],
+  "hints": [
+    {
+      "hint_id": "hint-cc-offset",
+      "trigger": "diagnosis raised DIAG_CC_DISCONTINUITY",
+      "level": "nudge",
+      "content": "The continuity counter on PID 256 jumps by the delta at one landing slot and the relative offset then persists. The recovery run restarts its own CC schedule from the recovery point.",
+      "requirement_ids": [
+        "REQ-SIM-204-003"
+      ]
+    }
+  ],
+  "pass_criteria": [
+    {
+      "criterion_id": "fault-cleared",
+      "kind": "fault_inactive",
+      "mandatory": true,
+      "fault_id": "fd000000-0000-4000-8000-00000000f103"
+    },
+    {
+      "criterion_id": "cc-continuous",
+      "kind": "cc_continuous",
+      "mandatory": true
+    },
+    {
+      "criterion_id": "no-unexpected-cc",
+      "kind": "no_unexpected_cc_error",
+      "mandatory": true
+    }
+  ]
+}
