@@ -1,0 +1,125 @@
+{
+  "schema_version": 1,
+  "scenario_id": "5c020000-0000-4000-8000-000000000002",
+  "version": "1.0.0",
+  "title": "CRC 防线：PMT 校验和失效",
+  "difficulty": "introductory",
+  "required_engine_versions": {},
+  "initial_topology": {
+    "topology_id": "topo-sc-02",
+    "revision": 1,
+    "nodes": [
+      {
+        "nodeId": "gen-0",
+        "nodeType": "ts_generator",
+        "config": {},
+        "ports": [
+          {"portId": "ts_out", "direction": "output", "plane": "MPEG_TS", "maxConnections": 1}
+        ]
+      },
+      {
+        "nodeId": "mux-0",
+        "nodeType": "ts_mux",
+        "config": {},
+        "ports": [
+          {"portId": "ts_in_1", "direction": "input", "plane": "MPEG_TS", "maxConnections": 1},
+          {"portId": "ts_in_2", "direction": "input", "plane": "MPEG_TS", "maxConnections": 1},
+          {"portId": "ts_out", "direction": "output", "plane": "MPEG_TS", "maxConnections": 1}
+        ]
+      },
+      {
+        "nodeId": "mon-0",
+        "nodeType": "ts_monitor",
+        "config": {},
+        "ports": [
+          {"portId": "ts_in", "direction": "input", "plane": "MPEG_TS", "maxConnections": 1}
+        ]
+      }
+    ],
+    "connections": [
+      {
+        "connectionId": "conn-1",
+        "plane": "MPEG_TS",
+        "from": {"nodeId": "gen-0", "portId": "ts_out"},
+        "to": {"nodeId": "mux-0", "portId": "ts_in_1"}
+      },
+      {
+        "connectionId": "conn-2",
+        "plane": "MPEG_TS",
+        "from": {"nodeId": "mux-0", "portId": "ts_out"},
+        "to": {"nodeId": "mon-0", "portId": "ts_in"}
+      }
+    ]
+  },
+  "simulation_config": {
+    "seed": 1234567,
+    "mode": "deterministic",
+    "clock": {
+      "mode": "deterministic",
+      "start_time_ns": 0,
+      "speed_num": 1,
+      "speed_den": 1,
+      "tick_quantum_ns": 1000000
+    }
+  },
+  "fault_plan": [
+    {
+      "fault_id": "fd000000-0000-4000-8000-00000000f1a2",
+      "fault_type": "PMT_INVALID_CRC",
+      "target_id": "mux-0:pid:0x1000",
+      "parameters": {"mode": "persistent", "corruption": "invert"},
+      "activation": {"kind": "packet_index", "packet_index": 1},
+      "expected_observations": ["ts.psi_section_observed"]
+    }
+  ],
+  "objectives": [
+    "观察基线流的 PMT（PID 4096）CRC 有效事实",
+    "注入 PMT CRC 持续失效故障并对照症状判据声明",
+    "恢复并提交判定：理解观测类判据在无分析证据时的诚实 NOT_EVALUATED"
+  ],
+  "hints": [
+    {
+      "hint_id": "sc02-hint-1",
+      "trigger": "experiment opened",
+      "level": "nudge",
+      "content": "PMT 位于 PID 4096（0x1000），CRC 是 MPEG-2 表级防线。先确认基线 Run 上 PMT 段周期出现。",
+      "requirement_ids": ["REQ-SIM-204-002"],
+      "standard_ref": null
+    },
+    {
+      "hint_id": "sc02-hint-2",
+      "trigger": "after Inject",
+      "level": "direction",
+      "content": "persistent + invert：自激活槽位起每个 PMT 实例的 CRC 位被反转——不是单次损坏而是持续症状。",
+      "requirement_ids": ["REQ-SIM-204-002"],
+      "standard_ref": null
+    },
+    {
+      "hint_id": "sc02-hint-3",
+      "trigger": "before Verify",
+      "level": "walkthrough",
+      "content": "恢复 Run 重跑空 plan。观测类判据（psi_pmt_valid/psi_pat_valid）的证据来自 normalized 码流观测；当前分析桥无 HTTP 面（M4 裁定 B），服务端对这些判据诚实回答 NOT_EVALUATED——总体 INCONCLUSIVE 是规格正确行为，不是缺陷。",
+      "requirement_ids": ["REQ-SIM-204-002"],
+      "standard_ref": null
+    }
+  ],
+  "pass_criteria": [
+    {
+      "criterion_id": "fault-cleared",
+      "kind": "fault_inactive",
+      "mandatory": true,
+      "fault_id": "fd000000-0000-4000-8000-00000000f1a2"
+    },
+    {
+      "criterion_id": "pmt-valid",
+      "kind": "psi_pmt_valid",
+      "mandatory": true
+    },
+    {
+      "criterion_id": "pat-valid",
+      "kind": "psi_pat_valid",
+      "mandatory": true
+    }
+  ],
+  "hidden_reference_solution": "恢复路径：以空 fault_plan 重跑一个新 Run（同几何同 seed，字节级可复现）。以 Inject（faulted）Run 为 baseline_run_id、恢复 Run 为 recovery_run_id 提交 verify。fault_inactive 三段证据链（注入生命周期闭合 / 恢复 prepared plan 排除该 fault_id / 无复发事件）成立 ⇒ 该判据 PASS。psi_pmt_valid 与 psi_pat_valid 为观测类判据：证据 = 恢复 Run 的 normalized ts.* 观测（present/crc_valid 能力字段）；当前分析桥无 HTTP 面（M4 裁定 B）时服务端诚实回答 NOT_EVALUATED（无观测 ≠ 干净），总体 INCONCLUSIVE——这是 SPEC-206 §6 的规格正确行为；待分析面可用后，恢复流 CRC 全部有效 ⇒ 两判据 PASS、总体 PASS。"
+}

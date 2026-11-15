@@ -1,0 +1,125 @@
+{
+  "schema_version": 1,
+  "scenario_id": "5c040000-0000-4000-8000-000000000004",
+  "version": "1.0.0",
+  "title": "连续性破坏：CC 相对偏移",
+  "difficulty": "intermediate",
+  "required_engine_versions": {},
+  "initial_topology": {
+    "topology_id": "topo-sc-04",
+    "revision": 1,
+    "nodes": [
+      {
+        "nodeId": "gen-0",
+        "nodeType": "ts_generator",
+        "config": {},
+        "ports": [
+          {"portId": "ts_out", "direction": "output", "plane": "MPEG_TS", "maxConnections": 1}
+        ]
+      },
+      {
+        "nodeId": "mux-0",
+        "nodeType": "ts_mux",
+        "config": {},
+        "ports": [
+          {"portId": "ts_in_1", "direction": "input", "plane": "MPEG_TS", "maxConnections": 1},
+          {"portId": "ts_in_2", "direction": "input", "plane": "MPEG_TS", "maxConnections": 1},
+          {"portId": "ts_out", "direction": "output", "plane": "MPEG_TS", "maxConnections": 1}
+        ]
+      },
+      {
+        "nodeId": "mon-0",
+        "nodeType": "ts_monitor",
+        "config": {},
+        "ports": [
+          {"portId": "ts_in", "direction": "input", "plane": "MPEG_TS", "maxConnections": 1}
+        ]
+      }
+    ],
+    "connections": [
+      {
+        "connectionId": "conn-1",
+        "plane": "MPEG_TS",
+        "from": {"nodeId": "gen-0", "portId": "ts_out"},
+        "to": {"nodeId": "mux-0", "portId": "ts_in_1"}
+      },
+      {
+        "connectionId": "conn-2",
+        "plane": "MPEG_TS",
+        "from": {"nodeId": "mux-0", "portId": "ts_out"},
+        "to": {"nodeId": "mon-0", "portId": "ts_in"}
+      }
+    ]
+  },
+  "simulation_config": {
+    "seed": 1234567,
+    "mode": "deterministic",
+    "clock": {
+      "mode": "deterministic",
+      "start_time_ns": 0,
+      "speed_num": 1,
+      "speed_den": 1,
+      "tick_quantum_ns": 1000000
+    }
+  },
+  "fault_plan": [
+    {
+      "fault_id": "fd000000-0000-4000-8000-00000000f1a3",
+      "fault_type": "CC_DISCONTINUITY",
+      "target_id": "mux-0:pid:0x0100",
+      "parameters": {"delta": 3},
+      "activation": {"kind": "packet_index", "packet_index": 30},
+      "expected_observations": ["ts.continuity_error"]
+    }
+  ],
+  "objectives": [
+    "观察基线流 PID 0x0100（256）的 CC 连续调度",
+    "注入 CC 相对偏移故障（delta 3）并读取偏移症状",
+    "恢复并提交判定：理解 CC 从恢复点重算期望值与预期/意外对偶"
+  ],
+  "hints": [
+    {
+      "hint_id": "sc04-hint-1",
+      "trigger": "experiment opened",
+      "level": "nudge",
+      "content": "continuity_counter 按 PID 连续（mod 16）。基线上 PID 256 的 CC 逐包 +1；先确认这个节奏。",
+      "requirement_ids": ["REQ-SIM-204-003"],
+      "standard_ref": null
+    },
+    {
+      "hint_id": "sc04-hint-2",
+      "trigger": "after Inject",
+      "level": "direction",
+      "content": "激活槽位（packet 30）起 CC 跳变 +3 并保持相对偏移——症状是一个持久的偏移，不是连续错误流。",
+      "requirement_ids": ["REQ-SIM-204-003"],
+      "standard_ref": null
+    },
+    {
+      "hint_id": "sc04-hint-3",
+      "trigger": "before Verify",
+      "level": "walkthrough",
+      "content": "恢复 Run 重启自己的 CC 调度（从恢复点重算期望，SPEC-206 §7）。cc_continuous / no_unexpected_cc_error 为观测类判据：分析面不可用时服务端诚实 NOT_EVALUATED，总体 INCONCLUSIVE。",
+      "requirement_ids": ["REQ-SIM-204-003"],
+      "standard_ref": null
+    }
+  ],
+  "pass_criteria": [
+    {
+      "criterion_id": "fault-cleared",
+      "kind": "fault_inactive",
+      "mandatory": true,
+      "fault_id": "fd000000-0000-4000-8000-00000000f1a3"
+    },
+    {
+      "criterion_id": "cc-continuous",
+      "kind": "cc_continuous",
+      "mandatory": true
+    },
+    {
+      "criterion_id": "no-unexpected-cc",
+      "kind": "no_unexpected_cc_error",
+      "mandatory": true
+    }
+  ],
+  "hidden_reference_solution": "恢复路径：以空 fault_plan 重跑一个新 Run（同几何同 seed）。以 Inject（faulted）Run 为 baseline_run_id、恢复 Run 为 recovery_run_id 提交 verify。fault_inactive 三段证据链成立 ⇒ 该判据 PASS。cc_continuous 与 no_unexpected_cc_error 为观测类判据：恢复 Run 的 CC 调度从恢复点重启（修复后重算期望 CC，无残留偏移）——恢复流零 continuity_error 事实 ⇒ 两判据 PASS、总体 PASS；分析面不可用（M4 裁定 B）时服务端诚实 NOT_EVALUATED、总体 INCONCLUSIVE（SPEC-206 §6 无观测≠干净）。baseline 注入声明的 expected_observations 覆盖 ts.continuity_error：它不豁免 cc_continuous（声明的不连续仍是不连续事实），只约束 no_unexpected_cc_error 的预期/意外对偶。"
+}

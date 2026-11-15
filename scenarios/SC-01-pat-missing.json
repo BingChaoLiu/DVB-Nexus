@@ -1,0 +1,115 @@
+{
+  "schema_version": 1,
+  "scenario_id": "5c010000-0000-4000-8000-000000000001",
+  "version": "1.0.0",
+  "title": "认识闭环：PAT 缺失",
+  "difficulty": "introductory",
+  "required_engine_versions": {},
+  "initial_topology": {
+    "topology_id": "topo-sc-01",
+    "revision": 1,
+    "nodes": [
+      {
+        "nodeId": "gen-0",
+        "nodeType": "ts_generator",
+        "config": {},
+        "ports": [
+          {"portId": "ts_out", "direction": "output", "plane": "MPEG_TS", "maxConnections": 1}
+        ]
+      },
+      {
+        "nodeId": "mux-0",
+        "nodeType": "ts_mux",
+        "config": {},
+        "ports": [
+          {"portId": "ts_in_1", "direction": "input", "plane": "MPEG_TS", "maxConnections": 1},
+          {"portId": "ts_in_2", "direction": "input", "plane": "MPEG_TS", "maxConnections": 1},
+          {"portId": "ts_out", "direction": "output", "plane": "MPEG_TS", "maxConnections": 1}
+        ]
+      },
+      {
+        "nodeId": "mon-0",
+        "nodeType": "ts_monitor",
+        "config": {},
+        "ports": [
+          {"portId": "ts_in", "direction": "input", "plane": "MPEG_TS", "maxConnections": 1}
+        ]
+      }
+    ],
+    "connections": [
+      {
+        "connectionId": "conn-1",
+        "plane": "MPEG_TS",
+        "from": {"nodeId": "gen-0", "portId": "ts_out"},
+        "to": {"nodeId": "mux-0", "portId": "ts_in_1"}
+      },
+      {
+        "connectionId": "conn-2",
+        "plane": "MPEG_TS",
+        "from": {"nodeId": "mux-0", "portId": "ts_out"},
+        "to": {"nodeId": "mon-0", "portId": "ts_in"}
+      }
+    ]
+  },
+  "simulation_config": {
+    "seed": 1234567,
+    "mode": "deterministic",
+    "clock": {
+      "mode": "deterministic",
+      "start_time_ns": 0,
+      "speed_num": 1,
+      "speed_den": 1,
+      "tick_quantum_ns": 1000000
+    }
+  },
+  "fault_plan": [
+    {
+      "fault_id": "fd000000-0000-4000-8000-00000000f1a1",
+      "fault_type": "PAT_MISSING",
+      "target_id": "mux-0:pid:0x0000",
+      "parameters": {},
+      "activation": {"kind": "packet_index", "packet_index": 202},
+      "expected_observations": ["ts.psi_section_observed"]
+    }
+  ],
+  "objectives": [
+    "观察基线流的 PSI 重复事实（PAT 在 PID 0 的周期性出现）",
+    "注入 PAT 缺失故障并识别激活槽位之后的症状",
+    "恢复（空 fault_plan 重跑新 Run）并提交通关判定"
+  ],
+  "hints": [
+    {
+      "hint_id": "sc01-hint-1",
+      "trigger": "experiment opened",
+      "level": "nudge",
+      "content": "PAT 位于 PID 0。先在基线 Run 的 artifact 上确认 PSI 重复节奏，再观察注入后同一 PID 的变化。",
+      "requirement_ids": ["REQ-SIM-204-001"],
+      "standard_ref": null
+    },
+    {
+      "hint_id": "sc01-hint-2",
+      "trigger": "after Inject",
+      "level": "direction",
+      "content": "激活槽位（packet 202）之后 PID 0 被空包替换：PAT 段停发。对照 events 时间线定位首个缺失槽位。",
+      "requirement_ids": ["REQ-SIM-204-001"],
+      "standard_ref": null
+    },
+    {
+      "hint_id": "sc01-hint-3",
+      "trigger": "before Recover",
+      "level": "walkthrough",
+      "content": "恢复 = 空 fault_plan 重跑一个新 Run（生成链与基线同几何同 seed）。以 Inject Run 作为 baseline_run_id 提交 verify。",
+      "requirement_ids": ["REQ-SIM-204-001"],
+      "standard_ref": null
+    }
+  ],
+  "pass_criteria": [
+    {
+      "criterion_id": "fault-cleared",
+      "kind": "fault_inactive",
+      "mandatory": true,
+      "fault_id": "fd000000-0000-4000-8000-00000000f1a1"
+    }
+  ],
+  "hidden_reference_solution": "恢复路径：以空 fault_plan 重跑一个新 Run 作为恢复 Run（生成链与基线同几何同 seed，字节级可复现）。以 Inject（faulted）Run 为 baseline_run_id、恢复 Run 为 recovery_run_id，按场景 pass_criteria 提交 verify。fault_inactive 判据核对三段结构化证据：① Inject Run 上 fault.injected/activated/cleared 生命周期闭合（故障真实植入，排除空判）；② 恢复 Run 的 prepared plan 不含该 fault_id；③ 恢复 Run journal 无该 fault 复发事件。全部成立 ⇒ 判定 PASS，参考解即此路径。"
+}

@@ -7,9 +7,12 @@
 // face from this merge onward — additive edits only.
 //
 // Step map mirrors the #58 API harness (tests/e2e/_fault_lab.py):
-//   Create   = POST /sessions                    (rest now; UI: #67 Lab 开局)
+//   Create   = Lab 开局 over the SC-01 scenario session — POST /sessions
+//              {scenario_id} → 201 ready → start (ui, #67 — flipped; the
+//              scenario branch is document-governed, SPEC-406 §4.3)
 //   Generate = POST runs with an EMPTY plan      (rest now; UI: #64 Monitor)
-//   Inject   = POST runs with the fault plan     (rest now; UI: #67 Lab)
+//   Inject   = Lab 注入 of the scenario document's fault_plan, verbatim
+//              (ui, #67 — flipped; SPEC-406 §4.5)
 //   Analyze  = in-process bridge                 (SKIPPED — M4 裁定 B: the
 //              REST analyze route stays frozen 501; no HTTP face exists)
 //   Diagnose = POST diagnose (idempotent)        (rest now; UI: #64)
@@ -25,11 +28,13 @@
 import { expect, test } from "@playwright/test";
 import {
   CC_DISCONTINUITY_FAULT_PLAN,
-  createStartedSession,
   fetchPacket,
   queryEvents,
-  submitAndAwaitRun,
 } from "./helpers/backend";
+
+// Lab Pack v1 SC-01 (repo-top scenarios/SC-01-pat-missing.json) — the #67
+// 开局载体 for this skeleton's Create/Inject steps.
+const SC01_SCENARIO_ID = "5c010000-0000-4000-8000-000000000001";
 
 test.describe.serial("eight-step closed loop (SPEC-400 §7.3 skeleton)", () => {
   let sessionId = "";
@@ -38,9 +43,17 @@ test.describe.serial("eight-step closed loop (SPEC-400 §7.3 skeleton)", () => {
   let recoveryRunId = "";
   let generatedArtifactId = "";
 
-  test("Create — session over topo-1 validates and starts (driver: rest, UI owner #67)", async ({ request }) => {
-    test.info().annotations.push({ type: "driver", description: 'rest — flips to "ui" at #67' });
-    sessionId = await createStartedSession(request);
+  test("Create — Lab opens the SC-01 scenario session (driver: ui, #67 — flipped)", async ({ page }) => {
+    test.info().annotations.push({
+      type: "driver",
+      description:
+        'ui — flipped: Lab 开局 (SPEC-406 §4.3 two-hop orchestration: POST /sessions{scenario_id} → 201 ready → start → running). The session is scenario-governed (topology/seed/clock from the SC-01 document).',
+    });
+    await page.goto(`/lab?scenario=${SC01_SCENARIO_ID}`);
+    await page.getByRole("button", { name: "开始实验" }).click();
+    // 201 ready → start running → the console mounts with the session badge.
+    await expect(page.getByTestId("lab-console-session")).toBeVisible({ timeout: 30_000 });
+    sessionId = ((await page.getByTestId("lab-console-session").textContent()) ?? "").trim();
     expect(sessionId).toBeTruthy();
   });
 
@@ -60,13 +73,22 @@ test.describe.serial("eight-step closed loop (SPEC-400 §7.3 skeleton)", () => {
     expect(generatedArtifactId).toBeTruthy();
   });
 
-  test("Inject — fault-plan run completes (driver: rest, UI owner #67)", async ({ request }) => {
-    test.info().annotations.push({ type: "driver", description: 'rest — flips to "ui" at #67' });
-    const run = await submitAndAwaitRun(request, sessionId, CC_DISCONTINUITY_FAULT_PLAN);
-    injectedRunId = run.runId;
-    expect(run.status).toBe("completed");
-    const faulted = run.artifacts.filter((a) => a.kind === "faulted_ts");
-    expect(faulted.length).toBeGreaterThanOrEqual(1);
+  test("Inject — the scenario fault_plan run completes (driver: ui, #67 — flipped)", async ({ page }) => {
+    test.info().annotations.push({
+      type: "driver",
+      description:
+        'ui — flipped: Lab 注入 (SPEC-406 §4.5: the console submits the scenario document\'s fault_plan VERBATIM — the SC-01 PAT_MISSING plan; frozen teaching geometry config).',
+    });
+    await page.goto(`/lab?scenario=${SC01_SCENARIO_ID}&session=${sessionId}`);
+    await page.getByRole("button", { name: /注入故障/ }).click();
+    // The console's run registry is per-mount page state — this fresh
+    // navigation has exactly the run this step submits.
+    const row = page.getByTestId(/^lab-run-row-/).first();
+    await expect(row).toHaveText(/completed/, { timeout: 30_000 });
+    injectedRunId = (await row.getAttribute("data-testid"))!.replace("lab-run-row-", "");
+    expect(injectedRunId).toBeTruthy();
+    // The faulted artifact kind is the Inject step's server-side observable.
+    await expect(row).toContainText("faulted_ts");
   });
 
   test("Analyze — SKIPPED: in-process bridge only (M4 裁定 B, no HTTP face)", async () => {
