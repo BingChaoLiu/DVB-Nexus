@@ -1,0 +1,108 @@
+/* SPEC-405 CLI console styles (minimal self-drawn kit extension, SPEC-400
+   §8.3): monospace display-text blocks (GBK verbatim discipline, §7.3), the
+   standing content-gate annotation (§7.4), the wire-name table, and the
+   Region.tsx section tab bar (approved R1 mount). */
+
+.dvb-mon-section-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.dvb-mon-section-tabs [role="tab"] {
+  padding: 4px 12px;
+  border: 1px solid var(--dvb-border, #444);
+  background: transparent;
+  cursor: pointer;
+}
+
+.dvb-mon-section-tabs [role="tab"][aria-selected="true"] {
+  background: var(--dvb-accent, #2a4d69);
+  color: #fff;
+}
+
+.dvb-cli-note {
+  font-size: 0.85em;
+  color: var(--dvb-muted, #888);
+  margin: 0 0 8px;
+}
+
+.dvb-cli-source-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.dvb-cli-source-filter button[aria-pressed="true"] {
+  background: var(--dvb-accent, #2a4d69);
+  color: #fff;
+}
+
+.dvb-cli-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85em;
+}
+
+.dvb-cli-table th,
+.dvb-cli-table td {
+  border: 1px solid var(--dvb-border, #444);
+  padding: 2px 6px;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.dvb-cli-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+  font: inherit;
+}
+
+/* Display-text blocks: verbatim rendering surface (§7.3) — monospace,
+   pre-wrap so lines are not lost, no styling that could imply judgment. */
+.dvb-cli-text {
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 4px 0;
+  padding: 6px;
+  border: 1px solid var(--dvb-border, #444);
+  max-height: 20em;
+  overflow: auto;
+}
+
+.dvb-cli-stderr {
+  background: var(--dvb-stderr-bg, #1f1f1f);
+  color: var(--dvb-stderr-fg, #d4d4d4);
+}
+
+.dvb-cli-field {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  margin: 2px 0;
+}
+
+.dvb-cli-field-name {
+  min-width: 18em;
+  font-family: ui-monospace, Consolas, monospace;
+  color: var(--dvb-muted, #888);
+}
+
+/* Standing content-gate annotation (§7.4): neutral emphasis only — no
+   success/failure color semantics, ever. */
+.dvb-cli-gate {
+  margin-top: 8px;
+  padding: 6px 8px;
+  border: 1px dashed var(--dvb-border, #444);
+  font-size: 0.9em;
+}
+
+.dvb-cli-error {
+  margin: 8px 0;
+}
