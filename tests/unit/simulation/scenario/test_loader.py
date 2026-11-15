@@ -151,8 +151,12 @@ def test_gate_install_is_idempotent():
 
     before = len(VALIDATION_GATES)
     install_scenario_validation_gate()
+    after_first = len(VALIDATION_GATES)
     install_scenario_validation_gate()
-    assert len(VALIDATION_GATES) == before + 1
+    # Idempotent: a second install adds nothing (earlier loader tests in
+    # this module may already have installed it via open_scenario_session).
+    assert len(VALIDATION_GATES) == after_first
+    assert after_first - before <= 1
 
 
 # --- acceptance core: VALIDATING rejection (SPEC-200 lifecycle) ----------------
