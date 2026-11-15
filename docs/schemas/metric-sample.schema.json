@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Observation Metric Sample",
+  "$comment": "Repository-authoritative implementation schema (ticket #50, SPEC-302 section 14). Deliberately differs from the read-only spec-package draft schemas/metric-sample.schema.json: (a) FOUR fields ADDED per the approved seam ruling #12 and SPEC-300 section 6 / SPEC-302 section 6.2 — time.clock_epoch, time.semantics (record-level timepoints carry explicit semantics; the ENVELOPE timepoint intentionally does not, SPEC-301 section 6), top-level revision, top-level is_final ('样本 schema 的 revision/is_final 字段与本条款一一对应', SPEC-302 section 6.2); (b) value_type moved OUT of required — SPEC-302 section 3 lists the sample fields (指标名/时间戳/值/维度/来源/质量/revision/is_final) and value_type belongs to the metric DEFINITION, not the sample; the query response's series metadata carries it (SPEC-302 section 8). The spec-package draft is NOT edited in place (docs/spec README rule 2); this document is the implementation registry entry and the divergences are declared in the ticket #50 implementation report (brief section 8 G1). The quality enum is the SPEC-302 derived-series vocabulary (good/missing/late/estimated/partial/revised/invalid) — a DIFFERENT axis from the SPEC-003 section 2.5 logical MetricQuality (G10).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "metric_name",
+    "value",
+    "time",
+    "dimensions",
+    "quality",
+    "provenance",
+    "revision",
+    "is_final"
+  ],
+  "properties": {
+    "metric_name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+    },
+    "value_type": {
+      "enum": [
+        "counter",
+        "gauge",
+        "histogram"
+      ]
+    },
+    "value": {
+      "type": [
+        "number",
+        "object",
+        "null"
+      ]
+    },
+    "unit": {
+      "type": "string"
+    },
+    "time": {
+      "type": "object",
+      "required": [
+        "value_ns",
+        "clock_domain",
+        "clock_epoch",
+        "semantics"
+      ],
+      "properties": {
+        "value_ns": {
+          "type": "integer"
+        },
+        "clock_domain": {
+          "type": "string"
+        },
+        "clock_epoch": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "semantics": {
+          "enum": [
+            "source",
+            "observed",
+            "derived"
+          ]
+        }
+      }
+    },
+    "dimensions": {
+      "type": "object",
+      "additionalProperties": {
+        "type": [
+          "string",
+          "integer",
+          "boolean"
+        ]
+      }
+    },
+    "quality": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "good",
+          "missing",
+          "late",
+          "estimated",
+          "partial",
+          "revised",
+          "invalid"
+        ]
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "required": [
+        "source_event_ids"
+      ],
+      "properties": {
+        "source_event_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "journal_watermark": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      }
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "is_final": {
+      "type": "boolean"
+    }
+  }
+}
