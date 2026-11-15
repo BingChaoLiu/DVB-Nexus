@@ -12,6 +12,8 @@
 // after each reload. Single-node drops need no further viewport machinery.
 import { expect, test, type Page } from "@playwright/test";
 
+import { fillMinimalGeneratorConfig } from "./helpers/inspector";
+
 async function dragPaletteItemToCanvas(page: Page, nodeType: string, nodeId: string, position: { x: number; y: number }) {
   await page.dragAndDrop(`[data-node-type="${nodeType}"]`, '[data-testid="dvb-topo-canvas"] .react-flow__pane', {
     targetPosition: position,
@@ -33,26 +35,6 @@ async function openFreshDraft(page: Page): Promise<void> {
 
 async function selectNode(page: Page, nodeId: string) {
   await page.locator(".react-flow__node", { has: page.locator(`[data-node-id="${nodeId}"]`) }).click();
-}
-
-/** Fill every required field of a minimal generator config (defaults fill the
- * optional ones) and apply — the 配置待填 → gate-open transition. */
-async function fillMinimalGeneratorConfig(page: Page) {
-  const required: [string, string][] = [
-    ["seed", "20260101"],
-    ["initial_media_clock_27mhz", "0"],
-    ["target_bitrate_bps", "3008000"],
-    ["output_packet_count", "1000"],
-    ["program.transport_stream_id", "1"],
-    ["program.program_number", "1"],
-    ["program.pmt_pid", "4096"],
-    ["program.pcr_pid", "256"],
-    ["program.version_number", "0"],
-  ];
-  for (const [label, value] of required) {
-    await page.getByLabel(label, { exact: true }).fill(value);
-  }
-  await page.getByRole("button", { name: "应用到草稿" }).click();
 }
 
 test("generator gate: empty config keeps save disabled → fill & apply → save → reload echo (AC-402-04/05)", async ({ page }) => {

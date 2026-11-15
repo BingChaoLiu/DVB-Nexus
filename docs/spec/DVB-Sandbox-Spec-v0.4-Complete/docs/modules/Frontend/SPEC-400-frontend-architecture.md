@@ -67,6 +67,8 @@ frontend/
   src/query/      查询键词表（canonical query keys）、hint→失效桥、节流/合帧钩子
   src/features/   <area>/ 每路由区一个目录（#62/#64/#67 各自 OWN 自己的 area）
   src/components/ui/  最小自绘组件集
+  src/lib/        env.ts（运行环境推导：API base / WS base）
+  src/styles/     theme.css（全局主题样式）
   e2e/            Playwright 冒烟（shell 导航 + 八步闭环骨架）
   scripts/        工程脚本（后端起服、OpenAPI dump、补缺检查）
 ```

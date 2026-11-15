@@ -35,6 +35,8 @@
 // unique within one node — mux/demux carry ts_out-shaped ids too).
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
+import { fillMinimalGeneratorConfig } from "./helpers/inspector";
+
 const CANVAS_TESTID = '[data-testid="dvb-topo-canvas"]';
 const PANE_SELECTOR = `${CANVAS_TESTID} .react-flow__pane`;
 const VIEWPORT_SELECTOR = `${CANVAS_TESTID} .react-flow__viewport`;
@@ -278,20 +280,7 @@ test("drag → connect → save → new revision walks the full canvas chain (AC
   // #63 accommodation (approved AC-402-04): the save entry is gate-gated —
   // select gen-0 and fill a minimal config through the inspector before saving.
   await page.locator(".react-flow__node", { has: page.locator('[data-node-id="gen-0"]') }).click();
-  for (const [label, value] of [
-    ["seed", "20260101"],
-    ["initial_media_clock_27mhz", "0"],
-    ["target_bitrate_bps", "3008000"],
-    ["output_packet_count", "1000"],
-    ["program.transport_stream_id", "1"],
-    ["program.program_number", "1"],
-    ["program.pmt_pid", "4096"],
-    ["program.pcr_pid", "256"],
-    ["program.version_number", "0"],
-  ] as [string, string][]) {
-    await page.getByLabel(label, { exact: true }).fill(value);
-  }
-  await page.getByRole("button", { name: "应用到草稿" }).click();
+  await fillMinimalGeneratorConfig(page);
 
   // REQ-UI-401-003: handle-to-handle connect (Strict mode, four-tuple mapping).
   await connectHandles(page, "gen-0", "ts_out", "mon-0", "ts_in");
@@ -348,20 +337,7 @@ test("precheck rejects connections beyond max_connections — nothing illegal re
   // #63 accommodation (approved AC-402-04): the gate requires the generator
   // config to be filled — select gen-0, fill minimal, apply before saving.
   await page.locator(".react-flow__node", { has: page.locator('[data-node-id="gen-0"]') }).click();
-  for (const [label, value] of [
-    ["seed", "20260101"],
-    ["initial_media_clock_27mhz", "0"],
-    ["target_bitrate_bps", "3008000"],
-    ["output_packet_count", "1000"],
-    ["program.transport_stream_id", "1"],
-    ["program.program_number", "1"],
-    ["program.pmt_pid", "4096"],
-    ["program.pcr_pid", "256"],
-    ["program.version_number", "0"],
-  ] as [string, string][]) {
-    await page.getByLabel(label, { exact: true }).fill(value);
-  }
-  await page.getByRole("button", { name: "应用到草稿" }).click();
+  await fillMinimalGeneratorConfig(page);
   await expect(page.locator('[data-node-id="gen-0"]').getByTestId("dvb-topo-handle-ts_out")).toBeVisible();
 
   // Legal first link: gen-0.ts_out → mux-0.ts_in_1. Handle ids repeat across

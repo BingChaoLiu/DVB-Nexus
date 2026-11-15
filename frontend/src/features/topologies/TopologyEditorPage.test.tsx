@@ -177,3 +177,19 @@ describe("TopologyEditorPage — AC-401-06 negative surface", () => {
     }
   });
 });
+
+describe("TopologyEditorPage — AC-402-04 no-session-entry assertion", () => {
+  // SPEC-402 §12 AC-402-04（§6.2 实现归属）：编辑器内自身无 session 入口——
+  // session/run 控制归 SPEC-403 monitor 与 SPEC-406 lab；本页只导出门判定
+  // 纯函数（computeInspectorGate），不出现任何「启动 session」类控件。
+  it("exposes no session-start or session-tracking entry points in the editor", async () => {
+    renderPage();
+    await screen.findByRole("complementary", { name: "节点面板" });
+    // The session-entry vocabulary the owner regions use: the lab 开局 flow
+    // (开局/开始实验), the monitor tracking entry (session id 以跟踪), and
+    // generic 启动/创建 session wording — none may exist here.
+    for (const forbidden of [/开局/, /开始实验/, /启动\s*session/i, /创建\s*session/i, /session\s*id/i, /跟踪/]) {
+      expect(screen.queryByText(forbidden)).toBeNull();
+    }
+  });
+});
