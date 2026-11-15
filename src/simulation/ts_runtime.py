@@ -56,6 +56,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import inspect
 import json
 import threading
 import uuid
@@ -263,7 +264,11 @@ class FaultFilter(Protocol):
 
 
 #: Builds the filter for a bound plan (composition-root seam; ``None``
-#: return is only valid for an empty plan).
+#: return is only valid for an empty plan).  The production factory is
+#: ``faults.factory.build_semantic_filter_factory()`` (#44); a factory may
+#: additionally accept a keyword-only ``run_id`` — the runtime injects it
+#: when the signature declares it, so the mutation log can carry the run
+#: binding (SPEC-204 §8.2).
 FilterFactory = Callable[[tuple[FaultDefinition, ...], GeneratorConfig], FaultFilter]
 
 
@@ -492,7 +497,13 @@ class TSRuntime:
                 "SPEC-108 §5 via the public validator)"
             )
         plan = validate_fault_plan(
-            fault_plan, actual_pmt_pid=config.program.pmt_pid
+            fault_plan,
+            actual_pmt_pid=config.program.pmt_pid,
+            # SPEC-204 §11 SIM_FAULT_ACTIVATION_OUT_OF_RANGE: the frame
+            # length is budgetable at prepare (REQ-SIM-204-001 validates
+            # the activation against the prepared output frame).
+            # #44 append-only: see the module changelog note in faults docs.
+            expected_packet_count=config.output_packet_count,
         )
         return PreparedTSRun(
             session_id=session.session_id,
@@ -709,6 +720,32 @@ class TSRuntime:
 
     # --- worker-side execution (runs on the bounded pool thread) --------------------
 
+    def _instantiate_filter(self, payload: "_RunPayload") -> Any:
+        """Call the wired filter factory (#44 append-only hook).
+
+        The default two-argument call ``(plan, config)`` is unchanged for
+        every existing factory.  When the factory declares support for it,
+        the run binding (``run_id``) is injected as a keyword argument so
+        the SPEC-204 §8.2 mutation log can carry the run reference — the
+        production faults-package factory accepts it; #43 fakes don't and
+        keep working untouched.
+        """
+        factory = self._filter_factory
+        assert factory is not None  # guarded by the tee gate in run()
+        try:
+            parameters = inspect.signature(factory).parameters
+            accepts_run_id = "run_id" in parameters or any(
+                parameter.kind is inspect.Parameter.VAR_KEYWORD
+                for parameter in parameters.values()
+            )
+        except (TypeError, ValueError):  # C builtins without signatures
+            accepts_run_id = False
+        if accepts_run_id:
+            return factory(
+                payload.fault_plan, payload.config, run_id=payload.run_id
+            )
+        return factory(payload.fault_plan, payload.config)
+
     def _execute_run(self, payload: "_RunPayload") -> "_RunOutcome":
         outcome = _RunOutcome(run_id=payload.run_id)
         cancel_flag = payload.cancel_flag
@@ -724,7 +761,7 @@ class TSRuntime:
         filter_instance = None
         if tee:
             try:
-                filter_instance = self._filter_factory(payload.fault_plan, payload.config)
+                filter_instance = self._instantiate_filter(payload)
             except Exception as exc:  # noqa: BLE001
                 outcome.fail_with(_RunError.generation(exc))
                 return outcome
