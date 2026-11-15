@@ -1,0 +1,125 @@
+{
+  "schema_version": 1,
+  "scenario_id": "5c030000-0000-4000-8000-000000000003",
+  "version": "1.0.0",
+  "title": "声明失配：PMT PID 重指向",
+  "difficulty": "intermediate",
+  "required_engine_versions": {},
+  "initial_topology": {
+    "topology_id": "topo-sc-03",
+    "revision": 1,
+    "nodes": [
+      {
+        "nodeId": "gen-0",
+        "nodeType": "ts_generator",
+        "config": {},
+        "ports": [
+          {"portId": "ts_out", "direction": "output", "plane": "MPEG_TS", "maxConnections": 1}
+        ]
+      },
+      {
+        "nodeId": "mux-0",
+        "nodeType": "ts_mux",
+        "config": {},
+        "ports": [
+          {"portId": "ts_in_1", "direction": "input", "plane": "MPEG_TS", "maxConnections": 1},
+          {"portId": "ts_in_2", "direction": "input", "plane": "MPEG_TS", "maxConnections": 1},
+          {"portId": "ts_out", "direction": "output", "plane": "MPEG_TS", "maxConnections": 1}
+        ]
+      },
+      {
+        "nodeId": "mon-0",
+        "nodeType": "ts_monitor",
+        "config": {},
+        "ports": [
+          {"portId": "ts_in", "direction": "input", "plane": "MPEG_TS", "maxConnections": 1}
+        ]
+      }
+    ],
+    "connections": [
+      {
+        "connectionId": "conn-1",
+        "plane": "MPEG_TS",
+        "from": {"nodeId": "gen-0", "portId": "ts_out"},
+        "to": {"nodeId": "mux-0", "portId": "ts_in_1"}
+      },
+      {
+        "connectionId": "conn-2",
+        "plane": "MPEG_TS",
+        "from": {"nodeId": "mux-0", "portId": "ts_out"},
+        "to": {"nodeId": "mon-0", "portId": "ts_in"}
+      }
+    ]
+  },
+  "simulation_config": {
+    "seed": 1234567,
+    "mode": "deterministic",
+    "clock": {
+      "mode": "deterministic",
+      "start_time_ns": 0,
+      "speed_num": 1,
+      "speed_den": 1,
+      "tick_quantum_ns": 1000000
+    }
+  },
+  "fault_plan": [
+    {
+      "fault_id": "fd000000-0000-4000-8000-00000000f1a4",
+      "fault_type": "PMT_PID_MISMATCH",
+      "target_id": "mux-0:pid:0x0000",
+      "parameters": {"wrong_pmt_pid": 4100},
+      "activation": {"kind": "packet_index", "packet_index": 0},
+      "expected_observations": ["ts.psi_section_observed"]
+    }
+  ],
+  "objectives": [
+    "读取基线流的 PAT 声明（program_map_pid）与实际 PMT 摆放",
+    "注入 PAT 重指向故障（声明改写为 PID 4100，CRC 重算）并对照声明/实际",
+    "恢复并提交判定：理解映射类判据的声明↔摆放对照语义"
+  ],
+  "hints": [
+    {
+      "hint_id": "sc03-hint-1",
+      "trigger": "experiment opened",
+      "level": "nudge",
+      "content": "PAT 声明 PMT 的摆放 PID；本几何中真实 PMT 在 4096。先在基线上确认声明与摆放一致。",
+      "requirement_ids": ["REQ-SIM-204-004"],
+      "standard_ref": null
+    },
+    {
+      "hint_id": "sc03-hint-2",
+      "trigger": "after Inject",
+      "level": "direction",
+      "content": "故障把 PAT 的 program_map_pid 改写为 4100（带重算 CRC，声明本身合法），真实 PMT 在 4096 成为孤儿——这是映射失配，不是 CRC 失效。",
+      "requirement_ids": ["REQ-SIM-204-004"],
+      "standard_ref": null
+    },
+    {
+      "hint_id": "sc03-hint-3",
+      "trigger": "before Verify",
+      "level": "walkthrough",
+      "content": "恢复 Run 重跑空 plan 后提交 verify。pat_pmt_mapping_valid 是观测类判据：证据来自恢复 Run 的 PAT/PMT 观测对照；分析面不可用时服务端诚实 NOT_EVALUATED，总体 INCONCLUSIVE。",
+      "requirement_ids": ["REQ-SIM-204-004"],
+      "standard_ref": null
+    }
+  ],
+  "pass_criteria": [
+    {
+      "criterion_id": "fault-cleared",
+      "kind": "fault_inactive",
+      "mandatory": true,
+      "fault_id": "fd000000-0000-4000-8000-00000000f1a4"
+    },
+    {
+      "criterion_id": "mapping-valid",
+      "kind": "pat_pmt_mapping_valid",
+      "mandatory": true
+    },
+    {
+      "criterion_id": "pat-valid",
+      "kind": "psi_pat_valid",
+      "mandatory": true
+    }
+  ],
+  "hidden_reference_solution": "恢复路径：以空 fault_plan 重跑一个新 Run（同几何同 seed）。以 Inject（faulted）Run 为 baseline_run_id、恢复 Run 为 recovery_run_id 提交 verify。fault_inactive 三段证据链成立 ⇒ 该判据 PASS。pat_pmt_mapping_valid 为观测类判据：评估对照恢复 Run 上 PAT 声明（program_map_pid 声明值）与 PMT 实际摆放——恢复流声明 4096 且 PMT 观测在 4096 ⇒ 映射一致 PASS；分析面不可用（M4 裁定 B）时服务端诚实 NOT_EVALUATED、总体 INCONCLUSIVE（SPEC-206 §6 无观测≠干净）。learner 若换新 fault_id 重投同类故障：fault_inactive 对原 fault_id PASS，但症状由观测类判据兜底（mandatory）→ 总体不 PASS。"
+}

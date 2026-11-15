@@ -23,6 +23,11 @@ from api.dto.runs import (
     RunStatusDTO,
     RunSubmitRequest,
 )
+from api.dto.scenarios import (
+    ScenarioDetailDTO,
+    ScenarioSolutionDTO,
+    ScenarioSummaryDTO,
+)
 from api.dto.sessions import (
     ArtifactRefDTO,
     ClockConfigDTO,
@@ -37,6 +42,17 @@ from api.dto.sessions import (
     SnapshotDTO,
     TopologyViolationDTO,
 )
+from api.dto.topologies import (
+    TopologyConnectionDTO,
+    TopologyCreateRequest,
+    TopologyDTO,
+    TopologyNodeDTO,
+    TopologyPortDTO,
+    TopologySpecDTO,
+    TopologySummaryDTO,
+    TopologyValidationDTO,
+)
+from api.dto.tsduck_calls import TSDuckCallDTO
 
 __all__ = [
     "ArtifactMetaDTO",
@@ -59,8 +75,20 @@ __all__ = [
     "RunArtifactDTO",
     "RunStatusDTO",
     "RunSubmitRequest",
+    "ScenarioDetailDTO",
+    "ScenarioSolutionDTO",
+    "ScenarioSummaryDTO",
     "SessionValidationDTO",
     "SessionViewDTO",
     "SnapshotDTO",
+    "TSDuckCallDTO",
+    "TopologyConnectionDTO",
+    "TopologyCreateRequest",
+    "TopologyDTO",
+    "TopologyNodeDTO",
+    "TopologyPortDTO",
+    "TopologySpecDTO",
+    "TopologySummaryDTO",
+    "TopologyValidationDTO",
     "TopologyViolationDTO",
 ]

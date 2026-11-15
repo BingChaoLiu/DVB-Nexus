@@ -29,22 +29,30 @@ from starlette.exceptions import HTTPException
 
 from api.dto.observation import (
     AlertsDataDTO,
+    AlertsResponseDTO,
     EventsDataDTO,
+    EventsResponseDTO,
     ExportCreateBody,
     ExportDataDTO,
+    ExportResponseDTO,
     HealthDataDTO,
+    HealthResponseDTO,
     MetricsDataDTO,
     MetricsQueryBody,
+    MetricsResponseDTO,
     ObservationMetaDTO,
     ObservationResponseDTO,
     ObservationScopeDTO,
     SummaryDataDTO,
+    SummaryResponseDTO,
     TimelineDataDTO,
+    TimelineResponseDTO,
     alert_record_dto,
     health_result_dto,
     metric_series_dto,
     timeline_record_dto,
 )
+from api.errors import OPENAPI_ERROR_RESPONSES, OPENAPI_EXPORT_ERROR_RESPONSES
 from application.context import LOCAL_TENANT_ID
 from application.errors import REQUEST_BODY_INVALID, BadRequestError
 
@@ -310,14 +318,22 @@ def build_observation_router(
 
     # --- §4.5 Observation (SPEC-305 §4, verbatim order) --------------------
 
-    @router.get("/sessions/{session_id}/observation/summary")
+    @router.get(
+        "/sessions/{session_id}/observation/summary",
+        response_model=SummaryResponseDTO,
+        responses=OPENAPI_ERROR_RESPONSES,
+    )
     async def observation_summary(session_id: str, request: Request) -> dict:
         if query_port is None:
             raise HTTPException(status_code=501, detail=_501_DETAIL)
         envelope = await query_port.summary(session_id)
         return _stamped(envelope, request)
 
-    @router.get("/sessions/{session_id}/events")
+    @router.get(
+        "/sessions/{session_id}/events",
+        response_model=EventsResponseDTO,
+        responses=OPENAPI_ERROR_RESPONSES,
+    )
     async def list_events(
         session_id: str,
         request: Request,
@@ -351,7 +367,11 @@ def build_observation_router(
         )
         return _stamped(envelope, request)
 
-    @router.get("/sessions/{session_id}/timeline")
+    @router.get(
+        "/sessions/{session_id}/timeline",
+        response_model=TimelineResponseDTO,
+        responses=OPENAPI_ERROR_RESPONSES,
+    )
     async def get_timeline(
         session_id: str,
         request: Request,
@@ -397,7 +417,11 @@ def build_observation_router(
         )
         return _stamped(envelope, request)
 
-    @router.post("/sessions/{session_id}/metrics/query")
+    @router.post(
+        "/sessions/{session_id}/metrics/query",
+        response_model=MetricsResponseDTO,
+        responses=OPENAPI_ERROR_RESPONSES,
+    )
     async def query_metrics(
         session_id: str,
         request: Request,
@@ -415,7 +439,11 @@ def build_observation_router(
         envelope = await query_port.metrics_query(session_id, body)
         return _stamped(envelope, request)
 
-    @router.get("/sessions/{session_id}/alerts")
+    @router.get(
+        "/sessions/{session_id}/alerts",
+        response_model=AlertsResponseDTO,
+        responses=OPENAPI_ERROR_RESPONSES,
+    )
     async def list_alerts(
         session_id: str,
         request: Request,
@@ -439,7 +467,11 @@ def build_observation_router(
         )
         return _stamped(envelope, request)
 
-    @router.get("/sessions/{session_id}/health")
+    @router.get(
+        "/sessions/{session_id}/health",
+        response_model=HealthResponseDTO,
+        responses=OPENAPI_ERROR_RESPONSES,
+    )
     async def get_health(
         session_id: str,
         request: Request,
@@ -465,7 +497,11 @@ def build_observation_router(
         )
         return _stamped(envelope, request)
 
-    @router.get("/sessions/{session_id}/exports/{export_id}")
+    @router.get(
+        "/sessions/{session_id}/exports/{export_id}",
+        response_model=ExportResponseDTO,
+        responses=OPENAPI_EXPORT_ERROR_RESPONSES,
+    )
     async def get_export(
         session_id: str, export_id: str, request: Request
     ) -> dict:
@@ -474,7 +510,11 @@ def build_observation_router(
         envelope = await query_port.export(session_id, export_id)
         return _stamped(envelope, request)
 
-    @router.post("/sessions/{session_id}/exports")
+    @router.post(
+        "/sessions/{session_id}/exports",
+        response_model=ExportResponseDTO,
+        responses=OPENAPI_EXPORT_ERROR_RESPONSES,
+    )
     async def create_export(
         session_id: str,
         request: Request,

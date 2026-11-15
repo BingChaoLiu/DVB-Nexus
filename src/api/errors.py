@@ -77,6 +77,42 @@ SPEC305_ERROR_HTTP_MAPPING: tuple[tuple[type[Exception], int], ...] = (
 )
 
 
+#: OpenAPI error-response documentation (ticket #80, REQ-API-500-002):
+#: every error body is the unified SPEC-305 §7 envelope, so routes declare
+#: these ``responses=`` entries to make ``ErrorResponse``/``ErrorDetail``
+#: reachable components (the #61 codegen plane). The declared statuses are
+#: the §6 rows a route can actually render — 400/404/409/422/501/503 for
+#: every route (validation, unknown resource, lifecycle/cursor conflict,
+#: semantic rejection, unbound-composition freeze, storage), plus the 429
+#: variant for the export-throttled faces. Documentation only: the runtime
+#: rendering is the declarative tables above, unchanged.
+_OPENAPI_ERROR_STATUSES: tuple[int, ...] = (400, 404, 409, 422, 501, 503)
+
+
+def _error_response_descriptions() -> dict[int, dict[str, object]]:
+    return {
+        status: {"model": ErrorResponse, "description": f"SPEC-500 §6 row {status}"}
+        for status in _OPENAPI_ERROR_STATUSES
+    }
+
+
+OPENAPI_ERROR_RESPONSES: dict[int, dict[str, object]] = _error_response_descriptions()
+
+#: The export-throttle variant: the common rows plus the SPEC-305 §9 429 row.
+OPENAPI_EXPORT_ERROR_RESPONSES: dict[int, dict[str, object]] = {
+    **OPENAPI_ERROR_RESPONSES,
+    429: {"model": ErrorResponse, "description": "SPEC-305 §9 export throttle"},
+}
+
+#: The solution-reveal variant (ticket #80 裁定 F): the common rows plus
+#: the 403 row — ``SIM_SCENARIO_SOLUTION_LEAK`` (SPEC-205 §7 row 6, the
+#: SPEC-305 §7 403 mapping) is raisable exactly on that route.
+OPENAPI_SOLUTION_ERROR_RESPONSES: dict[int, dict[str, object]] = {
+    **OPENAPI_ERROR_RESPONSES,
+    403: {"model": ErrorResponse, "description": "SPEC-500 §6 row 403"},
+}
+
+
 def _request_id(request: Request) -> str:
     """Per-request id stamped by ``api.app.RequestIdMiddleware``.
 

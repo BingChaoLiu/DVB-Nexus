@@ -1,20 +1,20 @@
 """Frozen-table routes whose backing use-cases arrive with M4 (SPEC-500
-§4.1/§4.4/§4.7, tickets #48/#54/#56).
+§4.4/§4.7, tickets #48/#54/#56).
 
 Route-table freeze discipline (REQ-API-500-001): the §4 inventory is the
 authority, so these routes are **mounted now** and answer **501 Not
-Implemented** through the unified envelope until their M3/M4 backends land:
+Implemented** through the unified envelope until their backends land:
 
-- §4.1 Topology: creation/list/read/modify are SPEC-502 persistence
-  (revision-row appends) — the topology tables are not in the M3 storage
-  slice; ``POST .../validate`` needs the stored graph, so it waits too.
 - §4.4 Diagnosis/Recovery: ticket #54 wires the TWO diagnosis endpoints
   (``GET .../diagnoses`` list, ``POST .../runs/{run_id}/diagnose``
   idempotent re-evaluation) behind the optional ``diagnosis_port``;
   ticket #56 wires ``POST .../verify`` (SPEC-206 three-state verdict)
   behind the optional ``verification_port``. An unbound port (composition
   root has no service yet) keeps the 501 freeze answer.
-- §4.7 Scenario: SPEC-205 experiment packages have no M3 registry.
+
+(The §4.1 topology ×5 and §4.7 scenario ×2 stubs lived here until ticket
+#80 moved them behind ``api.routes.topology`` / ``api.routes.scenarios``
+port modules — same paths, same unbound 501 envelopes.)
 
 Each stub documents exactly which spec owns the future semantics so the
 additive-only evolution (SPEC-500 §3) can replace the handler in place
@@ -58,10 +58,6 @@ __all__ = [
 
 _501 = 501
 
-_TOPOLOGY_DETAIL = (
-    "topology persistence (SPEC-502 revision rows) lands with M4; the "
-    "route is mounted per the SPEC-500 §4.1 freeze"
-)
 _DIAGNOSIS_DETAIL = (
     "diagnosis evaluation (SPEC-306) / verification (SPEC-206) lands with "
     "the M4 diagnosis chain; the route is mounted per the SPEC-500 §4.4 "
@@ -71,10 +67,6 @@ _VERIFY_DETAIL = (
     "recovery verification (SPEC-206 three-state) is wired through the "
     "optional verification_port (ticket #56); an unbound port keeps the "
     "SPEC-500 §4.4 freeze answer"
-)
-_SCENARIO_DETAIL = (
-    "the scenario registry (SPEC-205 experiment packages) lands with M4; "
-    "the route is mounted per the SPEC-500 §4.7 freeze"
 )
 
 
@@ -204,7 +196,7 @@ def build_pending_router(
     diagnosis_port: DiagnosisPort | None = None,
     verification_port: VerificationPort | None = None,
 ) -> APIRouter:
-    """Build the §4.1/§4.4/§4.7 router (frozen table presence).
+    """Build the §4.4/§4.7 router (frozen table presence).
 
     ``diagnosis_port=None`` keeps the §4.4 diagnosis endpoints on the 501
     freeze answer; binding a port switches exactly those two handlers to
@@ -214,30 +206,6 @@ def build_pending_router(
     to the SPEC-206 three-state verdict (ticket #56).
     """
     router = APIRouter()
-
-    # --- §4.1 Topology -----------------------------------------------------
-
-    @router.post("/topologies")
-    async def create_topology() -> dict:
-        raise HTTPException(status_code=_501, detail=_TOPOLOGY_DETAIL)
-
-    @router.get("/topologies")
-    async def list_topologies() -> dict:
-        raise HTTPException(status_code=_501, detail=_TOPOLOGY_DETAIL)
-
-    @router.get("/topologies/{topology_id}")
-    async def get_topology(topology_id: str) -> dict:
-        raise HTTPException(status_code=_501, detail=_TOPOLOGY_DETAIL)
-
-    @router.put("/topologies/{topology_id}")
-    async def update_topology(topology_id: str) -> dict:
-        # Modify = a new immutable revision row (SPEC-502), never in-place.
-        raise HTTPException(status_code=_501, detail=_TOPOLOGY_DETAIL)
-
-    @router.post("/topologies/{topology_id}/validate")
-    async def validate_topology(topology_id: str) -> dict:
-        # SPEC-202 path-addressed structured errors once stored graphs exist.
-        raise HTTPException(status_code=_501, detail=_TOPOLOGY_DETAIL)
 
     # --- §4.4 Diagnosis / Recovery ------------------------------------------
 
@@ -272,15 +240,5 @@ def build_pending_router(
                 " pass_criteria; SPEC-206)",
             )
         return await verification_port.verify_run(session_id, run_id, request)
-
-    # --- §4.7 Scenario -------------------------------------------------------
-
-    @router.get("/scenarios")
-    async def list_scenarios() -> dict:
-        raise HTTPException(status_code=_501, detail=_SCENARIO_DETAIL)
-
-    @router.get("/scenarios/{scenario_id}")
-    async def get_scenario(scenario_id: str) -> dict:
-        raise HTTPException(status_code=_501, detail=_SCENARIO_DETAIL)
 
     return router

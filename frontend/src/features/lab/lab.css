@@ -1,0 +1,240 @@
+/* Lab region styles (SPEC-406) — follows the monitor.css posture: plain
+   CSS classes under the dvb-lab- namespace, no CSS framework, no inline
+   layout semantics beyond the region's own presentation. */
+
+.dvb-lab-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.dvb-lab-row {
+  border: 1px solid var(--dvb-border, #d0d4dc);
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.dvb-lab-row-head,
+.dvb-lab-detail-head,
+.dvb-lab-hint-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.dvb-lab-row-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.dvb-lab-title {
+  font-weight: 600;
+}
+
+.dvb-lab-line {
+  color: var(--dvb-text-muted, #4b5563);
+  font-size: 0.875rem;
+}
+
+.dvb-lab-mono {
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 0.8125rem;
+}
+
+.dvb-lab-code {
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 0.8125rem;
+  background: var(--dvb-chip-bg, #eef1f6);
+  padding: 0.05rem 0.3rem;
+  border-radius: 4px;
+}
+
+.dvb-lab-ref-chip {
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 0.75rem;
+  background: var(--dvb-chip-bg, #eef1f6);
+  border: 1px solid var(--dvb-border, #d0d4dc);
+  border-radius: 999px;
+  padding: 0.05rem 0.45rem;
+}
+
+.dvb-lab-detail,
+.dvb-lab-console section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.dvb-lab-h3 {
+  margin: 0.75rem 0 0.25rem;
+  font-size: 0.95rem;
+}
+
+.dvb-lab-objectives {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.dvb-lab-hints {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.dvb-lab-hint-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.dvb-lab-hint {
+  border: 1px solid var(--dvb-border, #d0d4dc);
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+}
+
+.dvb-lab-hint-locked {
+  background: var(--dvb-chip-bg, #eef1f6);
+  color: var(--dvb-text-muted, #4b5563);
+}
+
+.dvb-lab-hint-content {
+  margin-top: 0.35rem;
+  white-space: pre-wrap;
+}
+
+.dvb-lab-hint-reqs {
+  margin-top: 0.35rem;
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.dvb-lab-hint-ref {
+  margin-top: 0.25rem;
+  color: var(--dvb-text-muted, #4b5563);
+  font-size: 0.8125rem;
+}
+
+.dvb-lab-reveal,
+.dvb-lab-solution-reveal {
+  align-self: flex-start;
+}
+
+.dvb-lab-criteria,
+.dvb-lab-topology ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.dvb-lab-topology ul ul {
+  padding-left: 1.25rem;
+}
+
+.dvb-lab-criterion {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  padding: 0.2rem 0;
+}
+
+.dvb-lab-topology {
+  border: 1px solid var(--dvb-border, #d0d4dc);
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+}
+
+.dvb-lab-run-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.dvb-lab-error,
+.dvb-lab-start-error {
+  color: var(--dvb-danger, #b42318);
+  font-size: 0.875rem;
+  white-space: pre-wrap;
+}
+
+.dvb-lab-stepper {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--dvb-border, #d0d4dc);
+  border-radius: 6px;
+  background: var(--dvb-chip-bg, #f7f8fa);
+}
+
+.dvb-lab-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.875rem;
+}
+
+.dvb-lab-step-done {
+  font-weight: 600;
+}
+
+.dvb-lab-step-gap {
+  color: var(--dvb-text-muted, #4b5563);
+}
+
+.dvb-lab-step-index {
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 0.75rem;
+  width: 1.25rem;
+  height: 1.25rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--dvb-border, #d0d4dc);
+  border-radius: 999px;
+}
+
+.dvb-lab-stepper-note {
+  color: var(--dvb-text-muted, #4b5563);
+  font-size: 0.75rem;
+  margin-left: auto;
+}
+
+.dvb-lab-solution {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.dvb-lab-solution-text {
+  margin: 0;
+  white-space: pre-wrap;
+  font-family: inherit;
+  border: 1px solid var(--dvb-border, #d0d4dc);
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  background: var(--dvb-chip-bg, #f7f8fa);
+}
+
+.dvb-lab-solution-locked {
+  color: var(--dvb-text-muted, #4b5563);
+  font-size: 0.875rem;
+}
+
+.dvb-lab-solution-error {
+  color: var(--dvb-danger, #b42318);
+  font-size: 0.875rem;
+}

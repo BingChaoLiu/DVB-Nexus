@@ -1,0 +1,297 @@
+/* Stream Monitor page styles (SPEC-403): co-located in the monitor feature
+   directory (the ticket's OWN face) — the shared theme.css stays untouched.
+   Consumes the theme tokens only. */
+.dvb-mon-page {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 20px;
+}
+
+.dvb-mon-page-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.dvb-mon-session {
+  font-family: var(--dvb-mono);
+  font-size: 0.9rem;
+  color: var(--dvb-accent);
+}
+
+.dvb-mon-guide {
+  color: var(--dvb-muted);
+}
+
+.dvb-mon-session-form,
+.dvb-mon-diagnose-bar,
+.dvb-mon-querybar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  color: var(--dvb-muted);
+}
+
+.dvb-mon-session-form input,
+.dvb-mon-diagnose-bar input,
+.dvb-mon-querybar input,
+.dvb-mon-verify-form input,
+.dvb-mon-verify-form select {
+  background: var(--dvb-bg);
+  color: var(--dvb-text);
+  border: 1px solid var(--dvb-border);
+  border-radius: 6px;
+  padding: 5px 8px;
+  font-family: var(--dvb-mono);
+}
+
+.dvb-mon-controlbar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dvb-mon-actions-bar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.dvb-mon-actions-bar button,
+.dvb-mon-verify-form button,
+.dvb-mon-runtrigger button,
+.dvb-mon-diagnose-bar button,
+.dvb-mon-session-form button,
+.dvb-mon-criterion button,
+.dvb-mon-page-header button {
+  background: var(--dvb-surface);
+  color: var(--dvb-text);
+  border: 1px solid var(--dvb-border);
+  border-radius: 6px;
+  padding: 5px 12px;
+  cursor: pointer;
+}
+
+.dvb-mon-actions-bar button:disabled,
+.dvb-mon-verify-form button:disabled,
+.dvb-mon-runtrigger button:disabled,
+.dvb-mon-diagnose-bar button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.dvb-mon-badge {
+  font-family: var(--dvb-mono);
+}
+
+.dvb-mon-rows {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dvb-mon-row {
+  border: 1px solid var(--dvb-border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  background: var(--dvb-surface);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dvb-mon-row-cleared {
+  opacity: 0.55;
+}
+
+.dvb-mon-row-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.dvb-mon-code {
+  font-family: var(--dvb-mono);
+  font-weight: 600;
+  color: var(--dvb-accent);
+}
+
+.dvb-mon-rule {
+  color: var(--dvb-muted);
+  font-family: var(--dvb-mono);
+  font-size: 0.85rem;
+}
+
+.dvb-mon-line {
+  color: var(--dvb-muted);
+  font-size: 0.9rem;
+}
+
+.dvb-mon-note {
+  font-size: 0.8rem;
+  color: var(--dvb-muted);
+}
+
+.dvb-mon-error {
+  color: var(--dvb-bad);
+  font-family: var(--dvb-mono);
+  font-size: 0.85rem;
+  margin: 4px 0;
+}
+
+.dvb-mon-actions {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--dvb-text);
+  font-size: 0.9rem;
+}
+
+.dvb-mon-refs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.dvb-mon-ref-chip {
+  font-family: var(--dvb-mono);
+  font-size: 0.8rem;
+  border: 1px solid var(--dvb-border);
+  border-radius: 999px;
+  padding: 1px 8px;
+  color: var(--dvb-muted);
+}
+
+.dvb-mon-locator {
+  background: transparent;
+  color: var(--dvb-accent);
+  border: 1px dashed var(--dvb-border);
+  border-radius: 6px;
+  padding: 3px 10px;
+  cursor: pointer;
+  font-family: var(--dvb-mono);
+  font-size: 0.85rem;
+}
+
+.dvb-mon-verdict {
+  font-family: var(--dvb-mono);
+  font-size: 1.05rem;
+}
+
+.dvb-mon-not-evaluated {
+  color: var(--dvb-warn);
+}
+
+.dvb-mon-title {
+  font-weight: 600;
+}
+
+.dvb-mon-points {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dvb-mon-point {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--dvb-mono);
+  font-size: 0.85rem;
+}
+
+.dvb-mon-point-window {
+  color: var(--dvb-muted);
+}
+
+.dvb-mon-missing {
+  font-weight: 600;
+}
+
+.dvb-mon-value {
+  color: var(--dvb-text);
+}
+
+.dvb-mon-node {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 10px;
+  font-family: var(--dvb-mono);
+  font-size: 0.85rem;
+}
+
+.dvb-mon-field {
+  margin-right: 14px;
+}
+
+.dvb-mon-field-label {
+  color: var(--dvb-muted);
+  font-family: var(--dvb-mono);
+  font-size: 0.8rem;
+}
+
+.dvb-mon-config {
+  width: 100%;
+  background: var(--dvb-bg);
+  color: var(--dvb-text);
+  border: 1px solid var(--dvb-border);
+  border-radius: 6px;
+  font-family: var(--dvb-mono);
+  font-size: 0.8rem;
+  white-space: pre;
+}
+
+.dvb-mon-verify-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 720px;
+}
+
+.dvb-mon-criteria {
+  border: 1px solid var(--dvb-border);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dvb-mon-criterion {
+  display: flex;
+  gap: 8px;
+  align-items: end;
+  flex-wrap: wrap;
+}
+
+.dvb-mon-criterion label,
+.dvb-mon-verify-form > label,
+.dvb-mon-session-form,
+.dvb-mon-diagnose-bar label,
+.dvb-mon-querybar label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.8rem;
+  color: var(--dvb-muted);
+}
+
+.dvb-mon-report {
+  margin-top: 8px;
+  border-top: 1px dashed var(--dvb-border);
+  padding-top: 8px;
+}
+
+.dvb-mon-journal-row {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}

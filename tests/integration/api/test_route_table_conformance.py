@@ -5,11 +5,13 @@ The authoritative freeze is the SPEC-500 §4 route table (ticket #13
 "Resolution" lists SPEC-500 as 路由权威冻结). This test pins **every**
 (method, path) pair of the composed §4 app against that table, verbatim:
 
-- §4.1 topology ×5 and §4.7 scenario ×2 and §4.4 diagnosis ×3 are mounted
-  as 501 mount points (backing use-cases land with M4) — presence is the
-  freeze obligation;
+- §4.1 topology ×5 and §4.7 scenario ×2 went LIVE with ticket #80
+  (SPEC-502 persistence / SPEC-205 registry); §4.4 diagnosis ×3 answers
+  501 in the unbound test composition (presence is the freeze
+  obligation);
 - §4.2 sessions ×8, §4.3 runs ×2 and §4.6 artifacts ×3 are wired;
 - §4.5 observation ×8 (SPEC-305 logical endpoints, verbatim);
+- the #80 additive §4.7/§4.8 rows (solution reveal + TSDuck call records);
 - plus the #24 skeleton canary ``GET /api/v1/version`` — the only route
   outside the §4 inventory, grandfathered by the app-factory ticket.
 
@@ -74,6 +76,12 @@ FROZEN_ROUTE_TABLE: tuple[tuple[str, str], ...] = (
     # §4.7 Scenario
     ("GET", "/scenarios"),
     ("GET", "/scenarios/{id}"),
+    # §4.7 Scenario — the ticket #80 additive solution-reveal gate
+    # (SPEC-500 §4.7 approved amendment; 裁定 F)
+    ("GET", "/scenarios/{id}/solution"),
+    # §4.8 TSDuck call records — the ticket #80 additive read face
+    # (SPEC-500 §4.8 approved amendment; SPEC-308 §7 nine fields)
+    ("GET", "/sessions/{id}/tsduck/calls"),
 )
 
 #: The #24 skeleton canary — the only route outside the §4 inventory.

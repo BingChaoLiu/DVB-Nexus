@@ -1,12 +1,26 @@
 """Production SPEC-500 port backends — the composition-root adapters
-(ticket #53, 裁定 1d: rest_stack 生产化).
+(ticket #53, 裁定 1d: rest_stack 生产化; ticket #80: the scenario-session
+branch + the TSDuck call-records face).
 
-These classes are the REAL bindings of the three M3-wired ports
+These classes are the REAL bindings of the M3-wired ports
 (sessions/runs/artifacts) over the #41/#43/#42 backends. They used to live
 in the test-only ``tests/integration/api/rest_stack.py``; ticket #53 moves
-them into the production composition root so both the production factory
+them into the production composition module so both the production factory
 (:func:`bootstrap.app.build_production_app`) and the test stack compose the
 identical code — the "测试组合根 → 生产组合根" value.
+
+Ticket #80 adds:
+
+- the ``SimulationSessionsBackend.create`` scenario branch: a
+  ``CreateSessionRequest.scenario_id`` resolves through the
+  :class:`~bootstrap.scenarios.ScenarioRegistry` and rides the #45 loader
+  full semantics (``open_scenario_session`` — 加载即建 session, 版本/内容
+  哈希钉扎, the VALIDATING double gate); the reconstructed spec lands in
+  ``session_specs`` so the runs seam accepts scenario sessions, and the
+  session-creation hook (observation plane) fires as on the plain path;
+- ``TSDuckCallsBackend`` — the SPEC-500 §4.8 read face over the call
+  store, with the ``GET .../diagnoses`` existence semantics (no stored
+  rows AND an empty journal → 404 unknown session).
 
 Domain error translation lives here too (composition-root concern): the
 simulation/adapters exception families map onto the application categories
@@ -18,7 +32,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import uuid
-from typing import Any, Callable
+from typing import Any, Callable, Optional, Sequence
 
 from adapters.storage.artifact_store import ArtifactStore
 from adapters.storage.artifact_errors import (
@@ -26,7 +40,12 @@ from adapters.storage.artifact_errors import (
     ArtifactNotFoundError,
 )
 from adapters.storage.errors import StorageUnavailableError
+from adapters.storage.journal import SqliteEventJournal
 from adapters.storage.repositories import SqliteArtifactRepository
+from adapters.storage.tsduck_calls import (
+    TSDuckCallRecord as StoredTSDuckCallRecord,
+    SqliteTSDuckCallStore,
+)
 from simulation.clock import SimulationClockConfig
 from simulation.errors import (
     InvalidLifecycleTransitionError,
@@ -41,6 +60,8 @@ from simulation.runtime import (
     SessionView,
     ValidationReport,
 )
+from simulation.scenario.loader import open_scenario_session
+from simulation.scenario.schema import ScenarioSchemaInvalidError
 from simulation.state import TopologyGraph
 from simulation.ts_runtime import (
     StoreArtifactSink,
@@ -59,18 +80,23 @@ from api.dto.runs import (
     RunStatusDTO,
     RunSubmitRequest,
 )
+from api.dto.scenarios import ScenarioSummaryDTO
 from api.dto.sessions import (
     CreateSessionRequest,
     SessionValidationDTO,
     SessionViewDTO,
     SnapshotDTO,
 )
+from api.dto.tsduck_calls import TSDuckCallDTO, tsduck_call_dto
 from application.errors import (
     ConflictError,
     NotFoundError,
     SemanticValidationError,
     ServiceUnavailableError,
 )
+
+
+from bootstrap.scenarios import translate_scenario_error
 
 
 # --- error translation (composition-root concern) -------------------------------
@@ -95,10 +121,21 @@ def _translate_simulation_error(exc: Exception) -> Exception:
         )
     if isinstance(exc, SimulationValidationError):
         report = exc.report
-        violations = [
-            {"code": v.code, "path": v.path, "message": v.message}
-            for v in getattr(report, "violations", ())
-        ]
+        violations = []
+        for v in getattr(report, "violations", ()):
+            if isinstance(v, str):
+                # The scenario VALIDATING gate (ticket #45) reports plain
+                # path-addressed strings —
+                # "SIM_SCENARIO_FAULT_PLAN_INVALID: fault_plan[0].…: …".
+                # The leading token is the registry code; the full string
+                # stays the message so the path-addressed detail survives.
+                violations.append(
+                    {"code": v.split(":", 1)[0], "path": "", "message": v}
+                )
+            else:
+                violations.append(
+                    {"code": v.code, "path": v.path, "message": v.message}
+                )
         return SemanticValidationError(
             "SIM_VALIDATION_FAILED", str(exc), details={"violations": violations}
         )
@@ -177,7 +214,16 @@ def _snapshot_to_dto(snapshot: SimulationSnapshot) -> SnapshotDTO:
 
 
 class SimulationSessionsBackend:
-    """``SessionsPort`` over the #41 ``SimulationRuntime``."""
+    """``SessionsPort`` over the #41 ``SimulationRuntime``.
+
+    The ``scenario_id`` consumption branch (ticket #80 scope item 2): when
+    the request names a scenario, the document governs — the #45 loader
+    opens the session from the scenario's own initial_topology / seed /
+    clock / deterministic flag (加载即建, SPEC-205 §5; the request's
+    topology/seed/clock fields are permissive-ignored, orchestrator
+    OQ-6 — the DTO docstring + the #67 downstream contract document this
+    loudly). Everything else rides the plain path byte-identically.
+    """
 
     def __init__(
         self,
@@ -185,13 +231,17 @@ class SimulationSessionsBackend:
         topology_provider: Callable[[str, int], TopologyGraph],
         session_specs: dict[str, SimulationSessionSpec],
         on_session_created: Callable[[str], None] | None = None,
+        scenario_registry: Any = None,
     ) -> None:
         self._runtime = runtime
         self._topology_provider = topology_provider
         self._session_specs = session_specs
         self._on_session_created = on_session_created
+        self._scenario_registry = scenario_registry
 
     async def create(self, request: CreateSessionRequest) -> SessionViewDTO:
+        if request.scenario_id is not None and self._scenario_registry is not None:
+            return await self._create_scenario_session(request)
         clock = SimulationClockConfig(
             mode=request.clock_config.mode,
             start_time_ns=request.clock_config.start_time_ns,
@@ -227,6 +277,50 @@ class SimulationSessionsBackend:
             raise _translate_simulation_error(exc) from exc
         if self._on_session_created is not None:
             self._on_session_created(spec.session_id)
+        return _view_to_dto(view)
+
+    async def _create_scenario_session(
+        self, request: CreateSessionRequest
+    ) -> SessionViewDTO:
+        """The #45 loader full semantics over a registry document.
+
+        open_scenario_session: parse (registry documents re-parse from
+        their normalized raw mapping — valid by construction) → new
+        session (CREATED, fresh uuid4) → VALIDATING (the #41 topology
+        gate + the scenario fault-plan gate) → READY/FAILED. The
+        reconstructed spec lands in ``session_specs`` (equal-valued, not
+        loader-internal identity — ``prepare`` reads fields) so the runs
+        seam accepts scenario sessions, and the creation hook attaches
+        the observation plane exactly as on the plain path.
+        """
+        document = self._scenario_registry.require(request.scenario_id)
+        try:
+            binding = await open_scenario_session(self._runtime, document.raw)
+        except Exception as exc:
+            translated = translate_scenario_error(exc)
+            if translated is not None:
+                raise translated from exc
+            raise _translate_simulation_error(exc) from exc
+        spec = SimulationSessionSpec(
+            session_id=binding.session_id,
+            topology=binding.document.topology,
+            seed=binding.document.seed,
+            deterministic=binding.document.deterministic,
+            clock_config=binding.document.clock_config,
+        )
+        self._session_specs[spec.session_id] = spec
+        if self._on_session_created is not None:
+            self._on_session_created(spec.session_id)
+        view = SessionView(
+            session_id=binding.snapshot.session_id,
+            revision=binding.snapshot.revision,
+            lifecycle=binding.snapshot.lifecycle,
+            virtual_time_ns=binding.snapshot.virtual_time_ns,
+            topology_revision=binding.snapshot.topology_revision,
+            node_states=binding.snapshot.node_states,
+            active_faults=binding.snapshot.active_faults,
+            latest_artifact_refs=binding.snapshot.latest_artifact_refs,
+        )
         return _view_to_dto(view)
 
     async def validate_session(self, session_id: str) -> SessionValidationDTO:
@@ -622,3 +716,39 @@ def default_topology_provider(topology_id: str, revision: int) -> TopologyGraph:
     )
 
 
+
+
+# --- TSDuck call records (SPEC-500 §4.8, ticket #80) -------------------------------
+
+
+class TSDuckCallsBackend:
+    """The §4.8 read face over the SPEC-308 §7 call-record store.
+
+    Existence semantics mirror ``DiagnosisService.list_diagnoses``: no
+    stored rows AND an empty journal for the session → 404 unknown
+    session; otherwise the (possibly empty) ``started_at_utc_ms``-ASC
+    list. The production stack makes no real TSDuck calls (MVP, 裁定 E) —
+    rows arrive through the store's write face (fixture seeding today,
+    future emission wiring)."""
+
+    def __init__(
+        self,
+        store: SqliteTSDuckCallStore,
+        journal: SqliteEventJournal,
+    ) -> None:
+        self._store = store
+        self._journal = journal
+
+    def list_calls(
+        self, session_id: str, *, run_id: Optional[str] = None
+    ) -> list[TSDuckCallDTO]:
+        rows: list[StoredTSDuckCallRecord] = self._store.query(
+            session_id, run_id=run_id
+        )
+        if not rows and self._journal.max_seq(session_id) == 0:
+            raise NotFoundError(
+                "SIM_SESSION_NOT_FOUND",
+                f"unknown session {session_id!r}: no stored call records"
+                " and no journal events (SPEC-500 §6 row 404)",
+            )
+        return [tsduck_call_dto(row) for row in rows]
