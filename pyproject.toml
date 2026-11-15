@@ -6,8 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "dvb-nexus"
 version = "0.1.0"
 description = "DVB-Nexus sandbox backend: MPEG-TS semantic core, simulation runtime, observation and diagnosis pipeline."
-# No readme reference: repo README.md is currently UTF-16-encoded (pre-existing
-# defect, reported to the delegator); setuptools reads it as UTF-8 and fails.
+readme = "README.md"
 requires-python = ">=3.10"
 # Runtime deps per ADR-0003 frozen stack. Pydantic v2 arrives with the
 # SPEC-003 shared domain models (ticket #21): v2 API required
