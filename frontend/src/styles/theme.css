@@ -1,0 +1,121 @@
+/* Minimal design tokens + shell layout (SPEC-400 §8.3 R3: plain CSS custom
+   properties, no CSS-in-JS runtime). CJK-first typography. */
+:root {
+  --dvb-bg: #0f172a;
+  --dvb-surface: #1e293b;
+  --dvb-border: #334155;
+  --dvb-text: #e2e8f0;
+  --dvb-muted: #94a3b8;
+  --dvb-accent: #38bdf8;
+  --dvb-good: #34d399;
+  --dvb-warn: #fbbf24;
+  --dvb-bad: #f87171;
+  --dvb-font: "Segoe UI", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+  --dvb-mono: "Cascadia Mono", Consolas, "Courier New", monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--dvb-bg);
+  color: var(--dvb-text);
+  font-family: var(--dvb-font);
+}
+
+.dvb-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.dvb-shell-header {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--dvb-border);
+  background: var(--dvb-surface);
+}
+
+.dvb-shell-title {
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.dvb-shell-nav {
+  display: flex;
+  gap: 8px;
+}
+
+.dvb-nav-link {
+  padding: 6px 14px;
+  border-radius: 6px;
+  color: var(--dvb-muted);
+  text-decoration: none;
+}
+
+.dvb-nav-link:hover {
+  color: var(--dvb-text);
+  background: rgba(56, 189, 248, 0.12);
+}
+
+.dvb-nav-link-active {
+  color: var(--dvb-accent);
+  background: rgba(56, 189, 248, 0.16);
+}
+
+.dvb-shell-main {
+  flex: 1;
+  padding: 20px;
+}
+
+.dvb-region-loading {
+  color: var(--dvb-muted);
+  padding: 24px;
+}
+
+.dvb-panel {
+  background: var(--dvb-surface);
+  border: 1px solid var(--dvb-border);
+  border-radius: 10px;
+  padding: 16px 20px;
+}
+
+.dvb-panel-title {
+  margin: 0 0 12px;
+  font-size: 16px;
+}
+
+.dvb-empty-state {
+  padding: 24px 12px;
+  text-align: center;
+}
+
+.dvb-empty-title {
+  margin: 0 0 8px;
+  color: var(--dvb-text);
+  font-weight: 600;
+}
+
+.dvb-empty-note {
+  margin: 0;
+  color: var(--dvb-muted);
+  font-size: 13px;
+}
+
+.dvb-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  border: 1px solid var(--dvb-border);
+}
+
+.dvb-badge-neutral { color: var(--dvb-muted); }
+.dvb-badge-good { color: var(--dvb-good); border-color: var(--dvb-good); }
+.dvb-badge-warn { color: var(--dvb-warn); border-color: var(--dvb-warn); }
+.dvb-badge-bad { color: var(--dvb-bad); border-color: var(--dvb-bad); }
+.dvb-badge-info { color: var(--dvb-accent); border-color: var(--dvb-accent); }
