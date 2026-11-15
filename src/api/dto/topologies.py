@@ -77,21 +77,21 @@ class TopologyConnectionDTO(_StrictDTO):
 
 class TopologySpecDTO(_StrictDTO):
     """The SPEC-003 §2.1 configuration model (graph content; identity
-    excluded — server-assigned)."""
+    excluded — server-assigned). The named composition view of the
+    request payload."""
 
     nodes: list[TopologyNodeDTO] = Field(default_factory=list)
     connections: list[TopologyConnectionDTO] = Field(default_factory=list)
 
 
-class TopologyCreateRequest(_StrictDTO):
+class TopologyCreateRequest(TopologySpecDTO):
     """``POST /topologies`` / ``PUT /topologies/{id}`` request body.
 
     PUT semantics = a NEW immutable revision row (SPEC-502); the revision
     is never client-chosen (防旧配置覆盖 is the server's composite key).
     """
 
-    nodes: list[TopologyNodeDTO] = Field(default_factory=list)
-    connections: list[TopologyConnectionDTO] = Field(default_factory=list)
+    pass
 
 
 class TopologyDTO(_StrictDTO):
