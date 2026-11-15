@@ -47,6 +47,15 @@ SPEC-200 section 8 codes (ticket #41, appended — SPEC-200 §5/§6/§8):
 - ``SIM_IO_ERROR``                     artifact/storage IO failure.
 - ``SIM_CANCELLED``                    command cancelled/timed out.
 - ``SIM_INTERNAL``                     unclassified internal error.
+
+SPEC-203 section 8 codes (ticket #43, appended — SPEC-203 §8):
+
+- ``SIM_TS_PLAN_INVALID``          fault plan validation failed (prepare).
+- ``SIM_TS_CONFIG_INVALID``        TSGeneratorConfig illegal (prepare).
+- ``SIM_TS_WORKER_UNAVAILABLE``    worker pool exhausted/crashed (retryable).
+- ``SIM_TS_CANCELLED``             run cancelled (partial artifacts returned).
+- ``SIM_TS_GENERATION_FAILED``     TS Core raised (root error code attached).
+- ``SIM_TS_SINK_IO_ERROR``         ArtifactSink write failed (run failed).
 """
 
 from __future__ import annotations
@@ -115,6 +124,27 @@ SIM_CANCELLED = "SIM_CANCELLED"
 
 #: SPEC-200 section 8 — unclassified internal error (no stack leakage).
 SIM_INTERNAL = "SIM_INTERNAL"
+
+# --- SPEC-203 section 8 (ticket #43, appended — SPEC-203 §8) -------------------
+
+#: SPEC-203 section 8 — fault plan validation failed (prepare stage).
+SIM_TS_PLAN_INVALID = "SIM_TS_PLAN_INVALID"
+
+#: SPEC-203 section 8 — TSGeneratorConfig illegal (prepare rejection).
+SIM_TS_CONFIG_INVALID = "SIM_TS_CONFIG_INVALID"
+
+#: SPEC-203 section 8 — worker pool exhausted/crashed (retryable).
+SIM_TS_WORKER_UNAVAILABLE = "SIM_TS_WORKER_UNAVAILABLE"
+
+#: SPEC-203 section 8 — run cancelled (returns partial artifacts).
+SIM_TS_CANCELLED = "SIM_TS_CANCELLED"
+
+#: SPEC-203 section 8 — TS Core raised during generation (root cause
+#: error code attached as ``root_code``).
+SIM_TS_GENERATION_FAILED = "SIM_TS_GENERATION_FAILED"
+
+#: SPEC-203 section 8 — ArtifactSink write failed (run failed).
+SIM_TS_SINK_IO_ERROR = "SIM_TS_SINK_IO_ERROR"
 
 
 class SimulationError(Exception):
@@ -245,3 +275,48 @@ class SimulationInternalError(SimulationError):
     """``SIM_INTERNAL``: 未分类内部错误（记录诊断，不外泄堆栈细节）."""
 
     code = SIM_INTERNAL
+
+
+# --- SPEC-203 section 8 exceptions (ticket #43, appended) -----------------------
+
+
+class TSPlanInvalidError(SimulationError):
+    """``SIM_TS_PLAN_INVALID``: fault plan 校验失败（prepare 阶段拒绝）.
+
+    Carries ``details`` — the SPEC-204 per-element validation error list
+    (SPEC-203 §8: "拒绝，附 SPEC-204 校验错误明细").
+    """
+
+    code = SIM_TS_PLAN_INVALID
+
+    def __init__(self, message: str, details: tuple[str, ...] = ()) -> None:
+        super().__init__(message)
+        self.details = details
+
+
+class TSConfigInvalidError(SimulationError):
+    """``SIM_TS_CONFIG_INVALID``: TSGeneratorConfig 非法（prepare 拒绝）."""
+
+    code = SIM_TS_CONFIG_INVALID
+
+
+class TSWorkerUnavailableError(SimulationError):
+    """``SIM_TS_WORKER_UNAVAILABLE``: worker 池耗尽/崩溃（retryable 语义）."""
+
+    code = SIM_TS_WORKER_UNAVAILABLE
+
+
+class TSGenerationFailedError(SimulationError):
+    """``SIM_TS_GENERATION_FAILED``: TS Core 抛错（透传根因错误码）."""
+
+    code = SIM_TS_GENERATION_FAILED
+
+    def __init__(self, message: str, root_code: str | None = None) -> None:
+        super().__init__(message)
+        self.root_code = root_code
+
+
+class TSSinkIOError(SimulationError):
+    """``SIM_TS_SINK_IO_ERROR``: ArtifactSink 写失败（Run failed）."""
+
+    code = SIM_TS_SINK_IO_ERROR

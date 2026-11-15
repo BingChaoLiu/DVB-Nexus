@@ -72,6 +72,27 @@ SPEC-200 (ticket #41) contributes the Runtime lifecycle surface:
   pull view with the ``journal_seq`` cursor echo (SPEC-200 section 4;
   documented in :mod:`simulation.snapshot`).
 - :mod:`simulation.errors` — the SPEC-200 section 8 codes (appended).
+
+SPEC-203 (ticket #43) contributes the L1 TS Runtime orchestration:
+
+- :class:`simulation.ts_runtime.TSRuntime` — the SPEC-203 section 4
+  adapter face (``prepare`` / ``run`` / ``cancel``): the fault plan binds
+  at prepare and is validated there (AC-204-01 alignment, ADR-0007 item
+  2), runs execute on a bounded worker pool (event-loop isolation) with
+  bounded-batch cancellation, and the tee double-write lands through the
+  structural :class:`simulation.ts_runtime.ArtifactSink` port
+  (:class:`simulation.ts_runtime.StoreArtifactSink` adapts the #42 store,
+  consume-only). Runs close through the #41 run face above, so the
+  lifecycle state machine gates runs and the ``run_*`` events emit.
+- :class:`simulation.ts_runtime.PreparedTSRun` / ``TSRunResult`` /
+  ``ArtifactRef`` — the §5 data model: deterministic fingerprint over
+  generator version + config + SPEC-201 clock + canonical fault plan;
+  list-form artifacts with the three tee kinds; 188-byte invariant.
+- :mod:`simulation.fault_plan` — the SPEC-204 §3 ``FaultDefinition`` /
+  ``FaultActivation`` seam shapes plus the MVP v1 prepare-stage plan
+  validation (the fault *transformation* itself is #44's filter, never
+  this module).
+- :mod:`simulation.errors` — the SPEC-203 section 8 codes (appended).
 """
 
 from simulation.clock import SimulationClock, SimulationClockConfig
