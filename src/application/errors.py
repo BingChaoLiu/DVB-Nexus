@@ -88,3 +88,44 @@ class SemanticValidationError(ApplicationError):
 
 class ServiceUnavailableError(ApplicationError):
     """SPEC-500 §6 row 503: 存储不可用、Artifact Storage 不可用、TSDuck 不可用."""
+
+
+class UnauthorizedError(ApplicationError):
+    """SPEC-305 §7 row 401: 未认证.
+
+    MVP has NO authentication (SPEC-500 §3, ticket #13 Q4: 无认证) — no
+    production code path raises this today. The category exists so the
+    frozen SPEC-305 §7 HTTP inventory is declaratively complete (the row
+    is exercised by the contract-test probe; a future auth layer raises it
+    instead of inventing a parallel category).
+    """
+
+
+class ForbiddenError(ApplicationError):
+    """SPEC-305 §7 row 403: scope 禁止.
+
+    Raised by the query plane when a request addresses records outside the
+    caller's tenant/session scope (e.g. another session's export task —
+    code ``OBS_SCOPE_FORBIDDEN``, SPEC-300 §13).
+    """
+
+
+class RateLimitedError(ApplicationError):
+    """SPEC-305 §7 row 429: 限流.
+
+    Retryable by construction (throttling is the one transient, client-side
+    fixable condition — hence the default). The MVP raiser is the SPEC-305
+    §9 export-task throttle; the code rides the registered
+    ``HTTP_<status>`` fallback convention (``HTTP_429``) because SPEC-300
+    §13 defines no dedicated rate-limit code.
+    """
+
+    def __init__(
+        self,
+        error_code: str,
+        message: str,
+        *,
+        retryable: bool = True,
+        details: Mapping[str, Any] | None = None,
+    ) -> None:
+        super().__init__(error_code, message, retryable=retryable, details=details)
