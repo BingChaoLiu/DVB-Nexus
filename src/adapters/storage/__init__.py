@@ -18,6 +18,7 @@ Public surface:
 - error types in :mod:`adapters.storage.errors` (SPEC-502 §7 semantics)
 """
 
+from adapters.storage.checkpoints import CheckpointStore, SqliteCheckpointStore
 from adapters.storage.db import BUSY_TIMEOUT_MS, connect, migrate
 from adapters.storage.errors import (
     InvalidEnvelopeError,
@@ -50,12 +51,14 @@ __all__ = [
     "ArtifactMeta",
     "ArtifactRepository",
     "ArtifactRow",
+    "CheckpointStore",
     "EventJournal",
     "EventRow",
     "InvalidEnvelopeError",
     "MigrationError",
     "RunRepository",
     "SqliteArtifactRepository",
+    "SqliteCheckpointStore",
     "SqliteEventJournal",
     "SqliteRunRepository",
     "StorageConflictError",
