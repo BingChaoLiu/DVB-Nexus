@@ -1,0 +1,53 @@
+"""Route assembly for the SPEC-500 §4 inventory (ticket #48).
+
+The composition-root helper: builds the full frozen-table router set from
+the three M3-wired ports (sessions / runs / artifacts) plus the 501
+mount-point routers (observation §4.5, topology §4.1, diagnosis §4.4,
+scenario §4.7). Routers carry no prefix themselves — ``api.app.create_app``
+mounts everything under the frozen ``/api/v1`` prefix (single mount point,
+additive-only policy, SPEC-500 §3).
+
+The port interfaces are structural Protocols owned by the route modules;
+the api layer never imports ``simulation`` / ``ts`` / ``adapters``
+(import-linter C6) — the composition root binds the real #41/#43/#42
+backends. See ``src/api/README.md`` for the layer posture.
+"""
+
+from __future__ import annotations
+
+from fastapi import APIRouter
+
+from api.routes.artifacts import ArtifactsPort, build_artifacts_router
+from api.routes.observation import build_observation_router
+from api.routes.pending import build_pending_router
+from api.routes.runs import RunsPort, build_runs_router
+from api.routes.sessions import SessionsPort, build_sessions_router
+
+__all__ = [
+    "ArtifactsPort",
+    "RunsPort",
+    "SessionsPort",
+    "build_spec500_routers",
+]
+
+
+def build_spec500_routers(
+    *,
+    sessions_port: SessionsPort,
+    runs_port: RunsPort,
+    artifacts_port: ArtifactsPort,
+) -> list[APIRouter]:
+    """Assemble the complete SPEC-500 §4 router set.
+
+    Args:
+        sessions_port: the SPEC-200 lifecycle backend (§4.2, wired).
+        runs_port: the run async-job backend (§4.3, wired).
+        artifacts_port: the #42 artifact read boundary (§4.6, wired).
+    """
+    return [
+        build_sessions_router(sessions_port),
+        build_runs_router(runs_port),
+        build_artifacts_router(artifacts_port),
+        build_observation_router(),
+        build_pending_router(),
+    ]

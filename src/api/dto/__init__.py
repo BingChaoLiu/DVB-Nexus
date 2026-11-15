@@ -5,8 +5,62 @@ SPEC-500 §5: "Pydantic DTO 权威定义于本规格实现 (``app/api/dto/``)"; 
 establishes the package and implements the DTOs the skeleton actually
 renders (the unified error envelope); route DTOs arrive with their routes
 in M3/M4 under the same discipline.
+
+Ticket #48 lands the SPEC-500 §4 route DTOs under that discipline: the
+SPEC-108 §4 generator mapping (``api.dto.generator``), the SPEC-204 §3
+fault-plan shapes (``api.dto.faults``), the run async-job surface
+(``api.dto.runs``), the SPEC-200 session views (``api.dto.sessions``) and
+the artifact metadata (``api.dto.artifacts``).
 """
 
+from api.dto.artifacts import ArtifactMetaDTO
 from api.dto.errors import ErrorDetail, ErrorResponse
+from api.dto.faults import FaultActivationDTO, FaultDefinitionDTO
+from api.dto.generator import ElementaryStreamDTO, GeneratorConfigDTO, ProgramDTO
+from api.dto.runs import (
+    RunAcceptedDTO,
+    RunArtifactDTO,
+    RunStatusDTO,
+    RunSubmitRequest,
+)
+from api.dto.sessions import (
+    ArtifactRefDTO,
+    ClockConfigDTO,
+    ConnectionDTO,
+    CreateSessionRequest,
+    FaultRefDTO,
+    NodeStateDTO,
+    PortStateDTO,
+    ResourceLimitsDTO,
+    SessionValidationDTO,
+    SessionViewDTO,
+    SnapshotDTO,
+    TopologyViolationDTO,
+)
 
-__all__ = ["ErrorDetail", "ErrorResponse"]
+__all__ = [
+    "ArtifactMetaDTO",
+    "ArtifactRefDTO",
+    "ClockConfigDTO",
+    "ConnectionDTO",
+    "CreateSessionRequest",
+    "ElementaryStreamDTO",
+    "ErrorDetail",
+    "ErrorResponse",
+    "FaultActivationDTO",
+    "FaultDefinitionDTO",
+    "FaultRefDTO",
+    "GeneratorConfigDTO",
+    "NodeStateDTO",
+    "PortStateDTO",
+    "ProgramDTO",
+    "ResourceLimitsDTO",
+    "RunAcceptedDTO",
+    "RunArtifactDTO",
+    "RunStatusDTO",
+    "RunSubmitRequest",
+    "SessionValidationDTO",
+    "SessionViewDTO",
+    "SnapshotDTO",
+    "TopologyViolationDTO",
+]

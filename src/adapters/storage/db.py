@@ -29,15 +29,23 @@ _MIGRATIONS_SUBDIR = "migrations"
 _SCRIPT_NAME_RE = re.compile(r"^(\d+)_.*\.sql$")
 
 
-def connect(path: Union[str, Path]) -> sqlite3.Connection:
+def connect(path: Union[str, Path], *, check_same_thread: bool = True) -> sqlite3.Connection:
     """Open a SQLite connection in explicit-transaction mode.
 
     ``isolation_level=None`` (autocommit) so every transaction boundary is
     written explicitly (``BEGIN IMMEDIATE`` / ``COMMIT`` / ``ROLLBACK``) —
     the journal stamp transaction of SPEC-502 section 6 depends on that.
+
+    ``check_same_thread=False`` (ticket #47) admits the documented
+    single-writer dispatch posture: the Event Gateway's dispatcher thread —
+    not the thread that opened the connection — performs the journal appends
+    (SPEC-300 §8: producers never block on storage I/O). Callers still own
+    serialization; one writer connection is driven by one dispatcher thread.
     """
     try:
-        conn = sqlite3.connect(str(path), isolation_level=None)
+        conn = sqlite3.connect(
+            str(path), isolation_level=None, check_same_thread=check_same_thread
+        )
         conn.row_factory = sqlite3.Row
         # SPEC-502 section 3: WAL mode on; foreign_keys on. WAL persists in the
         # database file and is verified working on Windows paths by

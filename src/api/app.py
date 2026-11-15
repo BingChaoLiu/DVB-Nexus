@@ -32,6 +32,8 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from api.errors import register_error_handlers
 from api.versioning import API_V1_PREFIX, API_VERSION_TOKEN, VERSION_POLICY
+from api.ws.hub import SessionHub
+from api.ws.router import build_ws_router
 from application.context import LOCAL_TENANT_ID
 
 
@@ -92,4 +94,25 @@ def create_app(*routers: APIRouter) -> FastAPI:
     for router in routers:
         app.include_router(router, prefix=API_V1_PREFIX)
     app.include_router(_version_canary_router())
+    return app
+
+
+def create_ws_app(*, hub: SessionHub) -> FastAPI:
+    """Build the app that additionally serves the SPEC-501 WebSocket route.
+
+    Continues the #24 factory seam: the HTTP side (frozen ``/api/v1``
+    prefix, error contract, canary) is exactly :func:`create_app`'s; the
+    WebSocket transport adds the §3 route ``/ws/v1/sessions/{session_id}``
+    via :func:`api.ws.router.build_ws_router`. The ``/ws/v1`` namespace is
+    deliberately outside ``/api/v1`` — SPEC-501 §3 names the route verbatim,
+    and the additive-only policy governs the REST prefix (SPEC-500 §3);
+    the transport layer ships no business HTTP routes.
+
+    Args:
+        hub: the :class:`api.ws.hub.SessionHub` bound to this app's
+            connections (journal + optional session directory are wired by
+            the composition root, per the hub's own contract).
+    """
+    app = create_app()
+    app.include_router(build_ws_router(hub))
     return app

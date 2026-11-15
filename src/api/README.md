@@ -15,8 +15,24 @@ SPEC-500 未在本文件之外指定版本策略/错误契约的文档位置,故
 | `api.versioning` | 冻结前缀 `API_V1_PREFIX="/api/v1"` 与 additive-only 策略常量 |
 | `api.errors` | SPEC-500 §6 声明式异常→HTTP 映射表 `ERROR_HTTP_MAPPING` + 信封渲染 handlers |
 | `api.dto` | Pydantic DTO 装配位(SPEC-500 §5):统一错误信封 `ErrorDetail` / `ErrorResponse` |
+| `api.dto.generator` | SPEC-108 §4 JSON↔DTO 映射权威(GeneratorConfig/Program/ES,bytes→hex) |
+| `api.dto.faults` | SPEC-204 §3 FaultDefinition/Activation 请求 DTO(fault_plan 入 run 请求体,ADR-0007) |
+| `api.dto.runs` | runs 异步作业面:202 RunAccepted / RunStatus(TSRunResult 形) |
+| `api.dto.sessions` | SPEC-200 §4 视图映射:创建请求 / SessionView / Snapshot(cursor 仅回显) / Validation |
+| `api.dto.artifacts` | ArtifactMetaDTO(SPEC-502 §5 行,relative_path 不出绝对路径) |
+| `api.routes` | SPEC-500 §4 路由面装配 `build_spec500_routers`(ticket #48) |
+| `api.routes.sessions` | §4.2 八端点(接 SessionsPort → #41 SimulationRuntime) |
+| `api.routes.runs` | §4.3 异步作业 202 + fault_plan prepare 绑定(接 RunsPort → #43 TSRuntime) |
+| `api.routes.artifacts` | §4.6 元数据/下载(Range/206/416;接 ArtifactsPort → #42 read_by_artifact) |
+| `api.routes.observation` | §4.5 SPEC-305 八端点原样落路由(501 待 M4 接线) |
+| `api.routes.pending` | §4.1/§4.4/§4.7 冻结表 501 挂载点(topology/diagnosis/scenarios) |
 | `application.errors` | 行别异常分类(表 key);api → application 是唯一层内依赖(ADR-0005 D4,import-linter C6) |
 | `application.context` | `LOCAL_TENANT_ID="local"`(SPEC-500 §3 Q4 姿态) |
+
+> 路由层纪律(ticket #48):`api.routes` 只含 Pydantic DTO + 结构化 Port
+> (Protocol)+ application 错误类别;`simulation`/`ts`/`adapters` 真实后端由
+> 组合根注入(import-linter C6 禁 api 直依赖),测试组合根见
+> `tests/integration/api/rest_stack.py`(#49 ws_stack.py 同款姿态)。
 
 ## 版本策略(additive-only,SPEC-500 §3 逐字)
 
