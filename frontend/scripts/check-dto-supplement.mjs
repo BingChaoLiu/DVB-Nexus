@@ -31,8 +31,10 @@ const supplementSource = readFileSync(
 );
 const exported = [...supplementSource.matchAll(/^export type (\w+)/gm)].map((m) => m[1]);
 if (exported.length === 0) {
-  console.error("check-dto-supplement: no `export type` declarations found — parse drift?");
-  process.exit(2);
+  // The standing goal is a ZERO-entry supplement (waiver-face zero): every
+  // wire model reachable from OpenAPI, nothing hand-written.
+  console.log("dto-supplement OK: supplement is empty — fully converged to generated types.");
+  process.exit(0);
 }
 
 const nowReachable = exported.filter((name) => schemaNames.has(name));

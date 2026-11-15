@@ -1,28 +1,21 @@
-// Observation face (SPEC-305 §4/§5/§6). The eight routes' response models are
-// NOT in OpenAPI yet (companion ticket wires response_model); bodies are cast
-// to the dto-supplement types here — the `as` narrowing is the ONLY cast site
-// and shrinks to zero when the generated types cover these routes
-// (SPEC-400 §7.1 convergence; scripts/check-dto-supplement.mjs enforces it).
+// Observation face (SPEC-305 §4/§5/§6). Since the M5 companion ticket wired
+// response_model onto the eight routes, every response envelope is generated
+// (`*ResponseDTO` in schema.gen.ts) — the supplement-era casts are gone.
 import { client, unwrap } from "../client";
-import type {
-  AlertsDataDTO,
-  EventsDataDTO,
-  ExportDataDTO,
-  HealthDataDTO,
-  MetricsDataDTO,
-  ObservationResponseDTO,
-  SummaryDataDTO,
-  TimelineDataDTO,
-} from "../dto-supplement";
 import type { components } from "../schema.gen";
 
 export type MetricsQueryBody = components["schemas"]["MetricsQueryBody"];
 export type ExportCreateBody = components["schemas"]["ExportCreateBody"];
-
-type PathParams = { session_id: string };
+export type SummaryResponseDTO = components["schemas"]["SummaryResponseDTO"];
+export type EventsResponseDTO = components["schemas"]["EventsResponseDTO"];
+export type TimelineResponseDTO = components["schemas"]["TimelineResponseDTO"];
+export type MetricsResponseDTO = components["schemas"]["MetricsResponseDTO"];
+export type AlertsResponseDTO = components["schemas"]["AlertsResponseDTO"];
+export type HealthResponseDTO = components["schemas"]["HealthResponseDTO"];
+export type ExportResponseDTO = components["schemas"]["ExportResponseDTO"];
 
 export function querySummary(sessionId: string) {
-  return unwrap<ObservationResponseDTO<SummaryDataDTO>>(
+  return unwrap(
     client.GET("/api/v1/sessions/{session_id}/observation/summary", {
       params: { path: { session_id: sessionId } },
     }),
@@ -45,7 +38,7 @@ export function queryEvents(
     end_ns?: string | null;
   } = {},
 ) {
-  return unwrap<ObservationResponseDTO<EventsDataDTO>>(
+  return unwrap(
     client.GET("/api/v1/sessions/{session_id}/events", {
       params: { path: { session_id: sessionId }, query },
     }),
@@ -73,7 +66,7 @@ export function queryTimeline(
     end_ns?: string | null;
   } = {},
 ) {
-  return unwrap<ObservationResponseDTO<TimelineDataDTO>>(
+  return unwrap(
     client.GET("/api/v1/sessions/{session_id}/timeline", {
       params: { path: { session_id: sessionId }, query },
     }),
@@ -81,7 +74,7 @@ export function queryTimeline(
 }
 
 export function queryMetrics(sessionId: string, body: MetricsQueryBody) {
-  return unwrap<ObservationResponseDTO<MetricsDataDTO>>(
+  return unwrap(
     client.POST("/api/v1/sessions/{session_id}/metrics/query", {
       params: { path: { session_id: sessionId } },
       body,
@@ -100,7 +93,7 @@ export function queryAlerts(
     suppressed?: boolean;
   } = {},
 ) {
-  return unwrap<ObservationResponseDTO<AlertsDataDTO>>(
+  return unwrap(
     client.GET("/api/v1/sessions/{session_id}/alerts", {
       params: { path: { session_id: sessionId }, query },
     }),
@@ -114,7 +107,7 @@ export function queryHealth(
   sessionId: string,
   query: { clock_domain: string; now_ns: number; clock_epoch?: number },
 ) {
-  return unwrap<ObservationResponseDTO<HealthDataDTO>>(
+  return unwrap(
     client.GET("/api/v1/sessions/{session_id}/health", {
       params: { path: { session_id: sessionId }, query },
     }),
@@ -122,9 +115,9 @@ export function queryHealth(
 }
 
 export function queryExport(sessionId: string, exportId: string) {
-  return unwrap<ObservationResponseDTO<ExportDataDTO>>(
+  return unwrap(
     client.GET("/api/v1/sessions/{session_id}/exports/{export_id}", {
-      params: { path: { session_id: sessionId, export_id: exportId } satisfies PathParams & { export_id: string } },
+      params: { path: { session_id: sessionId, export_id: exportId } },
     }),
   );
 }
@@ -133,7 +126,7 @@ export function createExport(
   sessionId: string,
   body: ExportCreateBody = { formats: ["jsonl"], redaction_policy: "none", record_kinds: [] },
 ) {
-  return unwrap<ObservationResponseDTO<ExportDataDTO>>(
+  return unwrap(
     client.POST("/api/v1/sessions/{session_id}/exports", {
       params: { path: { session_id: sessionId } },
       body,
