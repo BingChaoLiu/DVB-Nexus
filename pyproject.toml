@@ -56,8 +56,13 @@ minversion = "8.0"
 testpaths = ["tests"]
 # tests/_support is imported as a package (`tests._support.*`); rootdir on
 # sys.path keeps imports working without cwd assumptions (Windows-first,
-# ADR-0004).
-pythonpath = ["."]
+# ADR-0004). "src" makes pytest self-correct in secondary checkouts: a
+# shared .venv's editable install points at the main repo's src, and
+# without this entry a bare worktree pytest silently verifies the main
+# tree while reporting green (M3 retro; guard test
+# tests/integration/test_env_under_test_is_this_tree.py pins the
+# invariant). insert(0) semantics put this ahead of the stale .pth entry.
+pythonpath = [".", "src"]
 # --strict-markers: an unregistered marker is a hard collection failure
 # (SPEC-505 §8 "markers 声明完备性检查"). -ra: skip reasons always surface
 # in the summary (SPEC-505 §5 禁静默跳过).

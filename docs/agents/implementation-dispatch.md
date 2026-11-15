@@ -32,3 +32,14 @@ CI 首跑红一轮）。
 实机 / CI 真环境测试断言**形状**，禁钉环境字面值（版本号、盘符、绝对
 路径、盘上 casing）；字面钉扎只属于合成 fixture（锁定基线）。细则见
 `tests/README.md` §6。
+
+## 实现票收尾纪律
+
+- IMPLEMENTATION_REPORT 必须**同时以 comment 贴到票上**：报告只活在
+  派发会话上下文时，fresh reviewer / orchestrator 不可达，已申报偏差
+  会被当新发现重审（M3 retro：spec 轴四处检索找不到任何 REPORT）。
+  分支 commit 与报告内容一致；orchestrator 的汇总留档归 tracking
+  issue。
+- worktree 内跑检查：pytest 经 pyproject `pythonpath` 自愈；
+  `lint-imports` 必须 `PYTHONPATH=$PWD/src`（见
+  `docs/agents/windows-shell.md`「Worktree 内跑检查」）。
