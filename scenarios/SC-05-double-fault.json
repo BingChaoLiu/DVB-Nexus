@@ -1,0 +1,139 @@
+{
+  "schema_version": 1,
+  "scenario_id": "5c050000-0000-4000-8000-000000000005",
+  "version": "1.0.0",
+  "title": "双故障靶场：组合症状",
+  "difficulty": "advanced",
+  "required_engine_versions": {},
+  "initial_topology": {
+    "topology_id": "topo-sc-05",
+    "revision": 1,
+    "nodes": [
+      {
+        "nodeId": "gen-0",
+        "nodeType": "ts_generator",
+        "config": {},
+        "ports": [
+          {"portId": "ts_out", "direction": "output", "plane": "MPEG_TS", "maxConnections": 1}
+        ]
+      },
+      {
+        "nodeId": "mux-0",
+        "nodeType": "ts_mux",
+        "config": {},
+        "ports": [
+          {"portId": "ts_in_1", "direction": "input", "plane": "MPEG_TS", "maxConnections": 1},
+          {"portId": "ts_in_2", "direction": "input", "plane": "MPEG_TS", "maxConnections": 1},
+          {"portId": "ts_out", "direction": "output", "plane": "MPEG_TS", "maxConnections": 1}
+        ]
+      },
+      {
+        "nodeId": "mon-0",
+        "nodeType": "ts_monitor",
+        "config": {},
+        "ports": [
+          {"portId": "ts_in", "direction": "input", "plane": "MPEG_TS", "maxConnections": 1}
+        ]
+      }
+    ],
+    "connections": [
+      {
+        "connectionId": "conn-1",
+        "plane": "MPEG_TS",
+        "from": {"nodeId": "gen-0", "portId": "ts_out"},
+        "to": {"nodeId": "mux-0", "portId": "ts_in_1"}
+      },
+      {
+        "connectionId": "conn-2",
+        "plane": "MPEG_TS",
+        "from": {"nodeId": "mux-0", "portId": "ts_out"},
+        "to": {"nodeId": "mon-0", "portId": "ts_in"}
+      }
+    ]
+  },
+  "simulation_config": {
+    "seed": 1234567,
+    "mode": "deterministic",
+    "clock": {
+      "mode": "deterministic",
+      "start_time_ns": 0,
+      "speed_num": 1,
+      "speed_den": 1,
+      "tick_quantum_ns": 1000000
+    }
+  },
+  "fault_plan": [
+    {
+      "fault_id": "fd000000-0000-4000-8000-00000000f1b1",
+      "fault_type": "CC_DISCONTINUITY",
+      "target_id": "mux-0:pid:0x0100",
+      "parameters": {"delta": 2},
+      "activation": {"kind": "packet_index", "packet_index": 30},
+      "expected_observations": ["ts.continuity_error"]
+    },
+    {
+      "fault_id": "fd000000-0000-4000-8000-00000000f1b2",
+      "fault_type": "PAT_MISSING",
+      "target_id": "mux-0:pid:0x0000",
+      "parameters": {},
+      "activation": {"kind": "packet_index", "packet_index": 202},
+      "expected_observations": ["ts.psi_section_observed"]
+    }
+  ],
+  "objectives": [
+    "观察基线流的双锚点事实（PID 256 的 CC 节奏 + PID 0 的 PSI 节奏）",
+    "双故障注入并把两条症状各自归因到对应 fault_id",
+    "恢复并提交判定：每个被植入故障各建一条 fault_inactive 判据实例"
+  ],
+  "hints": [
+    {
+      "hint_id": "sc05-hint-1",
+      "trigger": "experiment opened",
+      "level": "nudge",
+      "content": "两个故障在不同 PID、不同槽位：CC 偏移在 256（packet 30 起），PAT 停发在 0（packet 202 起）。先分别确认基线节奏。",
+      "requirement_ids": ["REQ-SIM-204-003", "REQ-SIM-204-001"],
+      "standard_ref": null
+    },
+    {
+      "hint_id": "sc05-hint-2",
+      "trigger": "after Inject",
+      "level": "direction",
+      "content": "组合症状的归因锚 = fault_id：每个 fault 的生命周期事件（injected/activated/cleared）按 id 可区分，journal 时间线按槽位对齐两条症状。",
+      "requirement_ids": ["REQ-SIM-204-003"],
+      "standard_ref": null
+    },
+    {
+      "hint_id": "sc05-hint-3",
+      "trigger": "before Verify",
+      "level": "walkthrough",
+      "content": "恢复 Run 重跑空 plan。判据为每个 fault_id 各一条 fault_inactive 实例（双故障各自核销）+ 观测类症状判据。分析面不可用时观测类诚实 NOT_EVALUATED、总体 INCONCLUSIVE。",
+      "requirement_ids": ["REQ-SIM-204-003"],
+      "standard_ref": null
+    }
+  ],
+  "pass_criteria": [
+    {
+      "criterion_id": "cc-fault-cleared",
+      "kind": "fault_inactive",
+      "mandatory": true,
+      "fault_id": "fd000000-0000-4000-8000-00000000f1b1"
+    },
+    {
+      "criterion_id": "pat-fault-cleared",
+      "kind": "fault_inactive",
+      "mandatory": true,
+      "fault_id": "fd000000-0000-4000-8000-00000000f1b2"
+    },
+    {
+      "criterion_id": "cc-continuous",
+      "kind": "cc_continuous",
+      "mandatory": true
+    },
+    {
+      "criterion_id": "pat-valid",
+      "kind": "psi_pat_valid",
+      "mandatory": true
+    }
+  ],
+  "hidden_reference_solution": "恢复路径：以空 fault_plan 重跑一个新 Run（同几何同 seed）。以 Inject（faulted，双故障）Run 为 baseline_run_id、恢复 Run 为 recovery_run_id 提交 verify。两条 fault_inactive 判据实例各核三段证据链（各 fault_id 的注入生命周期闭合 / 恢复 prepared plan 不含该 id / 无复发）——双故障各自核销。cc_continuous 与 psi_pat_valid 为观测类判据：恢复流 CC 从恢复点重启且 PAT 段恢复周期出现 ⇒ 两判据 PASS、总体 PASS；分析面不可用（M4 裁定 B）时服务端诚实 NOT_EVALUATED、总体 INCONCLUSIVE（SPEC-206 §6）。learner 若只移除其一故障：对应 fault_inactive PASS 而另一条 FAIL（复发或未清除）→ 总体 FAIL——双故障场景各自兜底。"
+}

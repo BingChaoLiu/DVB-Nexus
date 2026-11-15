@@ -4,7 +4,7 @@
 **Status:** APPROVED
 **Normative parent:** DVB Sandbox SPEC-001/002/003；消费平台契约 SPEC-500/501/503 与 SPEC-305
 
-[范围预批准 ticket #18](https://github.com/BingChaoLiu/DVB-Nexus/issues/18)（2026-11-14）：SPEC-400～406 的 MVP 切集已裁决为**范围级预批准**（下表「MVP 切集」列为裁决内容）；各 spec 实体文本编写归 M5 实现流程（SPEC-400/401/402/403/405 已随实现票 #61/#62/#63/#64/#66 编写，均 APPROVED 0.5.0（ticket [#15](https://github.com/BingChaoLiu/DVB-Nexus/issues/15) 批准记录），SPEC-404/406 待各票编写）。SPEC-407 Timeline & Replay UI（P2）在 `docs/roadmap.md` §3。
+[范围预批准 ticket #18](https://github.com/BingChaoLiu/DVB-Nexus/issues/18)（2026-11-14）：SPEC-400～406 的 MVP 切集已裁决为**范围级预批准**（下表「MVP 切集」列为裁决内容）；各 spec 实体文本编写归 M5 实现流程（SPEC-400/401/402/403/405/406 已随实现票 #61/#62/#63/#64/#66/#67 编写；SPEC-400/401/402/403/405/406 均 APPROVED 0.5.0（ticket [#15](https://github.com/BingChaoLiu/DVB-Nexus/issues/15) 批准记录），SPEC-404 待各票编写）。SPEC-407 Timeline & Replay UI（P2）在 `docs/roadmap.md` §3。
 
 | Spec ID | Document | MVP 切集（#18 裁决） | 建议依赖 | MVP priority |
 |---|---|---|---|---|
@@ -14,7 +14,7 @@
 | SPEC-403 | [SPEC-403-stream-monitor.md](SPEC-403-stream-monitor.md) | 运行控制条（validate/start/pause/resume/stop/dispose + 状态徽章，SPEC-200 穷举表驱动）+ 概览卡 + PID/指标表（metrics/query 扁平标量 + summary）+ 诊断列表（priority/severity 排序 + confidence 三档 + evidence locator 呈现）+ verify 结果卡（三态 + 判据六 kind 明细）；诊断/verify 呈现组件定义在 403、406 复用叠加场景语境；实时性 = journal/hint 帧节流重取，非流式推送渲染；不做：时间轴图表（407 roadmap）、独立告警中心页（alerts 融入监控页）、自定义 dashboard、流式曲线图 | SPEC-302/501 | P0 |
 | SPEC-404 | SPEC-404-packet-inspector.md（待编写） | 最小证据下钻：诊断 evidence locator（pid + packet_index + artifact）可点击 → 按 packet_index × 188 从 artifact content（Range）取单包 → hex + TS header 字段解码（sync/PID/continuity_counter/AF/PCR flag）；不做：PSI section 树、PES、baseline/faulted A/B 对照（后续增强，等位替换不变式保证将来增量小） | SPEC-100/305/503 | P0 |
 | SPEC-405 | [SPEC-405-cli-console.md](SPEC-405-cli-console.md) | 「CLI 对照」= 来源标识区分（非双解析器 diff，SPEC-309 归 roadmap）：TSDuck 调用记录列表（九字段：版本/路径/argv/起止/退出码/stdout/stderr/输入 SHA）+ 调用详情（stderr GBK 原文只展示不解析；exit 0 ≠ 有效内容门语义显式标注）+ source 徽章过滤（generator/internal_parser/tsduck/hardware 四值枚举，hardware MVP 不出现）；不做：交互式命令输入（白名单 argv 由后端封装）、终端仿真、双栏 diff | SPEC-308/501 | P0 |
-| SPEC-406 | SPEC-406-training-lab-ui.md（待编写） | 场景库列表（GET /scenarios，Lab Pack v1 SC-01~05）+ 场景详情渲染（目标/分阶段 hints/步骤/pass_criteria）+ 建实验 session（scenario_id 入参 + 预设 topology/seed）+ hints 渐进揭示（点击展开下一层，纯前端无后端参与）+ 通关结果卡（verify 三态 + 判据明细 + 诊断候选跳转，复用 403 组件）+ 八步闭环 stepper（Create→…→Verify 顶部指示）+ hidden_reference_solution 通关后展开；不做：计分/进度存档/多用户、场景编辑器（场景编写归实现流程，#17 既裁） | SPEC-205/206 | P0 |
+| SPEC-406 | [SPEC-406-training-lab-ui.md](SPEC-406-training-lab-ui.md) | 场景库列表（GET /scenarios，Lab Pack v1 SC-01~05）+ 场景详情渲染（目标/分阶段 hints/步骤/pass_criteria）+ 建实验 session（scenario_id 入参 + 预设 topology/seed）+ hints 渐进揭示（点击展开下一层，纯前端无后端参与）+ 通关结果卡（verify 三态 + 判据明细 + 诊断候选跳转，复用 403 组件）+ 八步闭环 stepper（Create→…→Verify 顶部指示）+ hidden_reference_solution 通关后展开；不做：计分/进度存档/多用户、场景编辑器（场景编写归实现流程，#17 既裁） | SPEC-205/206 | P0 |
 
 ## 裁决要点（详见 ticket #18 决议）
 

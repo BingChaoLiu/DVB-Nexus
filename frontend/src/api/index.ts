@@ -19,6 +19,7 @@ export * from "./endpoints/artifacts";
 export * from "./endpoints/diagnosis";
 export * from "./endpoints/observation";
 export * from "./endpoints/runs";
+export * from "./endpoints/scenarios";
 export * from "./endpoints/sessions";
 export * from "./endpoints/topologies";
 export * from "./endpoints/verification";
