@@ -1,7 +1,7 @@
 ---
 spec_id: SPEC-401
 title: Topology Editor
-version: 0.5.1
+version: 0.5.2
 status: APPROVED
 phase: MVP
 owner: Frontend
@@ -285,3 +285,16 @@ path 语法 → 画布实体映射（权威 = `src/simulation/state/validate.py`
 - 后端 `/api/v1` additive-only：拓扑面字段新增经 `dto:sync` 吸收；删除/改名走 `/api/v2` 决策（漂移锁 CI 捕获）。
 - 交付物：SPEC-401 本文（批准翻 APPROVED）、`features/topologies/**`、`endpoints/topologies.ts` + barrel 行、`e2e/topology.spec.ts`、SPEC-INDEX-FRONTEND 本行链接更新。
 - 门禁：前端 lint/typecheck/test:run/build/dto:check/e2e + Python 三门（pytest 必绿组合 / `PYTHONPATH=$PWD/src lint-imports` / `python -I tools/check_specs.py`）全绿。
+
+## Phase 2 定点修订（随落笔票 #119，DRAFT_FOR_REVIEW 0.5.2；依据：细裁 [#110](https://github.com/BingChaoLiu/DVB-Nexus/issues/110)）
+
+- **§5.1 NodeType 注册表新增两类型**（机制零改动，仅类型集扩面）：
+
+| node_type | label | id_prefix | ports（port_id: direction, plane, max_connections） | config_schema |
+|---|---|---|---|---|
+| `t2mi_encapsulator` | T2-MI 封装器 | `enc` | `inner_in`: input, MPEG_TS, 1；`t2mi_out`: output, T2MI, 1 | T2miEncapsulatorConfigDTO（bbframe_params + plp_assignment，SPEC-600/602） |
+| `t2mi_demux` | T2-MI 解封装器 | `dmx` | `t2mi_in`: input, T2MI, 1；`inner_out`: output, MPEG_TS, 1 | T2miDemuxConfigDTO（plp_filter，SPEC-602） |
+
+- **MVP_ENABLED_PLANES 镜像扩容**：`readonly ["MPEG_TS", "T2MI"]`（镜像 domain MVP_ENABLED_PLANES，同源纪律；连线预检四项之平面项随扩容自动放行 T2MI 连线——「平面不符」原因枚举文案改为「平面不符（当前支持 MPEG_TS / T2MI）」）。
+- **BBFrame 词汇纪律**：面板/画布文案不得出现「BBFrame 平面」（BBFrame = 节点内部层次，[#110] 裁决）；两类型 label/description 文案以 CONTEXT.md「Phase 2 封装层」词条组为准。
+- 既有排除项延续：RF 面 tuner/gain 随 Phase 3 平面扩面入表；编辑器功能增强五项与「用户自定义拓扑进闭环」非目标不变。

@@ -86,7 +86,18 @@ SPEC-500/501/502/503/505/506 已于 2026-11-14 随 [补写 MVP P0 缺失契约](
 
 ## F. Future DVB Domains
 
-SPEC-600+ 未来模块目录不在本表维护：`docs/roadmap.md` §3 是唯一权威索引（ADR-0002）。原 §F 16 行（SPEC-600～641）已由 roadmap 承载，编号原样保留。前端远期行 SPEC-407 Timeline & Replay UI（P2）同步移入 roadmap。
+SPEC-604+ 未来模块目录不在本表维护：`docs/roadmap.md` §3 是唯一权威索引（ADR-0002）。原 §F 16 行（SPEC-600～641）已由 roadmap 承载，编号原样保留。前端远期行 SPEC-407 Timeline & Replay UI（P2）同步移入 roadmap。
+
+**SPEC-600～603（T2-MI 链）与 SPEC-610/611（BISS）已随 Phase 2 地图 [#103](https://github.com/BingChaoLiu/DVB-Nexus/issues/103) 落笔**（repo 主审计确认翻 **APPROVED 0.5.1**，2026-11-17；SPEC-612 DVB-CA 仍归 roadmap §3），收录于 [t2mi/](t2mi/SPEC-INDEX-T2MI.md) 与 [biss/](biss/SPEC-INDEX-BISS.md)：
+
+| Spec ID | 名称 | 范围 | 建议依赖 | 优先级 |
+|---|---|---|---|---|
+| SPEC-600 | T2MI Parser | T2-MI 包解析与封装双向接口、节点 config schema、背靠背纪律、t2mi.* 事件 | SPEC-100/107/301/003 | P2 |
+| SPEC-601 | BBFrame Parser | BBHEADER 10B 双向接口（HEM/NM+ISSY/NPD）、CRC-8 强制校验、B2 原语挂钩 | SPEC-600/100 | P2 |
+| SPEC-602 | PLP Extractor | PLP 过滤/分配/统计、B1 原语语义 | SPEC-600/601 | P2 |
+| SPEC-603 | Inner TS Reconstruction | UP 拼装与 SYNCD carry-over、Inner TS 输出、TSDuck 第二意见对拍协议 | SPEC-600/601/602/100 | P2 |
+| SPEC-610 | BISS Mode 1 | 加扰/解扰双向接口（DVB-CSA1 + DES）、session word 48-bit 口径、密钥指纹纪律、C1 原语挂钩 | SPEC-100/204/301 | P2 |
+| SPEC-611 | BISS Mode E | ESW/Injected ID 派生、BISS2/CISSA 纯 Python、两种错配证据可区分 | SPEC-610/100 | P2 |
 
 ## G. 模块 Spec 完成条件
 

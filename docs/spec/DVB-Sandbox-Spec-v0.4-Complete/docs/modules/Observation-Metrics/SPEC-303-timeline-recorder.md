@@ -1,7 +1,7 @@
 ---
 spec_id: SPEC-303
 title: Timeline Recorder
-version: 0.5.0
+version: 0.6.0
 status: APPROVED
 phase: MVP
 owner: Observation
@@ -121,3 +121,13 @@ checkpoint 包含：`checkpoint_id`、`session_id`、`journal_seq`、`clock_doma
 
 - SPEC-300（数据流与组件）、SPEC-301（事件来源与 journal_seq）。
 - 原 Evidence Manager 职责分摊裁决：timeline/evidence 导出由本 spec 承载（[规格编号体系重建 #10]）。
+
+## Phase 2 定点修订（随落笔票 #117，DRAFT_FOR_REVIEW 0.6.0；依据：细裁 [#112](https://github.com/BingChaoLiu/DVB-Nexus/issues/112)/[#113](https://github.com/BingChaoLiu/DVB-Nexus/issues/113)）
+
+- **信封注册表新增四命名空间**（additive，ADR-0006 权威不变；observation.* 撤回纪律不动）：
+  - `t2mi.*`：stage_summary / plp_mismatch；
+  - `bbframe.*`：stage_summary / recovery_failed；
+  - `biss.*`：scramble_applied / descramble_failed（payload 含密钥指纹引用，不落密钥本体）；
+  - `gen.*`：stage_started / stage_completed / packet_sampled（构造事件三型，layer 字段贯穿 {TS, BBFRAME, T2MI, BISS}；注入点包必发射；全量 packet 级事件流已被 #112 明确关闭）。
+- journal_seq per-session 全序、run_id 关联、source/confidence 枚举沿用；全部离散事件面，无连续指标流新增。
+- `ts.*` 观测流缺失（SPEC-408 §10 申报 1）口径维持诚实 INCONCLUSIVE。

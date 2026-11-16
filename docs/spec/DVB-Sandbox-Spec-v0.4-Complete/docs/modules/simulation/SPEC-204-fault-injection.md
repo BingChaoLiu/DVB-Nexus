@@ -1,7 +1,7 @@
 ---
 spec_id: SPEC-204
 title: Fault Injection Framework
-version: 0.5.0
+version: 0.6.0
 status: APPROVED
 phase: MVP
 owner: Simulation Engine
@@ -199,3 +199,15 @@ DEFINED -> SCHEDULED -> ACTIVE -> APPLIED -> REMOVED
 - ADR-0007（全部条款）、ADR-0006 第 3/5 条（寻址、事件注册表）。
 - SPEC-100 §5.4 CCAllocator（reset 语义）、SPEC-103 PAT/PMT、SPEC-106 Packetizer。
 - CONTEXT.md「故障双路由」「等位替换」词条。
+
+## Phase 2 定点修订（随落笔票 #117，DRAFT_FOR_REVIEW 0.6.0；依据：细裁 [#111](https://github.com/BingChaoLiu/DVB-Nexus/issues/111)，[ADR-0010](../../../../../docs/adr/0010-phase2-t2mi-integration-path.md)/[ADR-0011](../../../../../docs/adr/0011-biss-scramble-path.md)）
+
+- **FaultDefinition 增 `layer` 属性**：{TS, BBFRAME, T2MI, BISS}，默认 "TS"（MVP 四原语全为 TS，序列化/指纹 additive 兼容）；runtime 据此路由到对应层过滤器实例（分层流水线）。
+- **注册表新增四原语**（MVP「基线冻结不扩容」纪律的 Phase 2 显式扩容口）：
+  1. `T2MI_PLP_MISMATCH`（T2MI 层）：expected_plp/actual_plp 错位对 + plp_version_switch；activation session_start（默认）| packet_index。
+  2. `BBHEADER_SYNC_FAULT`（BBFRAME 层）：field（MATYPE/UPL/DFL/SYNC/SYNCD/CRC-8）+ mode（corrupt|shift）；activation packet_index。
+  3. `BISS_KEY_MISMATCH`（BISS 层）：wrong_session_word | wrong_esw/injected_id 变体 + pid_scope；activation session_start。
+  4. `PMT_PID_DRIFT`（TS/PMT 层）：new_pid_map + pmt_version_bump；activation packet_index——C2 的 TS 层等价（CA 全貌属 SPEC-612，诚实标注）。
+- **等位替换不变式逐层保持**：每层过滤器长度/包序不变，CBR 在 TS 层与 Inner TS 层各自成立；tee 双写 artifact 面维持最外层，中间层证据走 mutation log（含密钥指纹——密钥本体不落）。
+- **加扰器过滤器类型**：filters 族新增 scrambler（构造特性与 fault 注入共用，密钥来源不同——[ADR-0011](../../../../../docs/adr/0011-biss-scramble-path.md)）。
+- 四原语的 expected_observations 符号名引用观测注册表（事件定义见 SPEC-303/304 与 ADR-0006 关联面同批修订）。

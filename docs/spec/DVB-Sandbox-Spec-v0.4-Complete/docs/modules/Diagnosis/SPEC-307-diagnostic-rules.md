@@ -1,7 +1,7 @@
 ---
 spec_id: SPEC-307
 title: Diagnostic Rules
-version: 0.5.0
+version: 0.6.0
 status: APPROVED
 phase: MVP
 owner: Diagnosis
@@ -128,3 +128,12 @@ MVP 有限声明式集合（ticket #13 Q-B-②）：
 - SPEC-003 §2.6/§6（Diagnosis 实体与遗留项）、SPEC-301 §4（事件类型引用合法性）。
 - [ADR-0007](../../../../adr/0007-fault-injection-pipeline-contract.md) 第 4/5 条（共用包序 frame、四类故障语义与 expected_observations）。
 - SPEC-306（消费本规则集）、SPEC-304（健康告警——独立系统对照）。
+
+## Phase 2 定点修订（随落笔票 #117，DRAFT_FOR_REVIEW 0.6.0；依据：细裁 [#111](https://github.com/BingChaoLiu/DVB-Nexus/issues/111)）
+
+- **内置诊断规则新增四条候选声明**（declarations 机制不变，与四新原语一一对应，靶场单一可归因症状原则延续）：
+  1. T2MI_PLP_MISMATCH → 「PLP 映射错位」候选：证据 = t2mi.plp_mismatch 事件 + Inner TS 业务缺失定位；
+  2. BBHEADER_SYNC_FAULT → 「BBHEADER 同步错位」候选：证据 = bbframe.recovery_failed + 首失败帧定位；
+  3. BISS_KEY_MISMATCH → 「BISS 密钥错位」候选：证据 = biss.descramble_failed + 密钥指纹互链（区分解扰失败 vs 码流损坏）；
+  4. PMT_PID_DRIFT → 「PMT/Demux 过滤不同步」候选：证据 = PSI 版本对比 + 声明 PID 无数据漂移。
+- 诊断规则与故障原语同批落库；confidence 三档静态声明机制不变（候选 ≠ 事实纪律不变）。

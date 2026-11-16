@@ -53,6 +53,52 @@ _Avoid_: 把包络上限当实时能力承诺、凭直觉调整阈值（须走 A
 golden 向量的验收纪律：同源实现解析自身输出不构成验收证据，至少一条独立验证路径——外部位级向量（权威基准）或 TSDuck 双向交叉（合格独立验证）；自研 round-trip 仅作回归覆盖。
 _Avoid_: 自生成自解析算验证、把回归通过当验收证据
 
+### Phase 2 封装层
+
+**T2-MI 封装器（T2-MI Encapsulator）**:
+拓扑节点类型：把 Inner TS 经 BBFrame 封装段包化为 T2-MI 包流（in MPEG_TS / out T2MI）；BBFrame 参数与 PLP 分配表在其 config。
+_Avoid_: 把 BBFrame 说成独立信号平面、把封装器与解封装器混称
+
+**T2-MI 解封装器（T2-MI Demux）**:
+拓扑节点类型：T2-MI 包流 → BBFrame 解析 → Inner TS 重建的观测侧链（in T2MI / out MPEG_TS）；期望 PLP 过滤在其 config。
+_Avoid_: 用 TSDuck t2mi 插件指代本组件、把解封装失败说成静默丢弃
+
+**三级封装（Three-level Encapsulation）**:
+外层 TS Packet → BBFrame → Inner TS 的嵌套形态（B1/B2 教学结构）；封装方向反向对称。
+_Avoid_: 把三级说成三个平面、漏掉 BBFrame 这一级
+
+**分层流水线（Layered Pipeline）**:
+每层「生成 → 本层 fault 过滤器 → 本层封装/传递」的执行模型；等位替换不变式逐层保持。
+_Avoid_: 跨层混合过滤、把 tee 双写说成只在最内层
+
+**作用层（Layer）**:
+FaultDefinition 的层路由属性 {TS, BBFRAME, T2MI, BISS}，决定原语作用于哪层过滤器。
+_Avoid_: 用平面名指代作用层、给 MVP 旧原语补写非 TS 层
+
+**加扰器（Scrambler）**:
+包级 payload 变换过滤器类型（包头 clear、包长不变、包序不变）；构造特性与 fault 注入共用，差别只是密钥来源。
+_Avoid_: 把加扰说成故障注入的一种、跨包链式加扰破坏等位替换
+
+**密钥指纹（Key Fingerprint）**:
+密钥的哈希前缀，进 mutation log 与 biss.* 事件的唯一密钥痕迹；密钥本体永不落日志/artifact。
+_Avoid_: 落密钥本体、把指纹当密钥用
+
+**构造事件（Construction Event）**:
+gen.* 命名空间的分级事件：阶段级（stage_started/completed）为主 + 抽样包级（packet_sampled，注入点必发射）；全量 packet 级流已裁决关闭。
+_Avoid_: 发射逐包事件、把构造事件当通关证据
+
+**解扰证据（Descramble Evidence）**:
+按声明密钥解扰后的结构自检结果；解扰失败与码流损坏是两种显式区分的形态。
+_Avoid_: 把解扰失败说成丢包、把无解扰记录说成码流干净
+
+**PLP 分布（PLP Distribution）**:
+per Run 的 PLP → 包数统计（t2mi.stage_summary 摘要）；B1 症状（期望/实际 PLP 漂移）的证据形态。
+_Avoid_: 把期望 PLP 缺失说成零流量、把 PLP 分布当观测流
+
+**多 UP BBFrame（N_UPS）**:
+单 BBFrame 携带多个 UP 的封装形态；尾包不足 N_UPS 的填充语义须确定性。
+_Avoid_: 静默丢尾包（TSDuck 3.45 缺陷形态）、跳过 CRC-8 校验
+
 ### 实验
 
 **故障靶场（Fault Lab）**:

@@ -1,8 +1,8 @@
 ---
 spec_id: SPEC-003
 title: Domain Model and Shared Contracts
-version: 0.4.0
-status: DRAFT
+version: 0.6.0
+status: APPROVED
 phase: BASELINE
 owner: Architecture
 depends_on:
@@ -229,3 +229,11 @@ interface TSArtifact {
 - Observation/Metric 的单位与枚举注册表。
 - Diagnosis 规则优先级、抑制、关联和置信度语义。
 - Artifact 保留、清理、访问和校验策略。
+
+## Phase 2 定点修订（随落笔票 #117，DRAFT_FOR_REVIEW 0.6.0；依据：Phase 2 地图细裁 [#110](https://github.com/BingChaoLiu/DVB-Nexus/issues/110)，[ADR-0010](../../../../../docs/adr/0010-phase2-t2mi-integration-path.md)）
+
+- **平面启用**：`MVP_ENABLED_PLANES` 由 {MPEG_TS} 扩容为 {MPEG_TS, T2MI}；`RF`/`SEC_CONTROL`/`IP` 维持禁用（Phase 3/4）。
+- **NodeType 注册表新增两类型**：`t2mi_encapsulator`（in MPEG_TS / out T2MI，内部含 BBFrame 封装段）、`t2mi_demux`（in T2MI / out MPEG_TS，PLP 过滤入 config）——机制零新增（§6 既有注册表）。
+- **BBFrame 定位**：节点内部层次，**非独立信号平面**（五平面枚举无 BBFrame，不新增第六平面）；BBHEADER 语义（EN 302 755 §5.1.7）属内部结构面。
+- **端口模型零扩展**：既有 direction/plane/protocol/max_connections 四属性足够；BBFrame 层参数入节点 config。
+- 等位替换不变式延展出**逐层语义**（layer ∈ {TS, BBFRAME, T2MI, BISS}，SPEC-204 同批修订）。

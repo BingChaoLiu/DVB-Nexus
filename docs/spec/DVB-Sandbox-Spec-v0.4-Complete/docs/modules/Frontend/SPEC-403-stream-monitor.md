@@ -1,7 +1,7 @@
 ---
 spec_id: SPEC-403
 title: Stream Monitor
-version: 0.5.1
+version: 0.6.0
 status: APPROVED
 phase: MVP
 owner: Frontend
@@ -313,3 +313,9 @@ stopped    -> disposed
 - 全部响应类型取自 `schema.gen.ts`；若实现期间发现类型缺口，走 `dto-supplement.ts` 收窄机制申报，禁手改生成文件。
 - 交付物含：本规格文本（批准后转正）、SPEC-INDEX-FRONTEND 行链接、IMPLEMENTATION_REPORT（首节「下游接口清单」：#65 消费 locator 点击位签名、#67 消费组件复用签名 + 场景语境叠加点）。
 - 文本/徽章一律渲染 wire 枚举串原样（snake_case）；禁前端自造别名、大小写转换或本地编码表之外的语义改写。
+
+## Phase 2 定点修订（随落笔票 #119，DRAFT_FOR_REVIEW 0.6.0；依据：细裁 [#114](https://github.com/BingChaoLiu/DVB-Nexus/issues/114)）
+
+- **view 参数透传句**：包检查器组件定义在 SPEC-404（复用边界既裁不变）；Monitor 侧深链/入口对 view 参数原样透传，不自造视图语义。
+- **新命名空间事件呈现**：t2mi.*/bbframe.*/biss.* 事件（SPEC-303 Phase 2 修订章）进入 journal 尾窗与诊断候选明细的自然消费（注册表驱动，无面板新增）；「解扰失败 ≠ 码流损坏」「缺失 ≠ 零」诚实纪律句随事件文案落位。
+- 观测类判据口径维持诚实 INCONCLUSIVE（SPEC-408 §10 申报 1 延续）。

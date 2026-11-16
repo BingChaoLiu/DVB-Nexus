@@ -1,0 +1,172 @@
+{
+  "schema_version": 2,
+  "scenario_id": "5c010000-0000-4000-8000-000000000009",
+  "version": "0.1.0-draft",
+  "title": "时序错位：PMT 版本更新后的 PID 漂移（Demux 过滤未同步）",
+  "difficulty": "advanced",
+  "required_engine_versions": {
+    "fault_registry": ">=0.6.0",
+    "t2mi_nodes": ">=0.6.0"
+  },
+  "initial_topology": {
+    "topology_id": "topo-labpack-v2",
+    "revision": 1,
+    "nodes": [
+      {
+        "nodeId": "gen-0",
+        "nodeType": "ts_generator",
+        "config": {},
+        "ports": [
+          {
+            "portId": "ts_out",
+            "direction": "output",
+            "plane": "MPEG_TS",
+            "maxConnections": 1
+          }
+        ]
+      },
+      {
+        "nodeId": "mux-0",
+        "nodeType": "ts_mux",
+        "config": {},
+        "ports": [
+          {
+            "portId": "ts_in_1",
+            "direction": "input",
+            "plane": "MPEG_TS",
+            "maxConnections": 1
+          },
+          {
+            "portId": "ts_in_2",
+            "direction": "input",
+            "plane": "MPEG_TS",
+            "maxConnections": 1
+          },
+          {
+            "portId": "ts_out",
+            "direction": "output",
+            "plane": "MPEG_TS",
+            "maxConnections": 1
+          }
+        ]
+      },
+      {
+        "nodeId": "mon-0",
+        "nodeType": "ts_monitor",
+        "config": {},
+        "ports": [
+          {
+            "portId": "ts_in",
+            "direction": "input",
+            "plane": "MPEG_TS",
+            "maxConnections": 1
+          }
+        ]
+      }
+    ],
+    "connections": [
+      {
+        "connectionId": "conn-1",
+        "plane": "MPEG_TS",
+        "from": {
+          "nodeId": "gen-0",
+          "portId": "ts_out"
+        },
+        "to": {
+          "nodeId": "mux-0",
+          "portId": "ts_in_1"
+        }
+      },
+      {
+        "connectionId": "conn-2",
+        "plane": "MPEG_TS",
+        "from": {
+          "nodeId": "mux-0",
+          "portId": "ts_out"
+        },
+        "to": {
+          "nodeId": "mon-0",
+          "portId": "ts_in"
+        }
+      }
+    ]
+  },
+  "simulation_config": {
+    "seed": 1234567,
+    "mode": "deterministic",
+    "clock": {
+      "mode": "deterministic",
+      "start_time_ns": 0,
+      "speed_num": 1,
+      "speed_den": 1,
+      "tick_quantum_ns": 1000000
+    }
+  },
+  "fault_plan": [
+    {
+      "fault_id": "fd000000-0000-4000-8000-00000000f100",
+      "fault_type": "PMT_PID_DRIFT",
+      "target_id": "mux-0:pid:0x1000",
+      "parameters": {
+        "new_pid_map": [
+          4608
+        ],
+        "pmt_version_bump": true
+      },
+      "activation": {
+        "kind": "packet_index",
+        "packet_index": 400
+      },
+      "expected_observations": [
+        "ts.psi_section_observed",
+        "diagnosis.pmt_demux_desync"
+      ]
+    }
+  ],
+  "objectives": [
+    "观察 PMT 版本更新后加扰 PID 集合漂移，而 Demux 过滤表停在旧集合的症状",
+    "在 PID 树时间轴上定位「声明与实际漂移」（roadmap §4 C2 / #17 残留教学点）",
+    "恢复（空 fault_plan 重跑新 Run）并提交通关判定"
+  ],
+  "hints": [
+    {
+      "hint_id": "sc09-hint-1",
+      "trigger": "experiment opened",
+      "level": "nudge",
+      "content": "MVP 已认识 PMT_PID_MISMATCH；本场景是它的版本演进形态：PMT 合法更新（版本号递增、CRC 重算），错的是消费侧没有跟上。",
+      "requirement_ids": [
+        "REQ-SIM-204-P2"
+      ],
+      "standard_ref": null
+    },
+    {
+      "hint_id": "sc09-hint-2",
+      "trigger": "after Inject",
+      "level": "direction",
+      "content": "packet 400 后 PMT 宣告新 PID 集合，Demux 过滤表停在旧集合——声明 PID 无数据、业务 PID 漂移。对比 PSI 版本：version 字段变了、过滤没变。",
+      "requirement_ids": [
+        "REQ-SIM-204-P2"
+      ],
+      "standard_ref": null
+    },
+    {
+      "hint_id": "sc09-hint-3",
+      "trigger": "before Diagnose",
+      "level": "solution",
+      "content": "PMT_PID_DRIFT 在 packet 400 重写 PMT（复用 PMT 重建 + CRC 重算机制）并漂移加扰 PID 集合。诚实语境标注：本场景只教学 TS/PMT 层漂移面；C2 的 CA 全貌（ECM 与加密 PES 错位）属 DVB-CA（SPEC-612，Phase 3+），且 BISS 语境下无 ECM——两者不要混同。",
+      "requirement_ids": [
+        "REQ-SIM-204-P2"
+      ],
+      "standard_ref": null
+    }
+  ],
+  "pass_criteria": [
+    {
+      "criterion_id": "fault-cleared",
+      "kind": "fault_inactive",
+      "mandatory": true,
+      "fault_id": "fd000000-0000-4000-8000-00000000f100"
+    }
+  ],
+  "hidden_reference_solution": "恢复路径：空 fault_plan 重跑新 Run。fault_inactive 判据三段核对同前。教学锚点（roadmap §4 C2 + #17 MVP 交叉引用）：C2 原案例属 DVB-CA 语境（PMT 加扰 PID 动态变更而 Demux 过滤表未同步，ECM 与加密 PES 错位）；本场景以 TS/PMT 层等价原语教学「PID 树时间轴上定位声明与实际漂移」，CA 全貌（含 ECM）出界至 SPEC-612。"
+}

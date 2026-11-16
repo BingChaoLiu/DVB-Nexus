@@ -50,7 +50,7 @@
 
 前端远期行 **SPEC-407 Timeline & Replay UI**（P2，依赖 SPEC-640/501）自规格包 `REGISTRY.md` §D 移入本目录（[编号体系重建 #10](https://github.com/BingChaoLiu/DVB-Nexus/issues/10)）：随 Time Machine（SPEC-640，Later Phase）另启 effort，规格文本未编写。
 
-**生成过程可视化（packet 级构造事件流）**：属自研语义层职责（ADR-0005 决策 3），但 UI 与事件类型清单均 MVP 外（[前端最小 UI 范围裁决 #18](https://github.com/BingChaoLiu/DVB-Nexus/issues/18)）——SPEC-301 §4 预留条款原样保持，TS Core MVP 无发射义务；事件类型注册表与生成可视化 UI 在 roadmap 期一并裁决。
+**生成过程可视化（packet 级构造事件流）**：属自研语义层职责（ADR-0005 决策 3），但 UI 与事件类型清单均 MVP 外（[前端最小 UI 范围裁决 #18](https://github.com/BingChaoLiu/DVB-Nexus/issues/18)）——SPEC-301 §4 预留条款原样保持，TS Core MVP 无发射义务；事件类型注册表与生成可视化 UI 在 roadmap 期一并裁决。**已清账（2026-11-17，[#112](https://github.com/BingChaoLiu/DVB-Nexus/issues/112)）**：采纳分级粒度（gen.* 阶段级 + 抽样包级，全量 packet 级流关闭）+ Lab 实验台只读折叠区最小 UI；详见 SPEC-303 Phase 2 修订章与 SPEC-600~603。
 
 ## 4. v0.3 故障案例库（远期靶场素材）
 
@@ -83,11 +83,14 @@
 源自研究调研（`docs/research/`），实现对应 Phase 时先复核：
 
 ### T2-MI（Phase 2）
-- **解封装三套现成方案**，无需自研：TSDuck `t2mi` 插件（本机 3.40 已含，`--extract` 支持按 PLP 提取）/ FFmpeg 7.1 `t2mi` demuxer / DVBInspector PLP 导出
-- **封装（builder）**只有 Rust crate [`dvb-t2mi`](https://crates.io/crates/dvb_t2mi)（v14.0.0，MIT OR Apache-2.0）——但采用度极低（~1.6k 下载/13 stars），届时需重新复核成熟度；集成路径 PyO3 薄绑定或 CLI 子进程
+> **2026-11-17 实测订正**（[#104](https://github.com/BingChaoLiu/DVB-Nexus/issues/104)/[#105](https://github.com/BingChaoLiu/DVB-Nexus/issues/105)/[#107](https://github.com/BingChaoLiu/DVB-Nexus/issues/107)；裁决 [ADR-0010](adr/0010-phase2-t2mi-integration-path.md)，规格 SPEC-600~603 DRAFT）：
+- **解封装与封装均自研 Python 为主路径**——TSDuck 无封装能力（选项面仅 extract/identify/log）；**FFmpeg 从不存在 t2mi demuxer**（libavformat/t2mi.c 零 commit 历史，原「FFmpeg 7.1 t2mi demuxer」条目失实删除）；DVBInspector 仅离线工具非管线组件
+- TSDuck `tsp -P t2mi --extract` 解封装 HEM 布局逐字节确定，但 3.45-4798 有两个实测缺陷（不解析 BBHEADER CRC-8/MODE/UPL、多 UP BBFrame 尾包丢失；修复在未发布 master 147deab3）且失败路径全静默——降为第二意见验证器，前置 = 升级发布版并复测
+- Rust crate `dvb-t2mi`（现 v15.0.0，单人维护极活跃但家族锁步 breaking）不进运行时/CI，仅开发期 golden diff oracle
 
 ### BISS（Phase 2）
 - ⚠️ **TSDuck descrambler 不支持 BISS**（实测仅 DVB-CSA2/AES-CBC/CTR/ATIS-IDSA/DVB-CISSA）——v0.3"实况复用 TSDuck 解 BISS"的设想不成立
+> **2026-11-17 实测结论**（[#106](https://github.com/BingChaoLiu/DVB-Nexus/issues/106)；裁决 [ADR-0011](adr/0011-biss-scramble-path.md)，规格 SPEC-610/611 DRAFT）：libdvbcsa 本机编译成功（MSYS2，SSE2 batch 497 Mbps 余量 7.5 倍）+ pycryptodome DES；CISSA 纯 Python 134 Mbps 达标（TS 103 127 完全公开）；纯 Python CSA1 仅 0.305 Mbps 只作测试夹具
 - BISS1 → libdvbcsa（CSA1 实现）+ DES（session word 加密）；BISS2 → CISSA（ETSI TS 103 127）+ AES-128 自研或第三方实现
 - 标准原文：EBU Tech 3292（BISS2）与 Tech 3292-s1（BISS-CA）可免费下载
 

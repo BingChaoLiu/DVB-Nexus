@@ -1,7 +1,7 @@
 ---
 spec_id: SPEC-304
 title: Health and Alert Engine
-version: 0.5.0
+version: 0.6.0
 status: APPROVED
 phase: MVP
 owner: Observation
@@ -146,3 +146,8 @@ inactive -> pending -> firing -> resolving -> resolved
 
 - SPEC-302（指标输入）、SPEC-303（时间轴证据）、SPEC-305（暴露接口）。
 - ADR-0006 第 5 条（命名纠偏与 `observation.*` 预留）、[缝合批准 #12] Q3 裁决（告警不发信封事件）。
+
+## Phase 2 定点修订（随落笔票 #117，DRAFT_FOR_REVIEW 0.6.0；依据：细裁 [#113](https://github.com/BingChaoLiu/DVB-Nexus/issues/113)）
+
+- **告警面零扩容**：PCR_JITTER_HIGH 维持 MVP 惰性（ts.* 观测流缺失，roadmap §4 D2 残留原语候选不在本图）；t2mi.*/bbframe.*/biss.*/gen.* 事件走诊断/证据消费面（SPEC-307/303），不进 alert 面板语义。
+- 包检查器证据面（T2-MI 包视图/BBFrame 视图/BISS 加扰态标注）的数据源契约 = artifact 字节 + 自研解封装器结构 JSON（json_map 生成链）+ 中间层 mutation log 摘要；前端渲染归 SPEC-404 修订（Phase 2 前端票 #119）。

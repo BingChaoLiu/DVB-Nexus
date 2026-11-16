@@ -1,7 +1,7 @@
 ---
 spec_id: SPEC-406
 title: Training Lab
-version: 0.5.1
+version: 0.6.0
 status: APPROVED
 phase: MVP
 owner: Frontend
@@ -317,3 +317,10 @@ POST /api/v1/sessions/{session_id}/runs/{recovery_run_id}/verify
 - 并行裁定知悉：#65（证据下钻）面 = `features/monitor/packet-inspector/**` + monitor Region additive——与 `features/lab/**` 不相交；merge tip 收尾时 §7.6 双预案对齐，INDEX 预导言冲突按裁定 J（#15）机械并集。
 - 交付物含：本规格文本（批准后转正）、SPEC-INDEX-FRONTEND 行链接 + 预导言并集、Lab Pack v1 五文件、`src/api/endpoints/scenarios.ts` + barrel 行、`features/lab/**` 实体、closed-loop Create/Inject 翻转、`e2e/lab.spec.ts`、IMPLEMENTATION_REPORT（首节「共享面接触与跳转接线终态」——终票无下游）。
 - 文本/徽章一律渲染 wire 枚举串原样（snake_case / camelCase 岛各守其位）；禁前端自造别名或语义改写。
+
+## Phase 2 定点修订（随落笔票 #119，DRAFT_FOR_REVIEW 0.6.0；依据：细裁 [#112](https://github.com/BingChaoLiu/DVB-Nexus/issues/112)/[#114](https://github.com/BingChaoLiu/DVB-Nexus/issues/114)）
+
+- **「生成过程」只读折叠区**（实验台内，gen.* 事件消费）：阶段级进度行（Inner TS / BBFrame / T2MI 分层流水线各段，[#108](https://github.com/BingChaoLiu/DVB-Nexus/issues/108) 裁决形态）+ 抽样包卡片（gen.packet_sampled，layer 字段标注），点击跳包检查器（携带 view 参数）；静态路标式（无动画/时间线/独立页面，SPEC-408 引导哲学一致）。
+- **深链 view 参数消费**：诊断证据 → Monitor 包检查器深链追加 view 参数（三元组语义不变）。
+- **Lab Pack v2 场景承载**：场景库列表自然包含 v2 四场景（SC-06~09 落库后）；initial_topology 可读化对 t2mi_encapsulator/t2mi_demux 新节点类型自动获得（统计行 + 结构化渲染，零特制——[#110](https://github.com/BingChaoLiu/DVB-Nexus/issues/110) 裁决）。
+- 八步闭环结构不变：Analyze 缺口维持诚实 501 呈现；当前动作/指引条/run 主级化/自动基线/hints 全部场景无关机制零改动。

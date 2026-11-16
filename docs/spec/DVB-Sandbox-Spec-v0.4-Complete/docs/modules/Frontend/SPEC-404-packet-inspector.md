@@ -1,7 +1,7 @@
 ---
 spec_id: SPEC-404
 title: Packet Inspector
-version: 0.5.0
+version: 0.6.0
 status: APPROVED
 phase: MVP
 owner: Frontend
@@ -252,3 +252,11 @@ fixture 纪律（验收「取包落点与 artifact 字节逐位一致」）：�
 - 交付物：`packet-inspector/` 模块 + Region additive 接线 + 单元/组件测试 + E2E Inspect 步翻转（`frontend/e2e/closed-loop.spec.ts` 仅 Inspect 步 + 步骤地图注记行）+ SPEC-404 文本（本文件）+ SPEC-INDEX-FRONTEND 行链接。
 - 本地门：`npm run lint / typecheck / test:run / build / dto:check / e2e` + 后端三门（pytest 四组、`PYTHONPATH=$PWD/src lint-imports`、`python -I tools/check_specs.py` 0 failed）。
 - git：merge `integration/m5`（tip 可能因 #63 并行前进；冲突禁擅断，报 orchestrator）；禁推远端、禁关票。
+
+## Phase 2 定点修订（随落笔票 #119，DRAFT_FOR_REVIEW 0.6.0；依据：细裁 [#113](https://github.com/BingChaoLiu/DVB-Nexus/issues/113)/[#114](https://github.com/BingChaoLiu/DVB-Nexus/issues/114)，SPEC-600~603/610/611 依赖）
+
+- **视图参数 additive**：包检查器新增 `view` 参数（`view=t2mi|bbframe|ts`，默认 `ts` 保 MVP 兼容）；既有 locator（pid + packet_index + artifact）语义不变，深链三元组（inspect_artifact/inspect_pid/inspect_packet）不追加语义，仅 view 参数扩展（Lab 诊断证据深链与 Monitor 直达共用）。
+- **T2-MI 包视图**（view=t2mi）：6 字节包头逐字段解析（TS 102 773 §5.1）+ CRC-32 校验结果 + BBFrame 载荷指针；数据源 = artifact 字节 + 自研解封装器结构 JSON（json_map 生成链，禁手写 mirror）。
+- **BBFrame 视图**（view=bbframe）：BBHEADER 10 字节逐字段（MATYPE/UPL/DFL/SYNC/SYNCD/CRC-8，EN 302 755 §5.1.7）+ CRC-8 校验 + UP 边界标注；文案教学锚点「SYNCD 是数据字段内首个 UP 的位距离，不是同步字节」直接入视图文案。
+- **BISS 加扰态标注**：payload 层 scrambled/clear 标注 + 密钥指纹引用（密钥本体永不渲染）；biss.descramble_failed 证据与 mutation log 互链。
+- 排除项维持（#114）：不做 BISS Mode E 计算器式交互（ESW/Injected ID 计算过程展示属 SPEC-611 语义面，UI 只呈证据）；不做 section 树/PES/A-B 对照（既有非目标延续）。

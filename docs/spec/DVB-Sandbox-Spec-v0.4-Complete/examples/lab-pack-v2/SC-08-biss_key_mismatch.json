@@ -1,0 +1,179 @@
+{
+  "schema_version": 2,
+  "scenario_id": "5c010000-0000-4000-8000-000000000008",
+  "version": "0.1.0-draft",
+  "title": "加扰错位：BISS 密钥（session word 错配）",
+  "difficulty": "intermediate",
+  "required_engine_versions": {
+    "fault_registry": ">=0.6.0",
+    "t2mi_nodes": ">=0.6.0"
+  },
+  "initial_topology": {
+    "topology_id": "topo-labpack-v2",
+    "revision": 1,
+    "nodes": [
+      {
+        "nodeId": "gen-0",
+        "nodeType": "ts_generator",
+        "config": {},
+        "ports": [
+          {
+            "portId": "ts_out",
+            "direction": "output",
+            "plane": "MPEG_TS",
+            "maxConnections": 1
+          }
+        ]
+      },
+      {
+        "nodeId": "mux-0",
+        "nodeType": "ts_mux",
+        "config": {},
+        "ports": [
+          {
+            "portId": "ts_in_1",
+            "direction": "input",
+            "plane": "MPEG_TS",
+            "maxConnections": 1
+          },
+          {
+            "portId": "ts_in_2",
+            "direction": "input",
+            "plane": "MPEG_TS",
+            "maxConnections": 1
+          },
+          {
+            "portId": "ts_out",
+            "direction": "output",
+            "plane": "MPEG_TS",
+            "maxConnections": 1
+          }
+        ]
+      },
+      {
+        "nodeId": "mon-0",
+        "nodeType": "ts_monitor",
+        "config": {},
+        "ports": [
+          {
+            "portId": "ts_in",
+            "direction": "input",
+            "plane": "MPEG_TS",
+            "maxConnections": 1
+          }
+        ]
+      }
+    ],
+    "connections": [
+      {
+        "connectionId": "conn-1",
+        "plane": "MPEG_TS",
+        "from": {
+          "nodeId": "gen-0",
+          "portId": "ts_out"
+        },
+        "to": {
+          "nodeId": "mux-0",
+          "portId": "ts_in_1"
+        }
+      },
+      {
+        "connectionId": "conn-2",
+        "plane": "MPEG_TS",
+        "from": {
+          "nodeId": "mux-0",
+          "portId": "ts_out"
+        },
+        "to": {
+          "nodeId": "mon-0",
+          "portId": "ts_in"
+        }
+      }
+    ]
+  },
+  "simulation_config": {
+    "seed": 1234567,
+    "mode": "deterministic",
+    "clock": {
+      "mode": "deterministic",
+      "start_time_ns": 0,
+      "speed_num": 1,
+      "speed_den": 1,
+      "tick_quantum_ns": 1000000
+    }
+  },
+  "fault_plan": [
+    {
+      "fault_id": "fd000000-0000-4000-8000-00000000f100",
+      "fault_type": "BISS_KEY_MISMATCH",
+      "target_id": "mux-0:pid_scope:0x0100",
+      "parameters": {
+        "wrong_session_word": "0123456789ab",
+        "pid_scope": [
+          256
+        ]
+      },
+      "activation": {
+        "kind": "session_start",
+        "packet_index": null
+      },
+      "expected_observations": [
+        "biss.descramble_failed"
+      ]
+    }
+  ],
+  "objectives": [
+    "确认 BISS Mode 1 密钥口径：12 位十六进制（48-bit）session word——不是「16 字节密钥」",
+    "注入错配密钥并观察解扰失败证据（biss.descramble_failed），区分「解扰失败 ≠ 码流损坏」",
+    "恢复（空 fault_plan 重跑新 Run）并提交通关判定"
+  ],
+  "hints": [
+    {
+      "hint_id": "sc08-hint-1",
+      "trigger": "experiment opened",
+      "level": "nudge",
+      "content": "场景声明密钥在 biss 段（mode/session_word/pid_scope）。BISS 无 ECM（CA_PID 固定 0x1FFF，Tech 3292）——不要找 ECM/EMM。",
+      "requirement_ids": [
+        "REQ-SIM-204-P2"
+      ],
+      "standard_ref": null
+    },
+    {
+      "hint_id": "sc08-hint-2",
+      "trigger": "after Inject",
+      "level": "direction",
+      "content": "faulted Run 用错配密钥加扰了 pid_scope 范围。解扰侧按声明密钥解：结构自检失败（biss.descramble_failed）≠ 丢包 ≠ 位翻转。包检查器 BISS 标注显示 scrambled 态与密钥指纹。",
+      "requirement_ids": [
+        "REQ-SIM-204-P2"
+      ],
+      "standard_ref": null
+    },
+    {
+      "hint_id": "sc08-hint-3",
+      "trigger": "before Diagnose",
+      "level": "solution",
+      "content": "BISS_KEY_MISMATCH 用错 session word 加扰了 PID 0x0100。证据链：mutation log 密钥指纹（不落密钥本体）+ 解扰失败事件 + 声明指纹互链。恢复路径同前。Mode E 变体见 SPEC-611（ESW 带外、Injected ID 静态预置）。",
+      "requirement_ids": [
+        "REQ-SIM-204-P2"
+      ],
+      "standard_ref": null
+    }
+  ],
+  "pass_criteria": [
+    {
+      "criterion_id": "fault-cleared",
+      "kind": "fault_inactive",
+      "mandatory": true,
+      "fault_id": "fd000000-0000-4000-8000-00000000f100"
+    }
+  ],
+  "hidden_reference_solution": "恢复路径：空 fault_plan 重跑新 Run。fault_inactive 判据三段核对同前。教学锚点（roadmap §4 C1 订正）：BISS Mode 1 密钥为 12 位十六进制（48-bit）session word；Mode E = 固定 Session Key 加密 SW 成 16 位十六进制 ESW 带外下发 + 静态 128-bit Injected/Buried ID 预置接收端（不在流中传输）；BISS 无 ECM（CA_PID 固定 0x1FFF，Tech 3292）；底层 BISS1 = DVB-CSA1 + DES，BISS2 = DVB-CISSA（TS 103 127）+ AES-128。",
+  "biss": {
+    "mode": "1",
+    "session_word": "aaaaaaaaaaaa",
+    "pid_scope": [
+      256
+    ],
+    "ca_pid": 8191
+  }
+}
