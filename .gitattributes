@@ -1,0 +1,4 @@
+# Windows-first（ADR-0004）：脚本类文件在任意环境检出都保持 CRLF，
+# 避免 cmd 批处理在 LF-only 下 goto/label 解析的边缘问题
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
