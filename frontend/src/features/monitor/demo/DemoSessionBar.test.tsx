@@ -165,8 +165,8 @@ describe("DemoSessionBar — failed (§8 row 1: explicit reason + start.cmd hint
     expect(row.textContent).toContain("失败");
     expect(row.textContent).toContain("SIM_RUN_FAILED: inject exploded");
 
-    // The frozen §8 hint (verbatim guidance).
-    expect(screen.getByTestId("demo-failure-hint")).toHaveTextContent(/后端未运行？`start.cmd`/);
+    // The frozen §8 hint (verbatim guidance, spec punctuation).
+    expect(screen.getByTestId("demo-failure-hint")).toHaveTextContent("后端未运行？`start.cmd`");
     // 已建会话保留可手动清理: the kept id is visible and cleanup works.
     expect(screen.getByTestId("demo-session-bar").textContent).toContain(SESSION);
     const cleanup = screen.getByTestId("demo-cleanup");
