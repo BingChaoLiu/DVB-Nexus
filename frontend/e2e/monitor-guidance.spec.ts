@@ -98,9 +98,9 @@ test("session-list guide seat: entry copy, demo placeholder, list rows, row trac
   await expect(guide).toContainText("尚未选择任何 session");
   await expect(guide).toContainText("从 Lab 选场景开始实验后自动进入；或一键演示；或在最近列表选择；或手输 UUID");
 
-  // the demo button holds the primary button position as a disabled
-  // placeholder (behavior = ticket #99; no fake clickability)
-  await expect(page.getByTestId("monitor-demo-start")).toBeDisabled();
+  // the demo button holds the primary button position, wired by ticket #99
+  // (idle enabled; the orchestration chain itself is demo-session.spec.ts)
+  await expect(page.getByTestId("monitor-demo-start")).toBeEnabled();
 
   // the recent list renders both sessions (created_at DESC; lifecycle wire
   // badge verbatim; plain sessions carry the explicit 无场景 marker)
