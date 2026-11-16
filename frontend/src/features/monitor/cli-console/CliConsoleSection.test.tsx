@@ -61,7 +61,7 @@ describe("CliConsoleSection — data composition", () => {
   it("200 + [] with 全部: honest empty state", async () => {
     resolveWith([]);
     renderSection();
-    expect(await screen.findByText(/该会话暂无 TSDuck 调用记录/)).toBeInTheDocument();
+    expect(await screen.findByText(/TSDuck 调用记录与来源区分（来源标识 ≠ 双解析器 diff）/)).toBeInTheDocument();
   });
 
   it("filtering four-value selection over live tsduck rows: non-tsduck selection shows the honest filtered-empty (hardware MVP note)", async () => {
@@ -80,7 +80,7 @@ describe("CliConsoleSection — data composition", () => {
   it("run_id filter input passes the value into the §4.8 query", async () => {
     resolveWith([]);
     renderSection();
-    await screen.findByText(/该会话暂无 TSDuck 调用记录/);
+    await screen.findByText(/TSDuck 调用记录与来源区分（来源标识 ≠ 双解析器 diff）/);
     await userEvent.type(screen.getByLabelText("run id 过滤"), "run-9");
     // debounce-free: each keystroke re-queries; the LAST call carries the full value
     await vi.waitFor(() => {
@@ -105,7 +105,7 @@ describe("CliConsoleSection — data composition", () => {
     );
     renderSection();
     expect(await screen.findByText(/会话不存在/)).toBeInTheDocument();
-    expect(screen.queryByText(/该会话暂无 TSDuck 调用记录/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/TSDuck 调用记录与来源区分（来源标识 ≠ 双解析器 diff）/)).not.toBeInTheDocument();
   });
 });
 
@@ -136,7 +136,7 @@ describe("Region tab mount (R1) — minimal additive", () => {
     expect(screen.getByRole("heading", { name: "诊断" })).toBeInTheDocument();
     // CLI tab swaps the stack
     await userEvent.click(screen.getByRole("tab", { name: "CLI 对照" }));
-    expect(await screen.findByText(/该会话暂无 TSDuck 调用记录/, {}, { timeout: 3_000 })).toBeInTheDocument();
+    expect(await screen.findByText(/TSDuck 调用记录与来源区分（来源标识 ≠ 双解析器 diff）/ , {}, { timeout: 3_000 })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "运行控制" })).not.toBeInTheDocument();
     // stream tab restores the SPEC-403 panels
     await userEvent.click(screen.getByRole("tab", { name: "Stream Monitor" }));

@@ -65,9 +65,10 @@ test("honest empty state on a real session (MVP produces no TSDuck calls)", asyn
   await expect(page.getByRole("heading", { name: "运行控制" })).toBeVisible();
 
   await openCliTab(page, sessionId);
-  await expect(page.getByText("该会话暂无 TSDuck 调用记录")).toBeVisible();
+  // §4.6 Monitor 组行 10 逐字文案(SPEC-408 落笔权威表替换后)
+  await expect(page.getByText(/TSDuck 调用记录与来源区分（来源标识 ≠ 双解析器 diff）/)).toBeVisible();
   // Clean-refusal sentence is part of the copy contract (CONTEXT.md ban).
-  await expect(page.getByText(/不是[「"]?无问题[」"]?的信号/)).toBeVisible();
+  await expect(page.getByText(/不是[「"]?无问题[」"]?信号/)).toBeVisible();
   // The four-value filter vocabulary is fully present even in the empty view.
   for (const value of ["generator", "internal_parser", "tsduck", "hardware"]) {
     await expect(page.getByRole("button", { name: value })).toBeVisible();

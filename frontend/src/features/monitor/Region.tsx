@@ -1,22 +1,37 @@
-// Stream Monitor page (SPEC-403): control bar + overview card + run trigger
-// + PID/metrics + alerts + diagnoses + verify + journal tail, all scoped to
-// one tracked session (/monitor?session=<id>). Real-time = journal/hint
-// throttled refetch via the #61 bridge (useSessionStream) — never streaming
-// DOM. Queries here are the ONLY REST faces; freshness follows the SPEC-305
-// §8 matrix (summary has no hint row: refreshed on mount/actions/manual).
+// Stream Monitor page (SPEC-403 §4.1): control bar + overview card + run
+// trigger + PID/metrics + alerts + diagnoses + verify + journal tail, all
+// scoped to one tracked session (/monitor?session=<id>). Real-time = journal
+// /hint throttled refetch via the #61 bridge (useSessionStream) — never
+// streaming DOM. Queries here are the ONLY REST faces; freshness follows the
+// SPEC-305 §8 matrix (summary has no hint row: refreshed on mount/actions/
+// manual).
 //
-// Feature-local query keys: the canonical vocabulary (src/query/keys.ts) is a
-// shared face this ticket does not modify; these keys follow the same
-// <prefix, sessionId> convention, are exported from the components barrel for
-// #65/#67 reuse, and are candidates for a one-line keys.ts additive landing.
+// Guidance layer (SPEC-408 §4.3, ticket #95): without a session param the
+// page renders the 会话列表区 guide seat (recent-session list as the main
+// seat, the 一键演示 placeholder in the primary button position — wiring is
+// ticket #99's, the manual-UUID fallback degraded to second use). A session
+// that does not exist server-side (REST 404 / WS 4404) renders the explicit
+// unknown-session state (§4.6 row 0), never an error stack. The header
+// carries the source-scenario link back to Lab (zero state params — the
+// Lab→Monitor inspect_* deep link stays untouched). The verify form is
+// wired to the §7.5 editable prefill (scenario_id ← session detail,
+// version/content_hash ← scenario detail, baseline/recovery candidates ←
+// the run list datalist); runs are never auto-guessed.
+//
+// Feature-local query keys: the canonical vocabulary (src/query/keys.ts)
+ // now carries the sessions prefix (ticket #95 additive); monitorKeys below
+// remain the feature-local diagnosis/report keys.
 import { useCallback, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useSearchParams } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import type { DiagnosisEvidenceDTO, DiagnosisReportDTO, RunStatusDTO, VerificationResultDTO } from "./types";
 import {
   diagnoseRun,
   getRun,
   getSnapshot,
+  getSessionDetail,
+  getScenario,
+  listSessionRuns,
   listDiagnoses,
   queryAlerts,
   queryMetrics,
@@ -50,16 +65,17 @@ import { MetricsPanel } from "./metrics/MetricsPanel";
 import { useSessionStream } from "./stream/useSessionStream";
 import { VerifyResultCard } from "./verify/VerifyResultCard";
 import { VerifyRunForm, type VerifyRunPayload } from "./verify/VerifyRunForm";
-import { EmptyState } from "../../components/ui";
-// SPEC-405 CLI console (ticket #66, approved R1): minimal additive mount —
-// one import + one tab state + conditional wrap. The stream tab renders the
-// SPEC-403 panels exactly as before; the CLI tab renders the #66-owned
-// section. routes.tsx top-level three-area nav is deliberately unchanged.
+// SPEC-405 CLI console (ticket #66, approved R1): stream = the SPEC-403
+// panels (default); cli = the #66 CLI console section.
 import { CliConsoleSection } from "./cli-console/CliConsoleSection";
 import "./cli-console/cli-console.css";
+import { MONITOR_EMPTY_STATE_COPY } from "./copy";
+import { ThreeQuestionState } from "./ThreeQuestionState";
+import { SessionList } from "./sessionList/SessionList";
+import { isUnknownSessionState } from "./unknownSession";
 import "./monitor.css";
 
-/** Feature-local canonical-convention keys (see file header note). */
+/** Feature-local canonical-convention keys (diagnoses/report faces). */
 export const monitorKeys = {
   diagnoses: (sessionId: string) => ["diagnoses", sessionId] as const,
   report: (sessionId: string) => ["diagnosis-report", sessionId] as const,
@@ -79,6 +95,10 @@ const RUN_POLL_DEADLINE_MS = 30_000;
 const DIAGNOSE_404_RETRY_WINDOW_MS = 10_000;
 const DIAGNOSE_404_RETRY_INTERVAL_MS = 100;
 
+/** A complete session UUID tracks on input (输入即跟踪, §4.3 手输兜底); anything
+ * else waits for the explicit submit (no partial-id navigation). */
+const SESSION_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export default function MonitorRegion() {
   const [searchParams, setSearchParams] = useSearchParams();
   const sessionId = searchParams.get("session");
@@ -89,14 +109,32 @@ export default function MonitorRegion() {
   return <MonitorPage key={sessionId} sessionId={sessionId} onUntrack={() => setSearchParams({})} />;
 }
 
+/** 会话列表区(SPEC-408 §4.3;§4.6 row 1 copy verbatim). The main seat is the
+ * recent-session list; the demo button holds the primary button position as
+ * a placeholder (ticket #99 wires the behavior — disabled, no fake
+ * clickability); the manual-UUID form is the degraded fallback. */
 function SessionGuide({ onTrack }: { onTrack: (sessionId: string) => void }) {
   const [draft, setDraft] = useState("");
+  const changeDraft = (value: string) => {
+    setDraft(value);
+    const trimmed = value.trim();
+    if (SESSION_UUID_RE.test(trimmed)) onTrack(trimmed);
+  };
   return (
     <div className="dvb-region dvb-mon-page">
       <h2>Monitor</h2>
-      <p className="dvb-mon-guide">
-        输入 session id 以跟踪（无 session 列表端点；会话由拓扑区/实验区创建后在此跟踪）。
-      </p>
+      <ThreeQuestionState copy={MONITOR_EMPTY_STATE_COPY.entry} testid="monitor-entry-guide" />
+      <div className="dvb-mon-guide-actions">
+        <button
+          type="button"
+          data-testid="monitor-demo-start"
+          disabled
+          title="一键演示编排由后续票接线;当前为占位(不给假可点)。"
+        >
+          一键演示
+        </button>
+      </div>
+      <SessionList onTrack={onTrack} />
       <form
         className="dvb-mon-session-form"
         onSubmit={(e) => {
@@ -108,9 +146,12 @@ function SessionGuide({ onTrack }: { onTrack: (sessionId: string) => void }) {
           aria-label="session id"
           placeholder="session id"
           value={draft}
-          onChange={(e) => setDraft(e.target.value)}
+          onChange={(e) => changeDraft(e.target.value)}
         />
         <button type="submit">跟踪</button>
+        <p className="dvb-mon-note dvb-mon-fallback-note">
+          手输 UUID(输入 session id 即跟踪:完整 UUID 输入后自动进入;非 UUID 形状的 id 回车或点「跟踪」提交)。列表覆盖不到时的兜底。
+        </p>
       </form>
     </div>
   );
@@ -118,19 +159,25 @@ function SessionGuide({ onTrack }: { onTrack: (sessionId: string) => void }) {
 
 function MonitorPage({ sessionId, onUntrack }: { sessionId: string; onUntrack: () => void }) {
   const queryClient = useQueryClient();
-  const wsStatus = useSessionStream(sessionId);
-  // SPEC-404 §4.2 deep-link entry: read-only (the tracker owns the param
-  // surface; this page never writes inspect_* params back).
-  const [searchParams] = useSearchParams();
+  const { status: wsStatus, closeCode: wsCloseCode } = useSessionStream(sessionId);
+  // SPEC-404 §4.2 deep-link entry: read-only for inspect_* (the tracker owns
+  // that param surface; this page never writes inspect_* params back). The
+  // setter is used by the unknown-session state's reselection path only.
+  const [searchParams, setSearchParams] = useSearchParams();
   // SPEC-405 mount (R1): stream = the SPEC-403 panels (default, unchanged);
-  // cli = the #66 CLI console section. Only the tab bar + conditional wrap
-  // below are additive; every existing panel is untouched.
+  // cli = the #66 CLI console section.
   const [section, setSection] = useState<"stream" | "cli">("stream");
 
   // --- server state (all queries session-scoped) ---------------------------
   const snapshotQuery = useQuery({
     queryKey: [...qk.snapshot(sessionId)],
     queryFn: () => getSnapshot(sessionId),
+  });
+  // SPEC-408 §6.2 detail read-back (ticket #95): provenance pair + the
+  // unknown-session 404 signal + the verify prefill scenario_id source.
+  const detailQuery = useQuery({
+    queryKey: [...qk.sessionDetail(sessionId)],
+    queryFn: () => getSessionDetail(sessionId),
   });
   const summaryQuery = useQuery({
     queryKey: [...qk.summary(sessionId)],
@@ -149,6 +196,31 @@ function MonitorPage({ sessionId, onUntrack }: { sessionId: string; onUntrack: (
     queryKey: [...qk.metrics(sessionId), metricsBody],
     queryFn: () => queryMetrics(sessionId, metricsBody!),
     enabled: metricsBody !== null,
+  });
+
+  // --- provenance (source-scenario link + verify prefill identity) ---------
+  const scenarioId = detailQuery.data?.scenario_id ?? null;
+  const scenarioQuery = useQuery({
+    queryKey: [...qk.scenario(scenarioId ?? "")],
+    queryFn: () => getScenario(scenarioId!),
+    enabled: scenarioId !== null,
+  });
+  // SPEC-408 §6.3 run list (ticket #95): the datalist source across
+  // refresh/deep-link/manual entry (submitted_at ASC per contract).
+  const runsListQuery = useQuery({
+    queryKey: [...qk.sessionRuns(sessionId)],
+    queryFn: () => listSessionRuns(sessionId),
+  });
+
+  // --- unknown-session explicit state (§4.6 row 0) --------------------------
+  // Two signal routes, both server facts: a session-scoped REST read
+  // answering 404 (snapshot/detail) or the WS permanent close 4404. The
+  // state replaces the panel stack (never an error stack).
+  const snapshotNotFound = snapshotQuery.error instanceof ApiError && snapshotQuery.error.status === 404;
+  const detailNotFound = detailQuery.error instanceof ApiError && detailQuery.error.status === 404;
+  const unknownSession = isUnknownSessionState({
+    sessionHttpNotFound: snapshotNotFound || detailNotFound,
+    wsCloseCode: wsCloseCode,
   });
 
   // --- run registry (page state; facts always from getRun answers) ---------
@@ -172,6 +244,7 @@ function MonitorPage({ sessionId, onUntrack }: { sessionId: string; onUntrack: (
           await new Promise((resolve) => setTimeout(resolve, RUN_POLL_INTERVAL_MS));
         }
         void queryClient.invalidateQueries({ queryKey: [...qk.snapshot(sessionId)] });
+        void queryClient.invalidateQueries({ queryKey: [...qk.sessionRuns(sessionId)] });
       } finally {
         setRunBusy(false);
       }
@@ -290,13 +363,67 @@ function MonitorPage({ sessionId, onUntrack }: { sessionId: string; onUntrack: (
     [sessionId],
   );
 
-  const runCandidates = useMemo(() => runs.map((run) => run.run_id), [runs]);
+  // Run candidates: the page registry (newest first) merged with the server
+  // run list (contract ASC order) — the datalist source survives refresh /
+  // deep-link / manual entry (SPEC-408 §6.3; dedup keeps one option per id).
+  const runCandidates = useMemo(() => {
+    const seen = new Set<string>();
+    const merged: string[] = [];
+    for (const run of runs) {
+      if (!seen.has(run.run_id)) {
+        seen.add(run.run_id);
+        merged.push(run.run_id);
+      }
+    }
+    for (const item of runsListQuery.data ?? []) {
+      if (!seen.has(item.run_id)) {
+        seen.add(item.run_id);
+        merged.push(item.run_id);
+      }
+    }
+    return merged;
+  }, [runs, runsListQuery.data]);
+
+  if (unknownSession) {
+    // 未知会话态(§4.6 row 0,文案逐字):显式态替换面板栈;动作 = 回 Lab 开新
+    // 实验;重新选择 = 下方最近列表(SessionGuide)。
+    return (
+      <div className="dvb-region dvb-mon-page">
+        <header className="dvb-mon-page-header">
+          <h2>Monitor</h2>
+          <span className="dvb-mon-session">session: {sessionId}</span>
+          <Badge tone="neutral">ws: {wsStatus}</Badge>
+          <button type="button" onClick={() => { onUntrack(); }}>
+            取消跟踪
+          </button>
+        </header>
+        <section data-testid="monitor-unknown-session">
+          <ThreeQuestionState copy={MONITOR_EMPTY_STATE_COPY.unknownSession} />
+          <Link className="dvb-mon-back-lab" to="/lab">
+            回 Lab 开新实验
+          </Link>
+        </section>
+        <SessionGuide onTrack={(id) => setSearchParams({ session: id })} />
+      </div>
+    );
+  }
 
   return (
     <div className="dvb-region dvb-mon-page">
       <header className="dvb-mon-page-header">
         <h2>Monitor</h2>
         <span className="dvb-mon-session">session: {sessionId}</span>
+        {/* 来源场景(§4.3):仅来源回跳、零状态参数;Lab→Monitor 三元组深链
+            (inspect_*)维持不变、不追加参数。 */}
+        {scenarioId !== null && (
+          <Link
+            className="dvb-mon-scenario"
+            data-testid="monitor-source-scenario"
+            to={`/lab?scenario=${encodeURIComponent(scenarioId)}`}
+          >
+            来源场景:{scenarioId} ↗
+          </Link>
+        )}
         <Badge tone="neutral">ws: {wsStatus}</Badge>
         <button type="button" onClick={() => { onUntrack(); }}>
           取消跟踪
@@ -393,12 +520,23 @@ function MonitorPage({ sessionId, onUntrack }: { sessionId: string; onUntrack: (
       </Panel>
 
       <Panel title="Verify">
-        <VerifyRunForm runCandidates={runCandidates} onSubmit={(payload) => void triggerVerify(payload)} />
+        {/* §7.5 可编辑预填:scenario_id ← 会话详情;version/content_hash ← 场景
+            详情(真实钉扎哈希);baseline/recovery ← run 列表 datalist。全部可改;
+            run 永不自动猜——用户未明确选择前不发 verify 请求。 */}
+        <VerifyRunForm
+          runCandidates={runCandidates}
+          prefill={{
+            scenarioId: detailQuery.data?.scenario_id ?? null,
+            version: scenarioQuery.data?.version ?? null,
+            contentHash: scenarioQuery.data?.content_hash ?? null,
+          }}
+          onSubmit={(payload) => void triggerVerify(payload)}
+        />
         {verifyBusy && <p className="dvb-mon-line">判定中…</p>}
         {verifyError !== null && <p className="dvb-mon-error">{verifyError}</p>}
         {verifyResult !== null && <VerifyResultCard result={verifyResult} />}
         {verifyResult === null && !verifyBusy && verifyError === null && (
-          <EmptyState title="尚无判定结果" note="提交 verify 请求后在此渲染服务端三态判定（无本地推导）。" />
+          <ThreeQuestionState copy={MONITOR_EMPTY_STATE_COPY.verify} />
         )}
       </Panel>
 

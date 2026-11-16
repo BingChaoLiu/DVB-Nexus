@@ -8,6 +8,8 @@
 import type { ReactNode } from "react";
 import type { DiagnosisCandidateDTO, DiagnosisDTO, DiagnosisEvidenceDTO } from "../types";
 import { Badge, EmptyState } from "../../../components/ui";
+import { MONITOR_EMPTY_STATE_COPY } from "../copy";
+import { ThreeQuestionState } from "../ThreeQuestionState";
 import { orderDiagnoses } from "./order";
 
 export interface DiagnosisSharedProps {
@@ -70,7 +72,8 @@ export function DiagnosisList({ diagnoses, onEvidenceSelect, context }: Diagnosi
     <div className="dvb-mon-diagnosis-list">
       {context !== undefined && <div className="dvb-mon-context">{context}</div>}
       {ordered.length === 0 ? (
-        <EmptyState title="无诊断记录" note="该 session 尚无 diagnoses 表行（不代表码流干净）。" />
+        // §4.6 Monitor 组行 6(文案逐字):候选 ≠ 事实,不代表码流干净。
+        <ThreeQuestionState copy={MONITOR_EMPTY_STATE_COPY.diagnosis} />
       ) : (
         <ul className="dvb-mon-rows">
           {ordered.map((d) => (

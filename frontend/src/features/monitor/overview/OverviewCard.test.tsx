@@ -5,6 +5,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { SnapshotDTO, SummaryDataDTO } from "../types";
+import { MONITOR_EMPTY_STATE_COPY } from "../copy";
 import { DEFAULT_RUN_CONFIG_JSON, OverviewCard, RunTrigger } from "./OverviewCard";
 
 const summary: SummaryDataDTO = {
@@ -55,9 +56,45 @@ describe("OverviewCard — summary + snapshot view fields", () => {
     expect(screen.getByText(/generated_ts/)).toBeInTheDocument();
   });
 
-  it("renders an explicit empty state while data has not arrived", () => {
+  it("renders the §4.6 row-2 three-question copy while data has not arrived (verbatim via copy constants)", () => {
     render(<OverviewCard summary={undefined} snapshot={undefined} />);
-    expect(screen.getByText(/等待数据/)).toBeInTheDocument();
+    const c = MONITOR_EMPTY_STATE_COPY.overview;
+    expect(screen.getByText(c.what)).toBeInTheDocument();
+    expect(screen.getByText(c.why)).toBeInTheDocument();
+    expect(screen.getByText(`下一步:${c.next}`)).toBeInTheDocument();
+  });
+});
+
+describe("RunTrigger — §4.6 row-3 empty face", () => {
+  it("renders the row-3 three-question copy when the registry is empty (新增行,文案逐字)", () => {
+    render(<RunTrigger onSubmit={vi.fn()} runs={[]} busy={false} />);
+    const c = MONITOR_EMPTY_STATE_COPY.runTrigger;
+    expect(screen.getByText(c.what)).toBeInTheDocument();
+    expect(screen.getByText(c.why)).toBeInTheDocument();
+    expect(screen.getByText(`下一步:${c.next}`)).toBeInTheDocument();
+  });
+
+  it("hides the row-3 face once a run is registered (zero noise)", () => {
+    render(
+      <RunTrigger
+        onSubmit={vi.fn()}
+        runs={[
+          {
+            run_id: "r-1",
+            status: "completed",
+            config_hash: "h",
+            generator_version: "g",
+            packet_count: 600,
+            byte_count: 1,
+            virtual_duration_ns: 1,
+            artifacts: [],
+            warnings: [],
+          } as never,
+        ]}
+        busy={false}
+      />,
+    );
+    expect(screen.queryByText(/本页尚无已注册的 run/)).not.toBeInTheDocument();
   });
 });
 

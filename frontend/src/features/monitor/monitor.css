@@ -24,6 +24,52 @@
   color: var(--dvb-muted);
 }
 
+/* SPEC-408 §4.3 guidance layer (ticket #95): guide seat layout faces. */
+.dvb-mon-guide-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dvb-mon-guide-actions button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.dvb-mon-guide-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dvb-mon-list-title {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--dvb-muted);
+}
+
+.dvb-mon-fallback-note {
+  margin: 4px 0 0;
+  font-size: 0.85rem;
+}
+
+.dvb-mon-next {
+  color: var(--dvb-accent);
+}
+
+.dvb-mon-scenario,
+.dvb-mon-back-lab {
+  font-family: var(--dvb-mono);
+  font-size: 0.85rem;
+  color: var(--dvb-accent);
+  text-decoration: none;
+}
+
+.dvb-mon-scenario:hover,
+.dvb-mon-back-lab:hover {
+  text-decoration: underline;
+}
+
 .dvb-mon-session-form,
 .dvb-mon-diagnose-bar,
 .dvb-mon-querybar {

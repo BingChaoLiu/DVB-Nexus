@@ -8,9 +8,44 @@ export type CreateSessionRequest = components["schemas"]["CreateSessionRequest"]
 export type SessionViewDTO = components["schemas"]["SessionViewDTO"];
 export type SnapshotDTO = components["schemas"]["SnapshotDTO"];
 export type SessionValidationDTO = components["schemas"]["SessionValidationDTO"];
+// SPEC-408 §6 read increments (wire by ticket #94; consumed by #95's guidance
+// layer). Types come from the generated chain — no hand-written mirrors.
+export type SessionListItemDTO = components["schemas"]["SessionListItemDTO"];
+export type SessionDetailDTO = components["schemas"]["SessionDetailDTO"];
+export type RunListItemDTO = components["schemas"]["RunListItemDTO"];
 
 export function createSession(body: CreateSessionRequest) {
   return unwrap<SessionViewDTO>(client.POST("/api/v1/sessions", { body }));
+}
+
+/** GET /sessions — newest-first recent list (server default limit 20, cap 100).
+ * The rows answer in contract order; the frontend never re-sorts. */
+export function listSessions(limit?: number) {
+  return unwrap<SessionListItemDTO[]>(
+    client.GET("/api/v1/sessions", {
+      params: { query: limit === undefined ? {} : { limit } },
+    }),
+  );
+}
+
+/** GET /sessions/{id} — the detail read-back (provenance pair scenario_id? +
+ * created_at_ms; SPEC-408 §6.2). Unknown id → 404 SIM_SESSION_NOT_FOUND. */
+export function getSessionDetail(sessionId: string) {
+  return unwrap<SessionDetailDTO>(
+    client.GET("/api/v1/sessions/{session_id}", {
+      params: { path: { session_id: sessionId } },
+    }),
+  );
+}
+
+/** GET /sessions/{id}/runs — submitted_at ASC (the eight-step narrative
+ * order, SPEC-408 §6.3); no pagination, frontend never re-sorts. */
+export function listSessionRuns(sessionId: string) {
+  return unwrap<RunListItemDTO[]>(
+    client.GET("/api/v1/sessions/{session_id}/runs", {
+      params: { path: { session_id: sessionId } },
+    }),
+  );
 }
 
 export function validateSession(sessionId: string) {

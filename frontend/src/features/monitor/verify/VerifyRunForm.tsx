@@ -3,6 +3,15 @@
 // six-kind closed set; at least one criterion row is required (the wire's
 // min-1). ui_state is NEVER emitted — the engine accepts-and-ignores it and
 // it must not become an evidence channel (CONTEXT.md 通关 ban).
+//
+// SPEC-408 §7.5 (ticket #95): the identity triple arrives as an editable
+// prefill — scenario_id ← the session detail read-back, version/content_hash
+// ← the scenario detail (real pinned hash; the SPEC-406 §7.4 marker-string
+// posture is retired). The run candidates come through the datalist ONLY:
+// runs are never auto-guessed — until the user picks/types both runs there
+// is no submission (提交即声明; prefill never becomes a silent request).
+// Every prefilled value stays user-editable: an explicit user edit wins over
+// the prefill for the rest of the form's life.
 import { useState } from "react";
 import type { FormEvent } from "react";
 import type { PassCriterionDTO, VerifyRunRequest } from "../types";
@@ -11,6 +20,14 @@ import { VERIFY_CRITERION_KINDS } from "./VerifyResultCard";
 export interface VerifyRunPayload {
   recoveryRunId: string;
   body: VerifyRunRequest;
+}
+
+/** Editable prefill sources (SPEC-408 §7.5). `null` = the source honestly has
+ * nothing (e.g. a plain session's scenario_id) — the field stays empty. */
+export interface VerifyPrefill {
+  scenarioId?: string | null;
+  version?: string | null;
+  contentHash?: string | null;
 }
 
 interface CriterionDraft {
@@ -22,17 +39,25 @@ interface CriterionDraft {
 
 export function VerifyRunForm({
   runCandidates,
+  prefill,
   onSubmit,
 }: {
   /** Run ids observed on the page (run registry + journal observations). */
   runCandidates: readonly string[];
+  /** Three-source identity prefill (§7.5); absent = manual-only posture. */
+  prefill?: VerifyPrefill;
   onSubmit: (payload: VerifyRunPayload) => void;
 }) {
   const [recoveryRunId, setRecoveryRunId] = useState("");
   const [baselineRunId, setBaselineRunId] = useState("");
-  const [scenarioId, setScenarioId] = useState("");
-  const [version, setVersion] = useState("");
-  const [contentHash, setContentHash] = useState("");
+  // override = the user's explicit edit; it wins over any prefill value.
+  // Otherwise the live prefill is mirrored (so late-arriving read-backs land).
+  const [scenarioOverride, setScenarioOverride] = useState<string | null>(null);
+  const [versionOverride, setVersionOverride] = useState<string | null>(null);
+  const [hashOverride, setHashOverride] = useState<string | null>(null);
+  const scenarioId = scenarioOverride ?? prefill?.scenarioId ?? "";
+  const version = versionOverride ?? prefill?.version ?? "";
+  const contentHash = hashOverride ?? prefill?.contentHash ?? "";
   const [criteria, setCriteria] = useState<CriterionDraft[]>([
     { criterion_id: "", kind: VERIFY_CRITERION_KINDS[4]!, mandatory: true, fault_id: "" },
   ]);
@@ -94,15 +119,23 @@ export function VerifyRunForm({
       </label>
       <label>
         scenario_id
-        <input aria-label="scenario_id" value={scenarioId} onChange={(e) => setScenarioId(e.target.value)} />
+        <input
+          aria-label="scenario_id"
+          value={scenarioId}
+          onChange={(e) => setScenarioOverride(e.target.value)}
+        />
       </label>
       <label>
         version
-        <input aria-label="version" value={version} onChange={(e) => setVersion(e.target.value)} />
+        <input aria-label="version" value={version} onChange={(e) => setVersionOverride(e.target.value)} />
       </label>
       <label>
         content_hash
-        <input aria-label="content_hash" value={contentHash} onChange={(e) => setContentHash(e.target.value)} />
+        <input
+          aria-label="content_hash"
+          value={contentHash}
+          onChange={(e) => setHashOverride(e.target.value)}
+        />
       </label>
       <fieldset className="dvb-mon-criteria">
         <legend>pass_criteria（min 1）</legend>

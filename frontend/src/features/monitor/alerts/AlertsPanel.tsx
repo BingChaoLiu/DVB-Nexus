@@ -4,7 +4,9 @@
 // qk.alerts via the shared bridge. The empty state is explicit: "no alert
 // records" is NOT "clean" (SPEC-206 §6 absence-vs-clean duality).
 import type { AlertRecordDTO } from "../types";
-import { Badge, EmptyState } from "../../../components/ui";
+import { Badge } from "../../../components/ui";
+import { MONITOR_EMPTY_STATE_COPY } from "../copy";
+import { ThreeQuestionState } from "../ThreeQuestionState";
 
 const SEVERITY_TONE: Record<string, "bad" | "warn" | "info" | "neutral"> = {
   critical: "bad",
@@ -18,10 +20,8 @@ export function AlertsPanel({ alerts, total }: { alerts: readonly AlertRecordDTO
     <div className="dvb-mon-alerts">
       <p className="dvb-mon-total">共 {total} 条（显示 {alerts.length}）</p>
       {alerts.length === 0 ? (
-        <EmptyState
-          title="无告警记录"
-          note="无记录 ≠ 干净：没有告警记录不代表观测确认无错误（SPEC-206 §6 对偶纪律）。"
-        />
+        // §4.6 Monitor 组行 5(文案逐字):无告警记录 ≠ 干净。
+        <ThreeQuestionState copy={MONITOR_EMPTY_STATE_COPY.alerts} />
       ) : (
         <ul className="dvb-mon-rows">
           {alerts.map((a) => (

@@ -6,7 +6,9 @@
 // this component emits the body (controlled presentation).
 import { useEffect, useState } from "react";
 import type { MetricsResponseDTO } from "../types";
-import { Badge, EmptyState } from "../../../components/ui";
+import { Badge } from "../../../components/ui";
+import { MONITOR_EMPTY_STATE_COPY } from "../copy";
+import { ThreeQuestionState } from "../ThreeQuestionState";
 import { pointDisplay } from "./format";
 
 /** The 15-item MVP metric catalog (SPEC-302 §4, names verbatim). */
@@ -81,7 +83,8 @@ export function MetricsPanel({
         <span className="dvb-mon-note">clock_domain sim:{sessionId}（必填，缺省/混形状由服务端 422 拒绝）</span>
       </div>
       {series.length === 0 ? (
-        <EmptyState title="无指标序列" note="该窗口内查询无返回序列（不代表指标为零）。" />
+        // §4.6 Monitor 组行 4(文案逐字):缺失 ≠ 零。
+        <ThreeQuestionState copy={MONITOR_EMPTY_STATE_COPY.metrics} />
       ) : (
         <ul className="dvb-mon-rows">
           {series.map((s) => {
