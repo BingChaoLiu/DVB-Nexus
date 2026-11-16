@@ -6,6 +6,8 @@ import { ReactFlowProvider } from "@xyflow/react";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
+import { IllegalEndHandlesContext, illegalHandleKey } from "./connectionFeedback";
+
 import type { TopologyFlowNode } from "./graphMapping";
 import { TopologyNode, handlesForNode } from "./TopologyNode";
 
@@ -80,5 +82,38 @@ describe("TopologyNode — port template handles (Handle id = port_id)", () => {
   it("renders the config pointer hint for types with a config_schema (#63 entry point)", () => {
     renderNode(nodeFixture());
     expect(screen.getByText("GeneratorConfigDTO")).toBeInTheDocument();
+  });
+});
+
+// §7.6 拖拽预览全量降透明 (review-fix F2): the page computes the per-handle
+// ILLEGAL END set during a drag and hands it down through
+// IllegalEndHandlesContext — a handle in the set carries the
+// dvb-topo-handle-illegal-end class (CSS dims it), one outside stays lit.
+describe("TopologyNode — §7.6 illegal-end preview class (context consumption)", () => {
+  const node = nodeFixture();
+
+  it("a handle inside the illegal set carries dvb-topo-handle-illegal-end", () => {
+    const { container } = render(
+      <IllegalEndHandlesContext.Provider value={new Set([illegalHandleKey("gen-0", "ts_out")])}>
+        <ReactFlowProvider>
+          <TopologyNode {...props(node)} />
+        </ReactFlowProvider>
+      </IllegalEndHandlesContext.Provider>,
+    );
+    expect(container.querySelector(".dvb-topo-handle.dvb-topo-handle-illegal-end")).not.toBeNull();
+  });
+
+  it("a handle outside the illegal set (or idle: default empty context) stays un-classed", () => {
+    const { container } = render(
+      <IllegalEndHandlesContext.Provider value={new Set<string>()}>
+        <ReactFlowProvider>
+          <TopologyNode {...props(node)} />
+        </ReactFlowProvider>
+      </IllegalEndHandlesContext.Provider>,
+    );
+    expect(container.querySelector(".dvb-topo-handle-illegal-end")).toBeNull();
+    // Default context (no provider) behaves the same idle way.
+    const idle = renderNode(nodeFixture());
+    expect(idle.container.querySelector(".dvb-topo-handle-illegal-end")).toBeNull();
   });
 });

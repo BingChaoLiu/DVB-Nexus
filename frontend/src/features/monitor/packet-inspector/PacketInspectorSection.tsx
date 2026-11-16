@@ -5,6 +5,8 @@
 // success (SPEC-404 §8).
 import "./packet-inspector.css";
 import type { DiagnosisEvidenceDTO } from "../types";
+import { MONITOR_EMPTY_STATE_COPY } from "../copy";
+import { ThreeQuestionState } from "../ThreeQuestionState";
 import { type HexRow, TS_SYNC_BYTE } from "./decode";
 import { usePacketDrillDown } from "./usePacketDrillDown";
 
@@ -65,7 +67,11 @@ export function PacketInspectorSection({
 }) {
   const state = usePacketDrillDown(locator);
 
-  if (locator === null || state.phase === "idle") return null;
+  if (locator === null || state.phase === "idle") {
+    // §4.6 Monitor 组行 7(文案逐字):未进入下钻时的显式指路面;不渲染
+    // packet-inspector 面板本体(无假面板)。
+    return <ThreeQuestionState copy={MONITOR_EMPTY_STATE_COPY.packetInspector} />;
+  }
 
   return (
     <section className="dvb-pi-panel" data-testid="packet-inspector" aria-label="packet inspector">

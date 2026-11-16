@@ -1,0 +1,85 @@
+/* Demo session bar styles (SPEC-408 §4.3, ticket #99). Tokens come from
+   styles/theme.css; the bar mirrors the journey bar chrome (full-width strip
+   under the wayfinding bar, permanent for the whole demo period). */
+
+.dvb-demo-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 20px;
+  border-bottom: 1px solid var(--dvb-border);
+  background: rgba(30, 41, 59, 0.4);
+  font-size: 13px;
+}
+
+.dvb-demo-bar-title {
+  margin: 0;
+  color: var(--dvb-muted);
+  font-weight: 600;
+}
+
+.dvb-demo-phase-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dvb-demo-phase-row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.dvb-demo-phase-label {
+  color: var(--dvb-muted);
+}
+
+.dvb-demo-phase-state {
+  font-weight: 600;
+}
+
+.dvb-demo-phase-done .dvb-demo-phase-state {
+  color: var(--dvb-accent);
+}
+
+.dvb-demo-phase-failed .dvb-demo-phase-state,
+.dvb-demo-phase-failed .dvb-demo-phase-detail {
+  color: #f87171;
+}
+
+.dvb-demo-phase-detail {
+  color: var(--dvb-muted);
+}
+
+.dvb-demo-failure-hint {
+  margin: 0;
+  color: #f87171;
+}
+
+.dvb-demo-declaration {
+  margin: 0;
+  font-weight: 600;
+}
+
+.dvb-demo-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.dvb-demo-session-id {
+  color: var(--dvb-muted);
+  font-family: var(--dvb-mono);
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.dvb-demo-error {
+  margin: 0;
+  color: #f87171;
+}

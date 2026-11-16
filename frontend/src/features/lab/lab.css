@@ -88,6 +88,41 @@
   gap: 0.5rem;
 }
 
+/* Collapsible per-stage hints inside the console (SPEC-408 §4.4
+   REQ-UI-408-011): a sibling of the five locator sections — never an
+   anchor target itself. */
+.dvb-lab-hints-details {
+  margin: 0.5rem 0;
+}
+
+.dvb-lab-hints-details > summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.dvb-lab-hints-status-line {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  align-items: baseline;
+}
+
+.dvb-lab-hints-status {
+  color: var(--dvb-text-muted, #4b5563);
+  font-size: 0.8125rem;
+}
+
+.dvb-lab-hints-storage-warn {
+  color: var(--dvb-warn, #b45309);
+  font-size: 0.8125rem;
+}
+
+.dvb-lab-hints-controls {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
 .dvb-lab-hint-list {
   list-style: none;
   margin: 0;
@@ -160,6 +195,152 @@
   display: flex;
   gap: 0.5rem;
   flex-wrap: wrap;
+}
+
+/* Current-action primary elevation (SPEC-408 §4.4 REQ-UI-408-010): the
+   current-action button — run triggers AND diagnose/verify alike, the
+   mechanism is block-agnostic — fills with the accent; everything else
+   keeps the browser-default secondary look. No ordinal decorations. */
+.dvb-lab-btn-primary {
+  background: var(--dvb-accent, #2563eb);
+  border: 1px solid var(--dvb-accent, #2563eb);
+  color: #ffffff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.dvb-lab-btn-primary:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+/* Always-on guidance bar under the Stepper (SPEC-408 §4.4 REQ-UI-408-008). */
+.dvb-lab-action-guide {
+  margin: 0;
+  padding: 0.45rem 0.75rem;
+  border: 1px solid var(--dvb-border, #d0d4dc);
+  border-left: 3px solid var(--dvb-accent, #2563eb);
+  border-radius: 6px;
+  background: var(--dvb-chip-bg, #f7f8fa);
+  font-size: 0.875rem;
+}
+
+/* Always-on auto-baseline declaration note ABOVE the Stepper (SPEC-408
+   §4.4/§7.3): honest automation disclosure — real sandbox data, automatic
+   submission only. Left rule uses the good tone to separate it from the
+   accent-ruled guidance bar below the Stepper. */
+.dvb-lab-autorun-note {
+  margin: 0 0 0.5rem;
+  padding: 0.45rem 0.75rem;
+  border: 1px solid var(--dvb-border, #d0d4dc);
+  border-left: 3px solid var(--dvb-good, #15803d);
+  border-radius: 6px;
+  background: var(--dvb-chip-bg, #f7f8fa);
+  font-size: 0.875rem;
+}
+
+/* Verify editable prefill form (SPEC-408 §7.5 同口径): a compact two-column
+   label/input grid; inputs keep the monospace posture for ids/hashes. */
+.dvb-lab-verify-form {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.35rem 0.75rem;
+  align-items: center;
+  max-width: 46rem;
+}
+
+.dvb-lab-verify-form label {
+  font-size: 0.8125rem;
+  color: var(--dvb-text-muted, #4b5563);
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+
+.dvb-lab-verify-form input {
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 0.8125rem;
+  padding: 0.25rem 0.4rem;
+  border: 1px solid var(--dvb-border, #d0d4dc);
+  border-radius: 4px;
+}
+
+/* initial_topology readability (SPEC-408 §4.4 REQ-UI-408-012): the stats
+   line, the Chinese-labelled structured rows, and the verbatim raw fold. */
+.dvb-lab-topology-stats {
+  font-size: 0.875rem;
+  color: var(--dvb-text-muted, #4b5563);
+}
+
+.dvb-lab-topology-structured {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.dvb-lab-topology-structured ul {
+  list-style: none;
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.dvb-lab-topology-raw {
+  margin-top: 0.35rem;
+}
+
+.dvb-lab-topology-raw > summary {
+  cursor: pointer;
+  color: var(--dvb-text-muted, #4b5563);
+  font-size: 0.8125rem;
+}
+
+.dvb-lab-topology-raw ul {
+  list-style: none;
+  margin: 0.35rem 0 0;
+  padding: 0;
+}
+
+.dvb-lab-error-state {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+
+/* Stepper current-action pointer marker (render-layer orientation aid,
+   NOT a fact and NOT a punch card — light-up stays fact-driven). */
+.dvb-lab-step-current {
+  outline: 1px solid var(--dvb-accent, #2563eb);
+  border-radius: 4px;
+}
+
+/* Stepper steps are buttons now (定位非打卡) — reset the chrome away so the
+   strip keeps its former look; clicking locates, it never stamps. */
+button.dvb-lab-step {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+/* Scroll-locator flash (SPEC-408 §4.4「高亮闪示」): a one-shot background
+   pulse on the targeted section; removed again by the console after
+   FLASH_RESET_MS. */
+@keyframes dvb-lab-section-flash-pulse {
+  0% {
+    background-color: color-mix(in srgb, var(--dvb-accent, #2563eb) 16%, transparent);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+.dvb-lab-section-flash {
+  animation: dvb-lab-section-flash-pulse 1.1s ease-out forwards;
+  border-radius: 6px;
 }
 
 .dvb-lab-error,

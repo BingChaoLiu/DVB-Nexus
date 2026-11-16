@@ -26,6 +26,9 @@ export interface WireOptions {
   onStatus?: (status: StreamStatus) => void;
   /** Resume cursor override (default: the cached journal watermark). */
   lastJournalSeq?: number;
+  /** Close-code forwarding (SPEC-408 §4.3, ticket #95): 4404 feeds the
+   * page's unknown-session state; every code is forwarded verbatim. */
+  onClose?: (code: number) => void;
 }
 
 export interface WiredStream {
@@ -55,6 +58,7 @@ export function wireSessionStream(queryClient: QueryClient, options: WireOptions
     socketFactory: options.socketFactory,
     lastJournalSeq: options.lastJournalSeq ?? journalWatermark(queryClient, options.sessionId) ?? undefined,
     onStatus: options.onStatus,
+    onClose: options.onClose,
     onJournal: (envelope: JournalEnvelope) => {
       applyJournalFrame(queryClient, options.sessionId, envelope);
     },
@@ -79,24 +83,42 @@ export function wireSessionStream(queryClient: QueryClient, options: WireOptions
  * subscribes on mount (resuming from the cached watermark on remount —
  * SPEC-501 §5 recovery posture) and closes on unmount/session change.
  * Returns the transport status for the neutral header badge (best-effort
- * pointer-layer visibility; carries no verdict semantics).
+ * pointer-layer visibility; carries no verdict semantics) plus the latest
+ * WS close code (null until a close is observed) — 4404
+ * (CLOSE_SESSION_UNKNOWN) is the unknown-session state's second signal
+ * route (SPEC-408 §4.3, ticket #95). `options.socketFactory` is a
+ * test-only injection seam (production callers omit it).
  */
-export function useSessionStream(sessionId: string | null): StreamStatus {
+export function useSessionStream(
+  sessionId: string | null,
+  options?: { socketFactory?: (url: string) => import("../../../ws/SessionStream").MinimalSocket },
+): { status: StreamStatus; closeCode: number | null } {
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<StreamStatus>("idle");
+  const [closeCode, setCloseCode] = useState<number | null>(null);
+  // The injection seam is captured once per hook instance: identity churn in
+  // the (test-only) factory must never remount the live stream. The extra
+  // lambda matters — useState treats a bare function argument as a lazy
+  // initializer, which would store the factory's RETURN VALUE as the state.
+  const [socketFactory] = useState(() => options?.socketFactory);
 
   useEffect(() => {
     // No scope tracked → no stream; status stays "idle" (initial state).
     // Session changes remount the page (key={sessionId}), so the state resets
     // naturally without a synchronous setState in the effect body.
     if (sessionId === null) return;
-    const { stream, detach } = wireSessionStream(queryClient, { sessionId, onStatus: setStatus });
+    const { stream, detach } = wireSessionStream(queryClient, {
+      sessionId,
+      socketFactory,
+      onStatus: setStatus,
+      onClose: setCloseCode,
+    });
     stream.subscribe();
     return () => {
       detach();
       stream.close();
     };
-  }, [sessionId, queryClient]);
+  }, [sessionId, queryClient, socketFactory]);
 
-  return status;
+  return { status, closeCode };
 }

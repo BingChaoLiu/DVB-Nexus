@@ -62,6 +62,7 @@ const SCENARIO: ScenarioDetailDTO = {
   schema_version: "1.0",
   scenario_id: "5c010000-0000-4000-8000-000000000001",
   version: "1.0.0",
+  content_hash: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   title: "CC 不连续训练",
   difficulty: "intro",
   initial_topology: {},
@@ -179,6 +180,12 @@ describe("LabRegion — session switch reset (SPEC-406 §7.5 rule 4)", () => {
       timeout: 3_000,
     });
 
+    // Verify is the editable prefill form now (SPEC-408 §7.5): the run ids
+    // are the user's EXPLICIT picks (run-2 = inject anchor, run-3 = clean
+    // recovery) — the auto-guess one-click posture is retired, so the walk
+    // fills the two run fields first (identity prefills from the detail).
+    await user.type(screen.getByLabelText("baseline_run_id"), "run-2");
+    await user.type(screen.getByLabelText("recovery_run_id"), "run-3");
     await user.click(screen.getByRole("button", { name: "提交判定（verify）" }));
     expect(await screen.findByTestId("verify-verdict", {}, { timeout: 3_000 })).toHaveTextContent("PASS");
 

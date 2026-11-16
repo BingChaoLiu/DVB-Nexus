@@ -29,8 +29,116 @@
   font-size: 13px;
 }
 
+/* §4.5 item 4 display half: the inline one-line 落空原因 in the toolbar
+ * status area — about 4 s, never a modal. */
+.dvb-topo-connection-hint {
+  font-size: 13px;
+  color: #a93226;
+  background: #fdecea;
+  border: 1px solid #e6c8c5;
+  border-radius: 4px;
+  padding: 2px 8px;
+}
+
 .dvb-topo-save {
   font-weight: 600;
+}
+
+/* §4.5 item 3: the gate explanation area next to the save button. */
+.dvb-topo-gate-note {
+  font-size: 13px;
+  color: #556;
+  max-width: 320px;
+}
+
+.dvb-topo-gate-note p {
+  margin: 0;
+  font-weight: 600;
+  color: #8a6d3b;
+}
+
+.dvb-topo-gate-note ul {
+  margin: 2px 0 0 0;
+  padding: 0 0 0 16px;
+}
+
+/* §4.5 item 1: the persistent page-top guidance banner (static signage). */
+.dvb-topo-guidance {
+  border: 1px solid #d5dae2;
+  border-left: 4px solid #5a6b8c;
+  border-radius: 6px;
+  background: #f6f8fb;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
+.dvb-topo-guidance p {
+  margin: 0;
+  line-height: 1.6;
+}
+
+.dvb-topo-guidance-link {
+  color: #2c5fa8;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* §4.5 item 2: the canvas empty-state overlay — pointer-events stay OFF (the
+ * drop target beneath keeps working); only the link re-enables them. */
+.dvb-topo-empty-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.dvb-topo-empty-overlay p {
+  pointer-events: none;
+  max-width: 520px;
+  margin: 0;
+  padding: 14px 18px;
+  border: 1px dashed #9aa7bd;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.92);
+  font-size: 13px;
+  line-height: 1.7;
+  color: #334;
+}
+
+.dvb-topo-empty-overlay a {
+  pointer-events: auto;
+  color: #2c5fa8;
+  font-weight: 600;
+}
+
+/* §4.5 item 4 preview half: 拖拽中非法把手降透明度 (review-fix F2 全量口径).
+ * The page computes the per-handle ILLEGAL END set from the SAME four
+ * prechecks canConnect runs (direction / cardinality / plane / self loop —
+ * §7.6), and TopologyNode stamps dvb-topo-handle-illegal-end on every handle
+ * in the set via IllegalEndHandlesContext. The old direction-only CSS hooks
+ * (dim ALL source/target handles by wrapper attribute) are retired: the set
+ * is strictly more informative. Two rules remain:
+ * - the per-handle illegal class dims (only during a drag — the context is
+ *   empty when idle);
+ * - React Flow's hovered-invalid marking (.connectingto without .valid —
+ *   fed by isValidConnection) keeps dimming the specifically hovered
+ *   illegal target handle at drop-hover time.
+ * The ORIGIN handle is inside the semantic set (self loop = same node + same
+ * port) and dims with the rest — the honest "cannot loop back here" preview;
+ * RF's own .connectingfrom marking still identifies the held handle. */
+.dvb-topo-canvas .react-flow__handle.dvb-topo-handle-illegal-end {
+  opacity: 0.35;
+}
+
+.dvb-topo-canvas .react-flow__handle.connectingto:not(.valid) {
+  opacity: 0.35;
+}
+
+.react-flow__handle {
+  transition: opacity 120ms ease;
 }
 
 .dvb-topo-error {
@@ -48,6 +156,12 @@
   gap: 8px;
   flex: 1;
   min-height: 0;
+}
+
+/* positioned anchor for the §4.5 empty-state overlay (absolute inset: 0). */
+.dvb-topo-canvas {
+  position: relative;
+  min-height: 320px;
 }
 
 /* palette */

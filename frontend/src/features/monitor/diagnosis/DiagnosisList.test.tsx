@@ -6,6 +6,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { DiagnosisCandidateDTO, DiagnosisDTO, DiagnosisEvidenceDTO } from "../types";
 import { DiagnosisCandidateList, DiagnosisList } from "./DiagnosisList";
+import { MONITOR_EMPTY_STATE_COPY } from "../copy";
 
 const diag = (overrides: Partial<DiagnosisDTO>): DiagnosisDTO => ({
   diagnosis_id: "d-1",
@@ -96,7 +97,10 @@ describe("DiagnosisList — exported presentation (wire strings verbatim)", () =
 
   it("renders an explicit empty state when there are no rows", () => {
     render(<DiagnosisList diagnoses={[]} />);
-    expect(screen.getByText(/无诊断记录/)).toBeInTheDocument();
+    const c = MONITOR_EMPTY_STATE_COPY.diagnosis;
+    expect(screen.getByText(c.what)).toBeInTheDocument();
+    expect(screen.getByText(c.why)).toBeInTheDocument();
+    expect(screen.getByText(`下一步:${c.next}`)).toBeInTheDocument();
   });
 
   it("renders the context node (SPEC-406 overlay slot) without touching fact rows", () => {

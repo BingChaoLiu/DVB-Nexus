@@ -5,13 +5,15 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { CallStates } from "./states";
+import { MONITOR_EMPTY_STATE_COPY } from "../copy";
 
 describe("CallStates — honest empty states (AC-405-04/05)", () => {
   it("200 + []: honest empty copy that names the MVP zero-real-calls posture and refuses the clean implication", () => {
     render(<CallStates state={{ kind: "empty" }} />);
-    expect(screen.getByText(/暂无 TSDuck 调用记录/)).toBeInTheDocument();
-    expect(screen.getByText(/MVP 生产栈不产生真实 TSDuck 调用/)).toBeInTheDocument();
-    expect(screen.getByText(/不是[「"]?无问题[」"]?的信号/)).toBeInTheDocument();
+    const c = MONITOR_EMPTY_STATE_COPY.cli;
+    expect(screen.getByText(c.what)).toBeInTheDocument();
+    expect(screen.getByText(c.why)).toBeInTheDocument();
+    expect(screen.getByText(`下一步:${c.next}`)).toBeInTheDocument();
   });
 
   it("filtered-empty (hardware): MVP note present + 无记录 ≠ 干净", () => {

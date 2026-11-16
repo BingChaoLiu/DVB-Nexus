@@ -14,7 +14,8 @@ function run(
   status: LabFacts["runs"][number]["status"],
   kinds: string[],
 ): LabFacts["runs"][number] {
-  return { runId, status, artifacts: kinds.map((kind) => ({ kind })) };
+  // Page-memory run: no §6.3 list fact — the artifact-kind path decides.
+  return { runId, status, artifacts: kinds.map((kind) => ({ kind })), faultPlanPresent: null };
 }
 
 const DONE: LabFacts = {
@@ -115,5 +116,68 @@ describe("deriveStepState — the §7.3 mapping table", () => {
     expect(deriveStepState({ ...DONE, reportFetched: false }).diagnose).toBe(false);
     expect(deriveStepState({ ...DONE, eventsSeen: 0 }).inspect).toBe(false);
     expect(deriveStepState({ ...DONE, verdictFetched: false }).verify).toBe(false);
+  });
+});
+
+// §6.3 run-list reconstruction (SPEC-408 §7.5 同口径; review-fix F1): runs
+// rebuilt from GET /sessions/{id}/rows carry NO artifact list (the list face
+// answers fault_plan_present instead), so the clean/faulted facts ride the
+// server's own boolean — never a fabricated artifact. faultPlanPresent=null
+// keeps the page-memory artifact path byte-identical.
+describe("deriveStepState — §6.3 list-reconstructed runs (fault_plan_present fact)", () => {
+  const listRun = (
+    runId: string,
+    status: LabFacts["runs"][number]["status"],
+    faultPlanPresent: boolean | null,
+  ): LabFacts["runs"][number] => ({ runId, status, artifacts: [], faultPlanPresent });
+
+  it("completed + fault_plan_present=true → the inject fact (no artifact needed, no clean count)", () => {
+    const state = deriveStepState({
+      ...DONE,
+      runs: [listRun("r-inject", "completed", true)],
+    });
+    expect(state.inject).toBe(true);
+    expect(state.generate).toBe(false);
+    expect(state.recover).toBe(false);
+  });
+
+  it("completed + fault_plan_present=false → a clean run (Generate/Recover light from the list fact)", () => {
+    const state = deriveStepState({
+      ...DONE,
+      runs: [listRun("r-base", "completed", false), listRun("r-rec", "completed", false)],
+    });
+    expect(state.generate).toBe(true);
+    expect(state.recover).toBe(true);
+    expect(state.inject).toBe(false);
+  });
+
+  it("one list-clean + one list-faulted → generate AND inject lit independently", () => {
+    const state = deriveStepState({
+      ...DONE,
+      runs: [listRun("r-base", "completed", false), listRun("r-inject", "completed", true)],
+    });
+    expect(state.generate).toBe(true);
+    expect(state.inject).toBe(true);
+    expect(state.recover).toBe(false);
+  });
+
+  it("faultPlanPresent=null keeps the artifact-kind path (page-memory runs unchanged)", () => {
+    expect(
+      deriveStepState({ ...DONE, runs: [listRun("r-1", "completed", null)] }).generate,
+    ).toBe(false);
+    expect(
+      deriveStepState({ ...DONE, runs: [{ runId: "r-2", status: "completed", artifacts: [{ kind: "generated_ts" }], faultPlanPresent: null }] })
+        .generate,
+    ).toBe(true);
+  });
+
+  it("running list rows advance nothing (same as page-memory running rows)", () => {
+    const state = deriveStepState({
+      ...DONE,
+      runs: [listRun("r-1", "running", false), listRun("r-2", "running", true)],
+    });
+    expect(state.generate).toBe(false);
+    expect(state.inject).toBe(false);
+    expect(state.recover).toBe(false);
   });
 });

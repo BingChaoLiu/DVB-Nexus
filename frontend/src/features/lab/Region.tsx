@@ -3,17 +3,30 @@
 // ?session=). routes.tsx registration is #61's entry; this file replaces
 // the #61 placeholder in place (shared shell untouched). The 开局 action
 // runs the §7.1 two-hop orchestration: create (201 ready) → start
-// (running — the runs face requires RUNNING). Hint reveal state is
-// per-scenario page memory (pure frontend, resets on reload — honest).
+// (running — the runs face requires RUNNING) — plus the SPEC-408 §7.3
+// THIRD hop: an empty-plan baseline run with the FROZEN golden geometry
+// (LAB_RUN_CONFIG import, never a re-copy) is auto-submitted before the
+// console navigation; the run rides into the console's registry via the
+// initialRuns prop (the honest at-accept carrier, AcceptedRunCarrier — the
+// console remounts per session via key). Hop-3 failure is a SILENT fallback: the console
+// still opens, nothing fakes success, and the §4.6 empty-registry copy
+// speaks the fallback honestly. Hint reveal state (SPEC-408 §4.4
+// REQ-UI-408-011) lives in the hintsStorage seam — ONE shared per-scenario
+// localStorage key `dvb-lab-hints:{scenario_id}` is the record; each view
+// instantiates useHintsReveal and Region keys the views by scenario/session
+// so a fresh mount hydrates the same key (刷新不丢; the console embeds the
+// ladder — NO deep link, the ?session= anchor stays). Reveal state never
+// feeds any verify/evidence path — storage → UI display.
 import { useCallback, useState } from "react";
 import { useSearchParams } from "react-router";
-import { createSession, getScenario, isApiError, startSession } from "../../api";
+import { createSession, getScenario, isApiError, startSession, submitRun } from "../../api";
 import { qk } from "../../query/keys";
 import { useQueryClient } from "@tanstack/react-query";
+import { LAB_RUN_CONFIG } from "./labGeometry";
 import { buildCreateSessionBody } from "./labBodies";
 import { ScenarioDetail } from "./ScenarioDetail";
 import { ScenarioLibrary } from "./ScenarioLibrary";
-import { ExperimentConsole } from "./ExperimentConsole";
+import { ExperimentConsole, type AcceptedRunCarrier } from "./ExperimentConsole";
 import "./lab.css";
 
 interface StartErrorShape {
@@ -41,10 +54,16 @@ export default function LabRegion() {
   const scenarioId = searchParams.get("scenario");
   const sessionId = searchParams.get("session");
 
-  // Per-scenario hint reveal counters (component memory — no persistence).
-  const [revealedHints, setRevealedHints] = useState<Record<string, number>>({});
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<StartErrorShape | null>(null);
+  // §7.3 third-hop carrier: the auto-submitted baseline run handed to the
+  // console so its registry opens populated (the console remounts per
+  // session via key — a plain state carrier in the region is enough).
+  // Carrier honesty (review-fix F6): the at-accept face holds ONLY run_id +
+  // status — artifacts/packet faces are NOT claimed (omitted, never
+  // fabricated); the console's poller fills the real face from getRun.
+  // null = the hop failed or never ran (honest: NO note, NO fake row).
+  const [autoBaselineRun, setAutoBaselineRun] = useState<AcceptedRunCarrier | null>(null);
 
   const openDetail = useCallback(
     (id: string) => {
@@ -75,6 +94,24 @@ export default function LabRegion() {
         if (started.lifecycle !== "running") {
           throw new Error(`开局异常：start 应答 lifecycle=${started.lifecycle}（期望 running）`);
         }
+        // §7.3 THIRD hop — best-effort auto baseline: an empty-plan run with
+        // the FROZEN golden geometry. Any failure here is a SILENT fallback:
+        // the console still opens, nothing fakes success (the §4.6
+        // empty-registry copy states the fallback), and the manual buttons
+        // remain. The hop MUST NOT block the console navigation.
+        let autoRun: AcceptedRunCarrier | null = null;
+        try {
+          const accepted = await submitRun(created.session_id, {
+            config: LAB_RUN_CONFIG as unknown as Parameters<typeof submitRun>[1]["config"],
+            fault_plan: [] as Parameters<typeof submitRun>[1]["fault_plan"],
+          });
+          // Honest at-accept carrier (F6): no `as RunStatusDTO` claim, no
+          // fabricated empty artifacts face — just the two held facts.
+          autoRun = { run_id: accepted.run_id, status: "running" };
+        } catch {
+          autoRun = null;
+        }
+        setAutoBaselineRun(autoRun);
         setSearchParams({ scenario: id, session: created.session_id });
       } catch (error) {
         if (isApiError(error)) {
@@ -92,23 +129,20 @@ export default function LabRegion() {
     [queryClient, setSearchParams],
   );
 
-  const revealNext = useCallback(
-    (id: string) => setRevealedHints((prev) => ({ ...prev, [id]: (prev[id] ?? 0) + 1 })),
-    [],
-  );
-
   if (scenarioId !== null && sessionId !== null) {
     return (
       <>
         <h2>Lab</h2>
-        {/* key={sessionId} remounts the console on a ?session= switch —
+        {/* key remounts the console on a ?session= (or scenario) switch —
             SPEC-406 §7.5 rule 4: 面板复位锁定 + 已取文本丢弃（禁跨会话
-            残留；same per-session remount posture as the Monitor 区 key）. */}
+            残留；same per-session remount posture as the Monitor 区 key）.
+            The remount also re-hydrates the hints key (hintsStorage). */}
         <ExperimentConsole
-          key={sessionId}
+          key={`${scenarioId}:${sessionId}`}
           scenarioId={scenarioId}
           sessionId={sessionId}
           onBack={() => openDetail(scenarioId)}
+          initialRuns={autoBaselineRun === null ? [] : [autoBaselineRun]}
         />
       </>
     );
@@ -117,10 +151,12 @@ export default function LabRegion() {
     return (
       <>
         <h2>Lab</h2>
+        {/* key={scenarioId}: entering a different scenario remounts the
+            detail view, re-hydrating ITS hints key (same source, per
+            scenario — never a stale count from another scenario). */}
         <ScenarioDetail
+          key={scenarioId}
           scenarioId={scenarioId}
-          revealedCount={revealedHints[scenarioId] ?? 0}
-          onRevealNext={() => revealNext(scenarioId)}
           onBack={backToLibrary}
           onStart={() => void startExperiment(scenarioId)}
           starting={starting}
@@ -129,12 +165,13 @@ export default function LabRegion() {
       </>
     );
   }
-  // SPEC-406 §4.2: 列表行不直接开局，开局前必见详情——两行动作都导航到
-  // 详情页（开局动作在详情 §4.3）。
+  // SPEC-406 §4.2 + SPEC-408 §4.4 row 单入口: the library row's ONLY action
+  // is 「查看详情」 (the list row never starts — the 开局 entry stays the
+  // detail page's 开局区).
   return (
     <>
       <h2>Lab</h2>
-      <ScenarioLibrary onOpenDetail={openDetail} onStart={openDetail} />
+      <ScenarioLibrary onOpenDetail={openDetail} />
     </>
   );
 }

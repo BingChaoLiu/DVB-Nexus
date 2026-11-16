@@ -1,7 +1,7 @@
 ---
 spec_id: SPEC-403
 title: Stream Monitor
-version: 0.5.0
+version: 0.5.1
 status: APPROVED
 phase: MVP
 owner: Frontend
@@ -67,7 +67,7 @@ requirements: [REQ-UI-403-001, REQ-UI-403-002, REQ-UI-403-003, REQ-UI-403-004, R
 ### 4.1 路由区与页面骨架
 
 - 路由注册沿用 SPEC-400 §4.2：`/monitor` 条目已由 #61 注册（`appRoutes` → `features/monitor/Region` 惰性加载），本票**原地替换占位 Region**，不改 `routes.tsx` 共享壳。
-- 页面以 session 为作用域：`/monitor?session=<session_id>` 深链 + 页头 session-id 输入（无 session 列表端点，输入即跟踪）；无 `session` 参数时渲染引导空态。
+- 页面以 session 为作用域：`/monitor?session=<session_id>` 深链 + 会话列表区（0.5.1 修订，SPEC-408 §4.3/§6.1：主位 = 最近会话列表 `GET /api/v1/sessions`，演示一键 + 手输 UUID 降级为列表覆盖不到时的兜底）；无 `session` 参数时渲染会话列表区；未知/失效 session（深链 404 / WS 4404）渲染显式「未知会话态」而非报错堆栈（SPEC-408 §4.6）。
 - 页面骨架（单页分区，自上而下）：控制条 → 概览卡 → Run 触发面 → PID/指标表 → alerts 面板 → 诊断列表（含 diagnose 触发）→ verify 表单与结果卡 → journal 流水尾窗（REQ-UI-403-007 呈现面）。
 - SessionStream 生命周期与页面挂载/卸载绑定（subscribe on mount、close on unmount）；多 session 并发跟踪不在 MVP（一次一个作用域 session）。
 
@@ -295,13 +295,14 @@ stopped    -> disposed
 - **AC-403-05（REQ-005）**：verify 卡三态与判据明细渲染对齐 SPEC-206（三 fixture 单测绿）；NOT_EVALUATED 显式原因；页面无任何本地 verdict 推导路径（代码审查项：卡片仅消费 `VerificationResultDTO`）；判据 kind 输入限定六 kind 闭集。
 - **AC-403-06（REQ-006）**：`src/features/monitor/components` 导出 barrel 冻结（§6 签名）；#65/#67 派工词可直接引用该清单；复用组件在无 context 时渲染默认形态。
 - **AC-403-07（REQ-007）**：节流重取行为测试绿（合帧单失效/journal 有序去重/event_appended 零 REST 失效三断言）；页面无第二 WS 通道、无第二节流机制、无流式曲线/时间轴渲染。
+- **AC-403-08（SPEC-408 §4.3 引导层，0.5.1 增）**：会话列表区三件套落位（最近会话列表主位 + 演示一键保留 + 手输 UUID 降级兜底）；未知/失效 session 显式「未知会话态」；「来源场景」回跳链接（增量①落地后）；verify 表单可编辑预填（scenario_id ← 会话详情、version/content_hash ← 场景详情、baseline/recovery ← run 列表 datalist）且 run 永不自动猜；空态三问文案按 SPEC-408 §4.6 Monitor 组落位——契约与验收细则以 SPEC-408 §4.3/§6/§12.1 为准。
 
 ## 13. 非目标
 
 - 时间轴图表、事件浏览页、流式曲线图（SPEC-407 roadmap）。
 - 独立告警中心页、自定义 dashboard。
 - fault-plan 编辑器、场景库/开局（SPEC-406）；evidence 点击后的 hex/解码（SPEC-404）。
-- 多 session 并发监控、session 列表/搜索（无后端通路）。
+- 多 session 并发监控、session 搜索（0.5.1 修订：原「session 列表/搜索（无后端通路）」中列表半句已随 SPEC-408 §6.1 只读端点落地并由 §4.3 会话列表区承接，非目标撤销；搜索类能力仍不做）。
 - 泵循环扩展（`evaluate_alerts` 入泵属后端伴随票，§10）。
 - verdict 本地推导、confidence 概率化、「无告警=干净」呈现（UI 判定禁令，永久禁令非 MVP 裁量）。
 

@@ -23,6 +23,16 @@ import {
 import { qk } from "../../query/keys";
 import { editorReducer, initialEditorState, createNodeFromType } from "./editorState";
 import { canConnect, nextConnectionId, toWire } from "./graphMapping";
+import {
+  IllegalEndHandlesContext,
+  connectionAttempted,
+  connectionStarted,
+  idleConnectionFeedback,
+  illegalEndHandles,
+  type ConnectionAttempt,
+  type ConnectionFeedback,
+} from "./connectionFeedback";
+import { CanvasEmptyOverlay, ConnectionHint, SaveGateNote, SaveSuccessNote, TopologyGuidanceBanner } from "./guidance";
 import { nodeTypeSpec } from "./nodeTypes";
 import { NODE_TYPE_MIME, NodePalette } from "./NodePalette";
 import { TopologyNode } from "./TopologyNode";
@@ -33,6 +43,25 @@ import { NodeInspector } from "./inspector/NodeInspector";
 import "./topologyEditor.css";
 
 const nodeTypes = { topology: TopologyNode };
+
+// RF connection-callback shapes (structural supersets — no @xyflow/system
+// import; the generated/hoisted types stay RF-internal). §4.5 item 4 wires
+// these into the connectionFeedback machine (落空原因提示 + 拖拽预览标记).
+interface ConnectStartParams {
+  nodeId: string | null;
+  handleId: string | null;
+  handleType: "source" | "target" | null;
+}
+interface ConnectionEndHandle {
+  nodeId: string;
+  id?: string | null;
+  type: "source" | "target";
+}
+interface ConnectionEndInfo {
+  isValid: boolean | null;
+  fromHandle: ConnectionEndHandle | null;
+  toHandle: ConnectionEndHandle | null;
+}
 
 // jsdom (the vitest environment) lacks ResizeObserver, which React Flow's
 // ZoomPane uses at mount; browsers — the real target — always provide it.
@@ -64,6 +93,12 @@ function TopologyEditor() {
   // on the next successful save; graph-level locs stay on the ApiError banner.
   const [fieldErrors, setFieldErrors] = useState<FieldError[]>([]);
   const autoLoadedFor = useRef<Set<string>>(new Set());
+  // §4.5 item 4: connection-attempt feedback (preview marker + 落空原因 line).
+  const [feedback, setFeedback] = useState<ConnectionFeedback>(idleConnectionFeedback);
+  const attemptRef = useRef<ConnectionAttempt | null>(null);
+  // §4.5 item 5: the per-save declaration (已保存为 revision N) — cleared when
+  // the editing context changes (load / new draft), never by mere edits.
+  const [savedNoteRevision, setSavedNoteRevision] = useState<number | null>(null);
 
   // Server facts via the query cache (§7.6 load flow).
   const listQuery = useQuery({ queryKey: qk.topologies(), queryFn: () => listTopologies() });
@@ -72,6 +107,7 @@ function TopologyEditor() {
     async (topologyId: string) => {
       try {
         const topology = await getTopology(topologyId);
+        setSavedNoteRevision(null); // the declaration describes a save action, not the loaded row
         dispatch({ type: "loaded", topology });
         // §7.6: opening a stored revision shows its real state immediately.
         const validation = await validateTopology(topologyId, topology.revision);
@@ -106,6 +142,7 @@ function TopologyEditor() {
         ? await saveTopologyRevision(state.topologyId, request)
         : await createTopology(request);
       dispatch({ type: "saveSucceeded", topologyId: saved.topology_id, revision: saved.revision });
+      setSavedNoteRevision(saved.revision); // §4.5 item 5: EVERY save shows its declaration line
       setFieldErrors([]); // #63: a successful save clears the loc-chain backfill
       await queryClient.invalidateQueries({ queryKey: qk.topologies() });
       // §7.4 fixed third step: the server validates the STORED graph only.
@@ -142,6 +179,55 @@ function TopologyEditor() {
         targetHandle: connection.targetHandle ?? null,
         connections: state.connections,
       });
+    },
+    [state.connections, state.nodes],
+  );
+
+  // §4.5 item 4 handlers — pure machine wiring (connectionFeedback.ts). The
+  // end handle of a click-connect comes from the DOM data attributes (RF's
+  // click-path state carries no handles); a pointer drag reports it through
+  // FinalConnectionState.toHandle. Legality is ONLY ever explainConnection —
+  // the same four prechecks canConnect runs (SPEC-401 §7.2; backend stays the
+  // double-layer authority, §7.4).
+  const onConnectStart = useCallback((_: unknown, params: ConnectStartParams) => {
+    if (params.nodeId === null || params.handleType === null) return;
+    const attempt: ConnectionAttempt = { nodeId: params.nodeId, handleId: params.handleId, handleType: params.handleType };
+    attemptRef.current = attempt;
+    setFeedback((current) => connectionStarted(current, attempt));
+  }, []);
+
+  const onConnectEnd = useCallback(
+    (_: unknown, info: ConnectionEndInfo) => {
+      const start = attemptRef.current;
+      attemptRef.current = null;
+      const end: ConnectionAttempt | null = info.toHandle
+        ? { nodeId: info.toHandle.nodeId, handleId: info.toHandle.id ?? null, handleType: info.toHandle.type }
+        : null;
+      setFeedback((current) =>
+        connectionAttempted(current, start, end, { nodes: state.nodes, connections: state.connections }),
+      );
+    },
+    [state.connections, state.nodes],
+  );
+
+  const onClickConnectEnd = useCallback(
+    (event: Event, _connectionState: unknown) => {
+      const start = attemptRef.current;
+      attemptRef.current = null;
+      const handleEl =
+        event.target instanceof Element ? event.target.closest<HTMLElement>(".react-flow__handle") : null;
+      const nodeId = handleEl?.getAttribute("data-nodeid") ?? null;
+      const end: ConnectionAttempt | null =
+        handleEl && nodeId
+          ? {
+              nodeId,
+              handleId: handleEl.getAttribute("data-handleid"),
+              handleType: handleEl.classList.contains("source") ? "source" : "target",
+            }
+          : null;
+      setFeedback((current) =>
+        connectionAttempted(current, start, end, { nodes: state.nodes, connections: state.connections }),
+      );
     },
     [state.connections, state.nodes],
   );
@@ -212,6 +298,17 @@ function TopologyEditor() {
 
   const notWired = state.error !== null && state.error.errorCode === "HTTP_501";
 
+  // §7.6 拖拽预览 (review-fix F2): while an attempt is in flight the page
+  // computes the ILLEGAL END set for EVERY visible handle from the SAME four
+  // prechecks (canConnect, frozen signature) and hands it to the rendered
+  // Handles via context — direction/cardinality/plane/self-loop all dim
+  // before the drop, not just the drag direction. Idle (connecting === null)
+  // → empty set → no handle is ever dimmed by the preview.
+  const illegalEnds = useMemo(
+    () => illegalEndHandles(feedback.connecting, { nodes: state.nodes, connections: state.connections }),
+    [feedback.connecting, state.nodes, state.connections],
+  );
+
   // #63 (SPEC-402 §7.6): three-part joint gate (G1 completeness ∧ G2 validate
   // report ∧ G3 field errors) — reasons nonempty disables the save entry.
   // The editor renders no session-start entry (SPEC-402 §6.2); monitor/lab
@@ -221,11 +318,29 @@ function TopologyEditor() {
     validation: state.validation,
     fieldErrors,
   });
+  // §4.5 item 3: the honest pending count — incomplete config nodes (G1) +
+  // validation report entries (G2) + displayed field errors (G3).
+  const pendingCount = useMemo(() => {
+    let count = 0;
+    for (const reason of gate.reasons) {
+      if (reason.kind === "config_incomplete") {
+        count += reason.nodeIds.length;
+      } else if (reason.kind === "structural_violations") {
+        count +=
+          state.validation.entries.length + state.validation.graphEntries.length + state.validation.planErrors.length;
+      } else {
+        count += fieldErrors.length;
+      }
+    }
+    return count;
+  }, [gate, state.validation, fieldErrors]);
   const selected = state.nodes.find((n) => n.selected) ?? null;
 
   return (
     <div className="dvb-topo-editor">
       <h2 className="dvb-topo-region-title">Topologies</h2>
+      {/* §4.5 item 1: 页内常驻说明条 — static wayfinding, no closability. */}
+      <TopologyGuidanceBanner />
       <header className="dvb-topo-toolbar">
         <label className="dvb-topo-toolbar-field">
           拓扑
@@ -247,7 +362,10 @@ function TopologyEditor() {
         <button
           type="button"
           className="dvb-topo-new"
-          onClick={() => dispatch({ type: "newDraft" })}
+          onClick={() => {
+            setSavedNoteRevision(null);
+            dispatch({ type: "newDraft" });
+          }}
         >
           新建拓扑
         </button>
@@ -255,16 +373,23 @@ function TopologyEditor() {
           {state.topologyId === null ? "未保存草稿" : `revision ${state.revision ?? "?"}`}
           {state.dirty ? "（未保存修改）" : ""}
         </span>
+        {/* §4.5 item 4: 落空后工具栏状态区一行原因提示 (key remount gives every
+            rejection a fresh ~4 s window); inline, never a modal. */}
+        <ConnectionHint key={feedback.attempt} rejection={feedback.rejection} />
         <button
           type="button"
           className="dvb-topo-save"
           onClick={() => void handleSave()}
           disabled={!state.dirty || saving || gate.reasons.length > 0}
-          title={gate.reasons.length > 0 ? "校验未通过：配置待填 / 存在校验违规或字段错误" : undefined}
         >
           保存为新 revision
         </button>
+        {/* §4.5 item 3: the gate explanation area lives next to the save
+            button — three states + the saveable zero-noise state. Replaces the
+            old hover-only title (撤除). */}
+        <SaveGateNote saving={saving} dirty={state.dirty} pendingCount={pendingCount} reasons={gate.reasons} />
       </header>
+      {savedNoteRevision !== null && <SaveSuccessNote revision={savedNoteRevision} />}
       {state.error !== null && (
         <p className="dvb-topo-error" role="alert">
           {notWired ? "未接线：" : ""}
@@ -276,23 +401,34 @@ function TopologyEditor() {
         <div
           className="dvb-topo-canvas"
           data-testid="dvb-topo-canvas"
+          data-connecting={feedback.connectingFrom ?? undefined}
           onDrop={onDrop}
           onDragOver={(event) => {
             event.preventDefault();
             event.dataTransfer.dropEffect = "move";
           }}
         >
-          <ReactFlow
-            nodes={state.nodes}
-            edges={state.connections}
-            nodeTypes={nodeTypes}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
-            isValidConnection={isValidConnection}
-            connectionMode={ConnectionMode.Strict}
-            fitView
-          />
+          <IllegalEndHandlesContext.Provider value={illegalEnds}>
+            <ReactFlow
+              nodes={state.nodes}
+              edges={state.connections}
+              nodeTypes={nodeTypes}
+              onNodesChange={onNodesChange}
+              onEdgesChange={onEdgesChange}
+              onConnect={onConnect}
+              onConnectStart={onConnectStart}
+              onConnectEnd={onConnectEnd}
+              onClickConnectStart={onConnectStart}
+              onClickConnectEnd={onClickConnectEnd}
+              isValidConnection={isValidConnection}
+              connectionMode={ConnectionMode.Strict}
+              fitView
+            />
+          </IllegalEndHandlesContext.Provider>
+          {/* §4.5 item 2: 画布空态三问覆盖层 — only while the canvas has no
+              nodes; the first dropped node removes it. pointer-events stay off
+              the overlay (link re-enables them) so drops pass through. */}
+          {state.nodes.length === 0 && <CanvasEmptyOverlay />}
         </div>
         {/* #63: inspector + violations share the third grid column (inline
             flex wrapper keeps the approved additive face to this file only). */}

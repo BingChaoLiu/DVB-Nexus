@@ -8,7 +8,9 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
 import type { RunStatusDTO, SnapshotDTO, SummaryDataDTO } from "../types";
-import { Badge, EmptyState, Panel } from "../../../components/ui";
+import { Badge, Panel } from "../../../components/ui";
+import { MONITOR_EMPTY_STATE_COPY } from "../copy";
+import { ThreeQuestionState } from "../ThreeQuestionState";
 
 /**
  * The frozen golden geometry (#58 pull-safe config, SPEC-108 §4 wire shape)
@@ -63,12 +65,8 @@ export function OverviewCard({
   snapshot: SnapshotDTO | undefined;
 }) {
   if (summary === undefined && snapshot === undefined) {
-    return (
-      <EmptyState
-        title="等待数据"
-        note="概览卡数据未到达（summary / snapshot 查询进行中或 session 未跟踪）。"
-      />
-    );
+    // §4.6 Monitor 组行 2(文案逐字):快照数据未到达是诚实态,非缺陷。
+    return <ThreeQuestionState copy={MONITOR_EMPTY_STATE_COPY.overview} />;
   }
   const nodeStates = Object.values(snapshot?.node_states ?? {});
   return (
@@ -163,6 +161,7 @@ export function RunTrigger({
       <button type="button" disabled={busy === true} onClick={submit}>
         提交 Run（empty plan）
       </button>
+      {runs.length === 0 && <ThreeQuestionState copy={MONITOR_EMPTY_STATE_COPY.runTrigger} />}
       <ul className="dvb-mon-rows">
         {runs.map((run) => (
           <li key={run.run_id} data-testid={`run-row-${run.run_id}`} className="dvb-mon-row">

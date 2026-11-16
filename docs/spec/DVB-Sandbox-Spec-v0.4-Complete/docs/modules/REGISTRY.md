@@ -56,7 +56,7 @@ SPEC-200～206 已于 2026-11-14 批准为 MVP 基线（APPROVED 0.5.0，[ticket
 
 ## D. Frontend
 
-SPEC-400～406 的 MVP 范围切集已随 [前端最小 UI 范围裁决](https://github.com/BingChaoLiu/DVB-Nexus/issues/18) 裁决为**范围级预批准**（各 spec 实体文本未编写，编写归 M5 实现流程）；切集明细收录于 [Frontend/](Frontend/SPEC-INDEX-FRONTEND.md)。SPEC-404 原列 P1，按最小证据下钻（hex + header 解码）收编进 MVP，完整能力仍为后续增强；packet 级构造可视化事件 = MVP 外（SPEC-301 §4 预留保持，归 roadmap 期）；SPEC-407 Timeline & Replay UI（P2）已移 roadmap §3（见 §F 说明）。
+SPEC-400～406 的 MVP 范围切集已随 [前端最小 UI 范围裁决](https://github.com/BingChaoLiu/DVB-Nexus/issues/18) 裁决为**范围级预批准**（各 spec 实体文本未编写，编写归 M5 实现流程）；切集明细收录于 [Frontend/](Frontend/SPEC-INDEX-FRONTEND.md)。SPEC-404 原列 P1，按最小证据下钻（hex + header 解码）收编进 MVP，完整能力仍为后续增强；packet 级构造可视化事件 = MVP 外（SPEC-301 §4 预留保持，归 roadmap 期）；SPEC-407 Timeline & Replay UI（P2）已移 roadmap §3（见 §F 说明）。SPEC-408 UX Guidance（旅程与引导层）随 [UX 引导层地图 #84](https://github.com/BingChaoLiu/DVB-Nexus/issues/84) effort 落笔（落笔票 [#92](https://github.com/BingChaoLiu/DVB-Nexus/issues/92)：repo 主通读确认后 APPROVED 0.5.1，2026-11-16），非 #18 切集产物。
 
 | Spec ID | 名称 | 范围 | MVP 切集 gist（#18） | 建议依赖 | 优先级 |
 |---|---|---|---|---|---|
@@ -67,6 +67,7 @@ SPEC-400～406 的 MVP 范围切集已随 [前端最小 UI 范围裁决](https:/
 | SPEC-404 | Packet Inspector | Packet 列表、Header/Hex/字段下钻 | 最小证据下钻：locator（pid+packet_index+artifact）→Range 按 188×index 取单包→hex+TS header 字段解码；不做 section 树/PES/baseline-faulted A/B 对照（后续增强） | SPEC-100/305/503 | P0 |
 | SPEC-405 | CLI Console | 真实 TSDuck 输出、模拟日志的来源标识 | 对照=来源标识区分（非双解析器 diff，309 归 roadmap）：调用记录九字段+详情（stderr GBK 只展示、exit 0≠有效标注）+source 徽章四值过滤；不做命令输入/终端仿真/双栏 diff | SPEC-308/501 | P0 |
 | SPEC-406 | Training Lab UI | 实验目标、提示、步骤、通关结果 | 场景库列表（SC-01~05）+场景详情渲染（目标/分阶段 hints/步骤/pass_criteria）+建实验 session+hints 渐进揭示（纯前端）+通关结果卡（复用 403 组件）+八步闭环 stepper+hidden_reference_solution 通关后展开；不做计分/进度存档/场景编辑器 | SPEC-205/206 | P0 |
+| SPEC-408 | UX Guidance（旅程与引导层） | 主页旅程门厅（/）+全局旅程路标条+导航徽标+三模块引导层细则（Monitor 会话列表区/演示一键、Lab 当前动作/自动基线、Topologies 进阶化）+空态三问文案总表+后端只读增量四件（session 列表/会话详情/run 列表/场景 content_hash）+30 分钟实测验收协议（SC-01 主线） | —（#84 UX 引导层 effort 产物，#92 落笔） | SPEC-400/401/403/406 | P0 |
 
 ## E. API / Storage / Quality
 

@@ -157,6 +157,30 @@ describe("SessionStream — close-code discipline", () => {
     }
   });
 
+  it("forwards every close event verbatim to the onClose observer (SPEC-408 §4.3 unknown-session signal)", () => {
+    const closes: { code: number; reason: string }[] = [];
+    const { stream, sockets } = newStream({ onClose: (code, reason) => closes.push({ code, reason }) });
+    stream.subscribe();
+    current(sockets).serverAccept();
+    // Permanent close: observed verbatim, no reconnect.
+    current(sockets).serverClose(4404, "session unknown");
+    expect(closes).toEqual([{ code: 4404, reason: "session unknown" }]);
+    // Any later close event is equally forwarded (facts, verbatim).
+    current(sockets).serverClose(1006, "abnormal");
+    expect(closes).toEqual([
+      { code: 4404, reason: "session unknown" },
+      { code: 1006, reason: "abnormal" },
+    ]);
+  });
+
+  it("omitting onClose stays backward compatible (option is additive)", () => {
+    const { stream, sockets } = newStream();
+    stream.subscribe();
+    current(sockets).serverAccept();
+    expect(() => current(sockets).serverClose(4404, "session unknown")).not.toThrow();
+    expect(stream.status).toBe("closed");
+  });
+
   it("closes permanently on 4400 (subscribe/route mismatch)", () => {
     const { stream, sockets } = newStream();
     stream.subscribe();

@@ -411,3 +411,124 @@ test("backend double layer: a non-MPEG_TS stored connection surfaces as an in-pl
   // the addressed edge lights up in place too (§7.4: connections[x] → edge)
   await expect(page.locator(".react-flow__edge.dvb-topo-edge-violation")).toHaveCount(1);
 });
+
+// --- SPEC-408 §4.5 guidance layer (AC-408-08 / AC-401-07, #100) ----------------
+// Five additive faces at the page seam. Copy is asserted at key-phrase level
+// (the 定稿 literals live verbatim in the component tests); wire shapes stay
+// the only exact-match targets (tests/README §6 discipline).
+
+test("§4.5 guidance: persistent banner, empty overlay show/dismiss, gate note, save declaration", async ({ page }) => {
+  await page.goto("/topologies");
+  await expect(page.getByRole("heading", { name: "Topologies" })).toBeVisible();
+
+  // item 1 — 页内常驻说明条 with the two path-string links (shell-parallel safe:
+  // hrefs only, no shell navigation asserted here).
+  const banner = page.getByTestId("dvb-topo-guidance");
+  await expect(banner).toContainText("进阶工具");
+  await expect(banner).toContainText("场景自带的初始拓扑");
+  await expect(banner).toContainText("不会读取这里保存的拓扑");
+  await expect(banner.getByRole("link", { name: "[去 Lab →]" })).toHaveAttribute("href", "/lab");
+  await expect(banner.getByRole("link", { name: "[回主页 →]" })).toHaveAttribute("href", "/");
+
+  // item 2 — the fresh draft shows the three-question overlay…
+  await page.waitForLoadState("networkidle"); // settle the auto-load chain before cutting a draft
+  await page.getByRole("button", { name: "新建拓扑" }).click();
+  await expect(page.locator(".react-flow__node")).toHaveCount(0);
+  const overlay = page.getByTestId("dvb-topo-empty-overlay");
+  await expect(overlay).toBeVisible();
+  await expect(overlay).toContainText("这是什么");
+  await expect(overlay).toContainText("为什么是空的");
+  await expect(overlay).toContainText("下一步");
+  await expect(overlay.getByRole("link", { name: "[去 Lab 开始主干旅程 →]" })).toHaveAttribute("href", "/lab");
+
+  // …and the FIRST dropped node removes it.
+  await zoomCanvasOut(page);
+  const rect = await visibleFlowRect(page);
+  await dragPaletteItemToCanvas(page, "ts_generator", "gen-0", clampIntoVisibleRect(rect, { x: rect.x + 60, y: rect.y + 40 }));
+  await expect(overlay).toHaveCount(0);
+
+  // item 3 — gate note: 配置待填 with its own line only; the hover-only title
+  // is gone (AC-401-07 撤除).
+  const save = page.getByRole("button", { name: /保存为新 revision/ });
+  await expect(save).not.toHaveAttribute("title", /.+/);
+  const note = page.getByTestId("dvb-topo-gate-note");
+  await expect(note).toContainText("暂不能保存：1 处待处理");
+  await expect(note).toContainText("配置待填 → 右侧「节点属性」补全");
+  await expect(note).not.toContainText("校验违规 → 见下方「校验」面板");
+
+  // gate opens → zero noise (no note at all while the entry is saveable).
+  await page.locator(".react-flow__node", { has: page.locator('[data-node-id="gen-0"]') }).click();
+  await fillMinimalGeneratorConfig(page);
+  await expect(note).toHaveCount(0);
+
+  // item 5 — every save shows its declaration line (已保存拓扑 vs 场景初始
+  // 拓扑 vocabulary discipline, both sides in the sentence).
+  await save.click();
+  await expect(page.locator(".dvb-topo-revision")).toContainText("revision 1");
+  const declaration = page.getByTestId("dvb-topo-save-note");
+  await expect(declaration).toContainText("已保存为 revision 1。");
+  await expect(declaration).toContainText("此处保存的拓扑仅供本模块载入与校验；Lab 场景使用场景自带初始拓扑，不会自动使用它。");
+});
+
+test("§4.5 item 4: drag preview dims illegal handles (direction/cardinality/self-loop 全量口径); a rejected click-connect shows the §7.6 reason for ~4 s", async ({ page }) => {
+  await openFreshDraft(page);
+
+  await zoomCanvasOut(page);
+  const firstRect = await visibleFlowRect(page);
+  await dragPaletteItemToCanvas(page, "ts_generator", "gen-0", clampIntoVisibleRect(firstRect, { x: firstRect.x + 60, y: firstRect.y + 40 }));
+  await zoomCanvasOut(page);
+  const gen = await nodeFlowPosition(page, "gen-0");
+  const rect = await visibleFlowRect(page);
+  await dragPaletteItemToCanvas(page, "ts_mux", "mux-0", clampIntoVisibleRect(rect, { x: gen.x + 320, y: gen.y }));
+
+  await page.locator(".react-flow__node", { has: page.locator('[data-node-id="gen-0"]') }).click();
+  await fillMinimalGeneratorConfig(page);
+
+  // Legal first link (gen.ts_out → mux.ts_in_1, max_connections 1 each).
+  await connectHandles(page, "gen-0", "ts_out", "mux-0", "ts_in_1");
+  await expect(page.locator(".react-flow__edge")).toHaveCount(1);
+
+  // Click-connect PREVIEW: while the connection hangs off gen.ts_out, the
+  // wrapper carries data-connecting="source" and every OTHER source handle
+  // dims (direction-illegal ends) — mux.ts_out at opacity 0.35.
+  const genOut = page.locator('[data-node-id="gen-0"]').getByTestId("dvb-topo-handle-ts_out");
+  const muxOut = page.locator('[data-node-id="mux-0"]').getByTestId("dvb-topo-handle-ts_out");
+  await expectHandleNotCovered(page, genOut, "gen-0");
+  await genOut.click();
+  await expect(page.getByTestId("dvb-topo-canvas")).toHaveAttribute("data-connecting", "source");
+  await expect(muxOut).toHaveCSS("opacity", "0.35");
+
+  // The attempt lands on the free mux.ts_in_2 but gen.ts_out is FULL → the
+  // §7.6 cardinality reason surfaces inline in the toolbar status area…
+  const muxIn2 = page.locator('[data-node-id="mux-0"]').getByTestId("dvb-topo-handle-ts_in_2");
+  await expectHandleNotCovered(page, muxIn2, "mux-0");
+  await muxIn2.click();
+  await expect(page.locator(".react-flow__edge")).toHaveCount(1); // nothing illegal reaches the wire
+  const hint = page.getByTestId("dvb-topo-connection-hint");
+  await expect(hint).toHaveText("“ts_out”连接数已满（上限 1）");
+  await expect(page.getByTestId("dvb-topo-canvas")).not.toHaveAttribute("data-connecting", /.+/);
+
+  // §7.6 全量预览 (review-fix F2): a fresh drag hangs off mux.ts_out — the
+  // FULL ts_in_1 dims (cardinality-illegal though direction-legal) while the
+  // free ts_in_2 stays lit, and the ORIGIN handle dims with the self-loop
+  // rule (same node + same port is never a legal end). Cardinality and the
+  // self loop now enter the preview, not just the drag direction.
+  const muxIn1 = page.locator('[data-node-id="mux-0"]').getByTestId("dvb-topo-handle-ts_in_1");
+  await expectHandleNotCovered(page, muxOut, "mux-0");
+  await muxOut.click();
+  await expect(page.getByTestId("dvb-topo-canvas")).toHaveAttribute("data-connecting", "source");
+  await expect(muxIn1).toHaveCSS("opacity", "0.35");
+  await expect(muxOut).toHaveCSS("opacity", "0.35");
+  await expect(muxIn2).not.toHaveCSS("opacity", "0.35");
+  // Landing on the FULL ts_in_1: the target-side cardinality reason — still
+  // nothing illegal reaches the wire.
+  await expectHandleNotCovered(page, muxIn1, "mux-0");
+  await muxIn1.click();
+  await expect(page.locator(".react-flow__edge")).toHaveCount(1);
+  await expect(hint).toHaveText("“ts_in_1”连接数已满（上限 1）");
+  await expect(page.getByTestId("dvb-topo-canvas")).not.toHaveAttribute("data-connecting", /.+/);
+
+  // …and auto-dismisses after ~4 s without any interaction (exact 4 000 ms is
+  // pinned by the fake-timer component tests; here: real-browser honesty).
+  await expect(hint).toBeHidden({ timeout: 6000 });
+});
