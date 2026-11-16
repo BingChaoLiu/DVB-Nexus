@@ -48,6 +48,9 @@ class TestCanonicalShape:
             "parameters",
             "activation",
             "expected_observations",
+            # Phase 2 revision (SPEC-204 §Phase2, ticket #121): pipeline
+            # layer attribute, default "TS" (additive, MVP-compatible).
+            "layer",
         }
         activation_fields = {
             field.name for field in dataclasses.fields(FaultActivation)

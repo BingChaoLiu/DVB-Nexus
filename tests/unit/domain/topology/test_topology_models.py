@@ -56,9 +56,14 @@ class TestEnumClosedSets:
             "bidirectional",
         }
 
-    def test_mvp_enables_only_mpeg_ts_plane(self):
-        # ADR-0005 decision 5: five planes kept, MVP only enables MPEG_TS.
-        assert MVP_ENABLED_PLANES == frozenset({SignalPlane.MPEG_TS})
+    def test_mvp_enables_mpeg_ts_and_t2mi_planes(self):
+        # SPEC-003 §Phase2 (ticket #121): the enabled set expands
+        # {MPEG_TS} → {MPEG_TS, T2MI}; RF / SEC_CONTROL / IP stay
+        # disabled (Phase 3/4).  ADR-0005 decision 5 remains the
+        # validator-side rule (non-enabled planes are forbidden).
+        assert MVP_ENABLED_PLANES == frozenset(
+            {SignalPlane.MPEG_TS, SignalPlane.T2MI}
+        )
 
 
 class TestTopologyPort:
