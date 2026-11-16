@@ -1,0 +1,240 @@
+/* PROTOTYPE (issue #86) styles — throwaway, dvb-proto-* namespaced so a
+   casual reader sees these are not production classes. Reuses theme tokens. */
+
+/* ---- badges inside nav links / cards ---- */
+.dvb-proto-badge-main,
+.dvb-proto-badge-adv,
+.dvb-proto-badge-info {
+  display: inline-block;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 18px;
+  vertical-align: middle;
+  margin-left: 4px;
+}
+.dvb-proto-badge-main { color: var(--dvb-good); border: 1px solid var(--dvb-good); }
+.dvb-proto-badge-adv { color: var(--dvb-warn); border: 1px solid var(--dvb-warn); }
+.dvb-proto-badge-info { color: var(--dvb-accent); border: 1px solid var(--dvb-accent); }
+
+/* ---- guide links ---- */
+.dvb-proto-guide-link {
+  margin-left: auto;
+  color: var(--dvb-accent);
+  text-decoration: none;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.dvb-proto-guide-link:hover { text-decoration: underline; }
+.dvb-proto-guide-corner {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  background: var(--dvb-surface);
+  border: 1px solid var(--dvb-border);
+  border-radius: 999px;
+  padding: 8px 16px;
+  color: var(--dvb-accent);
+  text-decoration: none;
+  font-size: 13px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  z-index: 60;
+}
+
+/* ---- Variant A: compact global strip ---- */
+.dvb-proto-strip {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 20px;
+  border-bottom: 1px solid var(--dvb-border);
+  background: rgba(30, 41, 59, 0.6);
+  font-size: 12px;
+}
+.dvb-proto-strip-title { color: var(--dvb-muted); white-space: nowrap; }
+.dvb-proto-strip-node {
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--dvb-border);
+  color: var(--dvb-muted);
+  white-space: nowrap;
+}
+.dvb-proto-strip-node-gap { opacity: 0.55; border-style: dashed; }
+.dvb-proto-strip-pos { color: var(--dvb-accent); margin-left: 8px; white-space: nowrap; }
+.dvb-proto-strip-note { color: var(--dvb-muted); margin-left: auto; white-space: nowrap; }
+
+/* ---- Variant A: homepage ---- */
+.dvb-proto-home { display: flex; flex-direction: column; gap: 20px; max-width: 1100px; margin: 0 auto; }
+.dvb-proto-hero { text-align: center; padding: 36px 24px; }
+.dvb-proto-hero-title { margin: 0 0 12px; font-size: 28px; }
+.dvb-proto-hero-sub { color: var(--dvb-muted); margin: 0 auto 20px; max-width: 720px; line-height: 1.7; }
+.dvb-proto-hero-sub b { color: var(--dvb-text); }
+.dvb-proto-cta {
+  display: inline-block;
+  background: var(--dvb-accent);
+  color: #0f172a;
+  font-weight: 700;
+  padding: 12px 28px;
+  border-radius: 10px;
+  text-decoration: none;
+  font-size: 16px;
+}
+.dvb-proto-cta:hover { filter: brightness(1.1); }
+.dvb-proto-hero-note { color: var(--dvb-muted); font-size: 12px; margin: 16px 0 0; }
+.dvb-proto-journey-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+.dvb-proto-journey-card {
+  border: 1px solid var(--dvb-border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: rgba(15, 23, 42, 0.5);
+}
+.dvb-proto-journey-card-gap { opacity: 0.6; border-style: dashed; }
+.dvb-proto-journey-card-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.dvb-proto-journey-index {
+  background: var(--dvb-accent);
+  color: #0f172a;
+  font-weight: 700;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  line-height: 20px;
+  text-align: center;
+  font-size: 12px;
+  flex: none;
+}
+.dvb-proto-journey-zh { color: var(--dvb-muted); font-size: 12px; }
+.dvb-proto-journey-hint { color: var(--dvb-text); font-size: 12px; margin: 8px 0 4px; line-height: 1.5; }
+.dvb-proto-journey-where { color: var(--dvb-accent); font-size: 12px; margin: 0; }
+.dvb-proto-note { color: var(--dvb-muted); font-size: 12px; margin: 12px 0 0; }
+.dvb-proto-note a { color: var(--dvb-accent); }
+.dvb-proto-modules { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.dvb-proto-module-card p { color: var(--dvb-muted); font-size: 13px; margin: 6px 0; line-height: 1.6; }
+.dvb-proto-module-card p b { color: var(--dvb-text); }
+.dvb-proto-module-card a { color: var(--dvb-accent); }
+.dvb-proto-module-main { border-color: rgba(52, 211, 153, 0.5); }
+.dvb-proto-module-adv { border-style: dashed; }
+.dvb-proto-home-footer {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  color: var(--dvb-muted);
+  font-size: 12px;
+  padding: 8px 0 24px;
+}
+.dvb-proto-home-footer a { color: var(--dvb-accent); }
+
+/* ---- nav group separator (Variants B/C) ---- */
+.dvb-proto-nav-divider {
+  width: 1px;
+  align-self: stretch;
+  background: var(--dvb-border);
+  margin: 2px 4px;
+}
+.dvb-proto-nav-group-label { color: var(--dvb-warn); font-size: 11px; align-self: center; white-space: nowrap; }
+.dvb-proto-nav-spacer { flex: 1; }
+.dvb-proto-nav-adv { margin-left: auto; }
+
+/* ---- Variant B: Lab start banner ---- */
+.dvb-proto-start-banner { margin-bottom: 16px; border-color: rgba(52, 211, 153, 0.45); }
+.dvb-proto-banner-row { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.dvb-proto-youare-here {
+  color: var(--dvb-good);
+  font-weight: 700;
+  font-size: 15px;
+  white-space: nowrap;
+}
+.dvb-proto-banner-sub { color: var(--dvb-muted); font-size: 13px; }
+.dvb-proto-banner-steps { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.dvb-proto-banner-step {
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--dvb-border);
+  color: var(--dvb-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.dvb-proto-banner-step-here { color: var(--dvb-good); border-color: var(--dvb-good); font-weight: 700; }
+.dvb-proto-banner-step-gap { opacity: 0.55; border-style: dashed; }
+.dvb-proto-banner-note { color: var(--dvb-muted); font-size: 12px; margin-left: 8px; display: inline-flex; align-items: center; gap: 6px; }
+
+/* ---- Variant C: global journey ribbon ---- */
+.dvb-proto-ribbon {
+  border-bottom: 1px solid var(--dvb-border);
+  background: rgba(30, 41, 59, 0.6);
+  padding: 10px 20px;
+}
+.dvb-proto-ribbon-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.dvb-proto-ribbon-origin { color: var(--dvb-good); font-size: 12px; white-space: nowrap; }
+.dvb-proto-ribbon-node {
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--dvb-border);
+  color: var(--dvb-text);
+  font-size: 12px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.dvb-proto-ribbon-node:hover { border-color: var(--dvb-accent); color: var(--dvb-accent); }
+.dvb-proto-ribbon-node-gap { opacity: 0.55; border-style: dashed; }
+.dvb-proto-ribbon-aux {
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px dashed var(--dvb-accent);
+  color: var(--dvb-accent);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.dvb-proto-ribbon-aux-adv { border-color: var(--dvb-warn); color: var(--dvb-warn); }
+.dvb-proto-ribbon-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  font-size: 12px;
+  flex-wrap: wrap;
+}
+
+/* ---- Variant C: slim start strip ---- */
+.dvb-proto-startstrip { max-width: 860px; margin: 0 auto; }
+.dvb-proto-startstrip-list { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 12px; }
+.dvb-proto-startstrip-list li { color: var(--dvb-text); line-height: 1.7; }
+.dvb-proto-startstrip-list a { color: var(--dvb-accent); }
+.dvb-proto-startstrip-note { display: block; color: var(--dvb-muted); font-size: 12px; }
+
+/* ---- floating switcher (evaluation tooling, not part of any design) ---- */
+.dvb-proto-switcher {
+  position: fixed;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #000;
+  color: #fff;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  padding: 6px 10px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.6);
+  z-index: 100;
+}
+.dvb-proto-switcher-arrow {
+  background: transparent;
+  border: none;
+  color: #fff;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 2px 8px;
+}
+.dvb-proto-switcher-arrow:hover { color: var(--dvb-accent); }
+.dvb-proto-switcher-label { font-size: 13px; white-space: nowrap; }
+
+@media (max-width: 900px) {
+  .dvb-proto-journey-grid { grid-template-columns: repeat(2, 1fr); }
+  .dvb-proto-modules { grid-template-columns: 1fr; }
+}
