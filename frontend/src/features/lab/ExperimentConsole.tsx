@@ -11,7 +11,7 @@
 // the SPEC-404 §4.2 Monitor deep link (inspect_artifact/inspect_pid/
 // inspect_packet seed the packet inspector without any monitor/** import —
 // Plan A of the §7.6 dual plan; finalized at the merge tip).
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
 import {
@@ -36,6 +36,7 @@ import { DiagnosisCandidateList, DiagnosisList } from "../monitor/components";
 import { VerifyResultCard } from "../monitor/components";
 import { LAB_RUN_CONFIG } from "./labGeometry";
 import { buildVerifyBody } from "./labBodies";
+import { currentActionGuide, deriveCurrentAction, type CurrentActionKey } from "./currentAction";
 import { deriveStepState, type LabFacts, type LabRunFact } from "./stepperState";
 import { Stepper } from "./Stepper";
 import { SolutionPanel, type SolutionErrorState, type SolutionFetchState } from "./SolutionPanel";
@@ -43,6 +44,23 @@ import { SolutionPanel, type SolutionErrorState, type SolutionFetchState } from 
 const POLL_INTERVAL_MS = 200;
 const POLL_WINDOW_MS = 30_000;
 const EVENTS_LIMIT = 100;
+const FLASH_RESET_MS = 1_200;
+
+// Stepper click → scroll target (SPEC-408 §4.4「定位非打卡」): the console's
+// five sections are the anchors; the eight steps collapse onto them (the
+// four run-phase steps all land on the Run 触发 block, which holds their
+// buttons and disable reasons).
+type SectionKey = "run" | "diagnose" | "inspect" | "verify" | "solution";
+
+const STEP_SECTION: Record<CurrentActionKey, SectionKey> = {
+  create: "run",
+  generate: "run",
+  inject: "run",
+  diagnose: "diagnose",
+  inspect: "inspect",
+  recover: "run",
+  verify: "verify",
+};
 
 interface RegistryEntry {
   view: RunStatusDTO;
@@ -182,6 +200,35 @@ export function ExperimentConsole({
   );
   const steps = deriveStepState(facts);
 
+  // --- current action (SPEC-408 §7.2): pointer over the §7.3 facts ----------
+  const current = deriveCurrentAction(steps);
+  const primary = (key: CurrentActionKey): string | undefined =>
+    current === key ? "dvb-lab-btn-primary" : undefined;
+
+  // Stepper locator (定位非打卡): scroll to the step's section + flash it.
+  // A click NEVER mutates light-up (steps above derive only from facts) and
+  // never submits anything.
+  const sectionRefs = useRef<Record<SectionKey, HTMLElement | null>>({
+    run: null,
+    diagnose: null,
+    inspect: null,
+    verify: null,
+    solution: null,
+  });
+  const [flashSection, setFlashSection] = useState<SectionKey | null>(null);
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const locateStep = useCallback((key: CurrentActionKey) => {
+    const section = STEP_SECTION[key];
+    const element = sectionRefs.current[section];
+    if (element === null) return;
+    if (typeof element.scrollIntoView === "function") {
+      element.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+    setFlashSection(section);
+    if (flashTimer.current !== null) clearTimeout(flashTimer.current);
+    flashTimer.current = setTimeout(() => setFlashSection(null), FLASH_RESET_MS);
+  }, []);
+
   const runDiagnose = useCallback(async () => {
     if (baselineRunId === "") return;
     setDiagnosing(true);
@@ -243,9 +290,15 @@ export function ExperimentConsole({
   );
 
   const lifecycle = snapshotQuery.data?.lifecycle ?? null;
+  const sectionClass = (key: SectionKey): string | undefined =>
+    flashSection === key ? "dvb-lab-section-flash" : undefined;
   return (
     <div className="dvb-lab-console">
-      <Stepper steps={steps} />
+      <Stepper steps={steps} onStepSelect={locateStep} />
+      {/* 常驻指引条（SPEC-408 §4.4）: next-step name + VERBATIM button copy. */}
+      <p className="dvb-lab-action-guide" data-testid="lab-action-guide">
+        {currentActionGuide(steps)}
+      </p>
       <Panel title={`实验控制台 · ${detailQuery.data?.title ?? scenarioId}`}>
         <button type="button" onClick={onBack}>
           返回场景库
@@ -264,20 +317,21 @@ export function ExperimentConsole({
               : errorMessage(snapshotQuery.error)}
           </div>
         )}
-        <section>
+        <section data-testid="lab-section-run" ref={(el) => { sectionRefs.current.run = el; }} className={sectionClass("run")}>
           <h3 className="dvb-lab-h3">Run 触发</h3>
           <div className="dvb-lab-run-actions">
-            <button type="button" onClick={() => void submit([])} disabled={lifecycle !== "running"}>
+            <button type="button" className={primary("generate")} onClick={() => void submit([])} disabled={lifecycle !== "running"}>
               生成基线（Generate，空 plan）
             </button>
             <button
               type="button"
+              className={primary("inject")}
               onClick={() => void submit(detailQuery.data?.fault_plan ?? [])}
               disabled={lifecycle !== "running" || detailQuery.data === undefined}
             >
               注入故障（Inject，场景 fault_plan）
             </button>
-            <button type="button" onClick={() => void submit([])} disabled={lifecycle !== "running"}>
+            <button type="button" className={primary("recover")} onClick={() => void submit([])} disabled={lifecycle !== "running"}>
               恢复重跑（Recover，空 plan）
             </button>
           </div>
@@ -310,9 +364,14 @@ export function ExperimentConsole({
           )}
         </section>
 
-        <section>
+        <section data-testid="lab-section-diagnose" ref={(el) => { sectionRefs.current.diagnose = el; }} className={sectionClass("diagnose")}>
           <h3 className="dvb-lab-h3">诊断（Diagnose）</h3>
-          <button type="button" onClick={() => void runDiagnose()} disabled={diagnosing || baselineRunId === ""}>
+          <button
+            type="button"
+            className={primary("diagnose")}
+            onClick={() => void runDiagnose()}
+            disabled={diagnosing || baselineRunId === ""}
+          >
             {diagnosing ? "评估中…" : "对注入 Run 评估（diagnose）"}
           </button>
           {reportError !== null && <div className="dvb-lab-error">{reportError}</div>}
@@ -332,7 +391,7 @@ export function ExperimentConsole({
           />
         </section>
 
-        <section>
+        <section data-testid="lab-section-inspect" ref={(el) => { sectionRefs.current.inspect = el; }} className={sectionClass("inspect")}>
           <h3 className="dvb-lab-h3">证据 / 事件（Inspect）</h3>
           {eventsQuery.isPending ? (
             <EmptyState title="加载中" note="读取 journal 事件…" />
@@ -351,7 +410,7 @@ export function ExperimentConsole({
           )}
         </section>
 
-        <section>
+        <section data-testid="lab-section-verify" ref={(el) => { sectionRefs.current.verify = el; }} className={sectionClass("verify")}>
           <h3 className="dvb-lab-h3">通关判定（Verify）</h3>
           <div className="dvb-lab-line">
             recovery_run_id: <span className="dvb-lab-mono">{recoveryRunId === "" ? "（待恢复 Run 完成）" : recoveryRunId}</span>
@@ -359,6 +418,7 @@ export function ExperimentConsole({
           </div>
           <button
             type="button"
+            className={primary("verify")}
             onClick={() => void runVerify()}
             disabled={verifying || baselineRunId === "" || recoveryRunId === ""}
           >
@@ -373,7 +433,7 @@ export function ExperimentConsole({
           )}
         </section>
 
-        <section>
+        <section data-testid="lab-section-solution" ref={(el) => { sectionRefs.current.solution = el; }} className={sectionClass("solution")}>
           <h3 className="dvb-lab-h3">参考解（hidden_reference_solution）</h3>
           <SolutionPanel
             scenarioId={scenarioId}
