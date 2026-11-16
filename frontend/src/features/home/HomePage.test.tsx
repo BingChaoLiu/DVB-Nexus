@@ -2,19 +2,27 @@
 // VERBATIM (§4.2 L97-102; expected values below are the spec's own sentences,
 // checked against the spec file). Assertions target wire-agnostic UI
 // structure (role/label/testid) — never full-DOM snapshots (§11.2 discipline).
+// The Monitor card demo button is wired to the shell-owned orchestration via
+// the demo controller context (ticket #99); the no-provider fallback stays a
+// harmless no-op so the copy tests render standalone.
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import HomePage from "./HomePage";
+import { DemoContext, type DemoController } from "../monitor/demo/DemoSessionContext";
 
-function renderHome() {
+function renderHome(demo?: Partial<DemoController>) {
   const queryClient = new QueryClient();
+  const demoController: DemoController = { startDemo: demo?.startDemo ?? (() => {}), demoBusy: demo?.demoBusy ?? false };
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter>
-        <HomePage />
-      </MemoryRouter>
+      <DemoContext.Provider value={demoController}>
+        <MemoryRouter>
+          <HomePage />
+        </MemoryRouter>
+      </DemoContext.Provider>
     </QueryClientProvider>,
   );
 }
@@ -83,10 +91,19 @@ describe("HomePage — foyer (SPEC-408 §4.2 / AC-408-01)", () => {
     expect(topologies.getByText("下一步 = 拿到第一次 PASS 之后再回来探索。")).toBeInTheDocument();
   });
 
-  it("renders the Monitor card demo button as a disabled placeholder (wiring is #99)", () => {
-    renderHome();
+  it("wires the Monitor card demo button: idle = enabled, click fires the shell-owned startDemo (#99)", async () => {
+    const startDemo = vi.fn();
+    renderHome({ startDemo });
     const demo = screen.getByTestId("home-monitor-demo-start");
-    expect(demo).toBeDisabled();
+    expect(demo).toBeEnabled();
     expect(demo).toHaveTextContent("一键演示");
+    const user = userEvent.setup();
+    await user.click(demo);
+    expect(startDemo).toHaveBeenCalledTimes(1);
+  });
+
+  it("disables the demo button while an orchestration is in flight (demoBusy, no parallel demo)", () => {
+    renderHome({ demoBusy: true });
+    expect(screen.getByTestId("home-monitor-demo-start")).toBeDisabled();
   });
 });

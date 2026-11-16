@@ -14,6 +14,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "../../api/client";
 import type { RunListItemDTO, ScenarioDetailDTO, SessionDetailDTO, SnapshotDTO } from "../../api";
+import { DemoContext, type DemoController } from "./demo/DemoSessionContext";
 
 vi.mock("../../api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../api")>();
@@ -52,6 +53,7 @@ import { useSessionStream } from "./stream/useSessionStream";
 import { AppShell } from "../../app/AppShell";
 import { appRoutes } from "../../app/routes";
 import { MONITOR_EMPTY_STATE_COPY } from "./copy";
+import MonitorRegion from "./Region";
 
 const getSnapshotMock = vi.mocked(getSnapshot);
 const querySummaryMock = vi.mocked(querySummary);
@@ -97,14 +99,17 @@ const DETAIL_PLAIN: SessionDetailDTO = {
 
 const DETAIL_SCENARIO: SessionDetailDTO = { ...DETAIL_PLAIN, scenario_id: SCENARIO };
 
-function renderAppAt(path: string) {
+function renderAppAt(path: string, demo?: Partial<DemoController>) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const demoController: DemoController = { startDemo: demo?.startDemo ?? (() => {}), demoBusy: demo?.demoBusy ?? false };
   const router = createMemoryRouter(
     [
       {
         element: (
           <QueryClientProvider client={queryClient}>
-            <AppShell />
+            <DemoContext.Provider value={demoController}>
+              <AppShell />
+            </DemoContext.Provider>
           </QueryClientProvider>
         ),
         children: [...appRoutes.map((route) => ({ path: route.path, element: <route.element /> }))],
@@ -121,7 +126,7 @@ beforeEach(() => {
 });
 
 describe("MonitorRegion — 会话列表区 guide seat (row 1)", () => {
-  it("renders the row-1 three-question copy verbatim, the demo placeholder (disabled), and the manual-UUID fallback", async () => {
+  it("renders the row-1 three-question copy verbatim, the wired demo button (#99), and the manual-UUID fallback", async () => {
     listSessionsMock.mockResolvedValue([]);
     renderAppAt("/monitor");
 
@@ -130,9 +135,10 @@ describe("MonitorRegion — 会话列表区 guide seat (row 1)", () => {
     expect(guide.textContent).toContain(MONITOR_EMPTY_STATE_COPY.entry.why);
     expect(guide.textContent).toContain(`下一步:${MONITOR_EMPTY_STATE_COPY.entry.next}`);
 
-    // 演示一键主按钮位:占位渲染、本票不接行为(#99 接线)——禁用态不给假可点。
+    // 演示一键主按钮位(#99 已接线):默认(无 shell 编排进行中)可点——点击经
+    // DemoContext 驱动 AppShell 的编排,行为断言见下。
     const demo = screen.getByTestId("monitor-demo-start");
-    expect(demo).toBeDisabled();
+    expect(demo).toBeEnabled();
     expect(demo.textContent).toContain("一键演示");
 
     // 手输 UUID 兜底仍在(输入 session id 即跟踪)。
@@ -149,6 +155,47 @@ describe("MonitorRegion — 会话列表区 guide seat (row 1)", () => {
     const user = userEvent.setup();
     await user.type(screen.getByLabelText("session id"), SESSION);
     expect(await screen.findByText(`session: ${SESSION}`)).toBeInTheDocument();
+  });
+});
+
+describe("MonitorRegion — 一键演示 wiring (ticket #99)", () => {
+  /** The wiring seam here is the button → demo-controller contract; the
+   * region renders directly under a STUB provider (AppShell contributes its
+   * own real provider around the outlet, which would shadow an outer stub). */
+  function renderRegionAt(demo: Partial<DemoController>) {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const demoController: DemoController = { startDemo: demo.startDemo ?? (() => {}), demoBusy: demo.demoBusy ?? false };
+    const router = createMemoryRouter(
+      [
+        {
+          path: "/monitor",
+          element: (
+            <QueryClientProvider client={queryClient}>
+              <DemoContext.Provider value={demoController}>
+                <MonitorRegion />
+              </DemoContext.Provider>
+            </QueryClientProvider>
+          ),
+        },
+      ],
+      { initialEntries: ["/monitor"] },
+    );
+    return render(<RouterProvider router={router} />);
+  }
+
+  it("clicking the demo button fires the shell-owned startDemo (same orchestration as the home card)", async () => {
+    listSessionsMock.mockResolvedValue([]);
+    const startDemo = vi.fn();
+    renderRegionAt({ startDemo });
+    const user = userEvent.setup();
+    await user.click(await screen.findByTestId("monitor-demo-start"));
+    expect(startDemo).toHaveBeenCalledTimes(1);
+  });
+
+  it("demoBusy (an orchestration in flight) disables the entry button — no parallel demo", async () => {
+    listSessionsMock.mockResolvedValue([]);
+    renderRegionAt({ demoBusy: true });
+    expect(await screen.findByTestId("monitor-demo-start")).toBeDisabled();
   });
 });
 

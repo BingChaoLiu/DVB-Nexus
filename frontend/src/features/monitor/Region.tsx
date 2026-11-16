@@ -73,6 +73,10 @@ import { MONITOR_EMPTY_STATE_COPY } from "./copy";
 import { ThreeQuestionState } from "./ThreeQuestionState";
 import { SessionList } from "./sessionList/SessionList";
 import { isUnknownSessionState } from "./unknownSession";
+// SPEC-408 §4.3 demo one-click (ticket #99): the guide seat's primary button
+// drives the shell-owned orchestration through the demo controller context
+// (AppShell owns the state; this page only fires startDemo).
+import { useDemoController } from "./demo/DemoSessionContext";
 import "./monitor.css";
 
 /** Feature-local canonical-convention keys (diagnoses/report faces). */
@@ -102,18 +106,34 @@ const SESSION_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-
 export default function MonitorRegion() {
   const [searchParams, setSearchParams] = useSearchParams();
   const sessionId = searchParams.get("session");
+  const demo = useDemoController();
 
   if (sessionId === null || sessionId === "") {
-    return <SessionGuide onTrack={(id) => setSearchParams({ session: id })} />;
+    return (
+      <SessionGuide
+        onTrack={(id) => setSearchParams({ session: id })}
+        onDemoStart={demo.startDemo}
+        demoBusy={demo.demoBusy}
+      />
+    );
   }
   return <MonitorPage key={sessionId} sessionId={sessionId} onUntrack={() => setSearchParams({})} />;
 }
 
 /** 会话列表区(SPEC-408 §4.3;§4.6 row 1 copy verbatim). The main seat is the
- * recent-session list; the demo button holds the primary button position as
- * a placeholder (ticket #99 wires the behavior — disabled, no fake
- * clickability); the manual-UUID form is the degraded fallback. */
-function SessionGuide({ onTrack }: { onTrack: (sessionId: string) => void }) {
+ * recent-session list; the demo button holds the primary button position and
+ * drives the shell-owned one-click orchestration (ticket #99 — busy disables
+ * so a second click can never start a parallel demo); the manual-UUID form
+ * is the degraded fallback. */
+function SessionGuide({
+  onTrack,
+  onDemoStart,
+  demoBusy,
+}: {
+  onTrack: (sessionId: string) => void;
+  onDemoStart: () => void;
+  demoBusy: boolean;
+}) {
   const [draft, setDraft] = useState("");
   const changeDraft = (value: string) => {
     setDraft(value);
@@ -128,8 +148,8 @@ function SessionGuide({ onTrack }: { onTrack: (sessionId: string) => void }) {
         <button
           type="button"
           data-testid="monitor-demo-start"
-          disabled
-          title="一键演示编排由后续票接线;当前为占位(不给假可点)。"
+          disabled={demoBusy}
+          onClick={onDemoStart}
         >
           一键演示
         </button>
@@ -159,6 +179,7 @@ function SessionGuide({ onTrack }: { onTrack: (sessionId: string) => void }) {
 
 function MonitorPage({ sessionId, onUntrack }: { sessionId: string; onUntrack: () => void }) {
   const queryClient = useQueryClient();
+  const demo = useDemoController();
   const { status: wsStatus, closeCode: wsCloseCode } = useSessionStream(sessionId);
   // SPEC-404 §4.2 deep-link entry: read-only for inspect_* (the tracker owns
   // that param surface; this page never writes inspect_* params back). The
@@ -403,7 +424,11 @@ function MonitorPage({ sessionId, onUntrack }: { sessionId: string; onUntrack: (
             回 Lab 开新实验
           </Link>
         </section>
-        <SessionGuide onTrack={(id) => setSearchParams({ session: id })} />
+        <SessionGuide
+          onTrack={(id) => setSearchParams({ session: id })}
+          onDemoStart={demo.startDemo}
+          demoBusy={demo.demoBusy}
+        />
       </div>
     );
   }

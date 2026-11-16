@@ -3,13 +3,16 @@
 // journey map (§1 overview table verbatim; Analyze row annotated as the
 // declared gap) and the three module cards (§4.2 frozen copy, verbatim).
 // Zero popups/tours/mode switches (SPEC-408 §12.1 review item). The Monitor
-// card's 「一键演示」 button is a DISABLED placeholder — behavior is wired by
-// ticket #99; never render a fake-clickable button.
+// card's 「一键演示」 button (the §4.3 demo gate) drives the shell-owned
+// one-click orchestration via the demo controller context (ticket #99;
+// busy disables so a second click never starts a parallel demo).
 import { Link } from "react-router";
 import { ANALYZE_GAP_NOTE, JOURNEY_STEPS } from "../../app/journeySteps";
+import { useDemoController } from "../monitor/demo/DemoSessionContext";
 import "./home.css";
 
 export default function HomePage() {
+  const demo = useDemoController();
   return (
     <div className="dvb-home" data-testid="home-foyer">
       <section className="dvb-home-hero" aria-label="旅程门厅">
@@ -57,7 +60,13 @@ export default function HomePage() {
           <p className="dvb-home-card-body">这是自由观测台（free observation deck），按 session 展示真实运行证据。</p>
           <p className="dvb-home-card-body">需先有 session 才有内容：从 Lab 进入，或粘贴 UUID，或一键演示。</p>
           <p className="dvb-home-card-next">下一步按钮 = 「一键演示」（演示门，§4.3）。</p>
-          <button type="button" className="dvb-home-card-action" data-testid="home-monitor-demo-start" disabled>
+          <button
+            type="button"
+            className="dvb-home-card-action"
+            data-testid="home-monitor-demo-start"
+            disabled={demo.demoBusy}
+            onClick={demo.startDemo}
+          >
             一键演示
           </button>
         </article>

@@ -48,12 +48,13 @@ test("home foyer renders the journey skeleton and the bar follows the URL (AC-40
     "不可用（REST 冻结 501），旅程自动跳过",
   );
 
-  // Three module cards + the Monitor demo placeholder (behavior is #99).
+  // Three module cards + the Monitor demo gate (#99: wired — idle enabled;
+  // the full orchestration chain is e2e/demo-session.spec.ts's job).
   await expect(page.getByTestId("home-card-lab")).toContainText("这是主干旅程所在：场景库列出五个场景，实验台走完八步。");
   await expect(page.getByTestId("home-card-monitor")).toContainText(
     "这是自由观测台（free observation deck），按 session 展示真实运行证据。",
   );
-  await expect(page.getByTestId("home-monitor-demo-start")).toBeDisabled();
+  await expect(page.getByTestId("home-monitor-demo-start")).toBeEnabled();
   await expect(page.getByTestId("home-card-topologies")).toContainText(
     "这是进阶工具：手工搭建与校验 MPEG-TS 拓扑。",
   );
