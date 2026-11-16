@@ -116,6 +116,7 @@ export function AppShell() {
   const cleanupDemo = useCallback(async () => {
     const sessionId = demo?.sessionId ?? null;
     if (sessionId === null || cleanupBusy) return;
+    if (demo?.status === "orchestrating") return; // the in-flight orchestration owns the state
     setCleanupBusy(true);
     setCleanupError(null);
     try {
@@ -139,7 +140,7 @@ export function AppShell() {
     } finally {
       setCleanupBusy(false);
     }
-  }, [cleanupBusy, demo?.sessionId, location.pathname, location.search, navigate]);
+  }, [cleanupBusy, demo?.sessionId, demo?.status, location.pathname, location.search, navigate]);
 
   const demoController = useMemo(
     () => ({ startDemo, demoBusy: demo?.status === "orchestrating" }),

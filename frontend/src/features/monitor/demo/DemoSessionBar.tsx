@@ -42,6 +42,10 @@ export function DemoSessionBar({
 }: DemoSessionBarProps) {
   const sessionKnown = demo.sessionId !== null;
   const showActions = sessionKnown;
+  // Mid-flight the orchestration owns the state: the actions stay locked
+  // until it settles (landed/failed) — a mid-flight cleanup would race the
+  // landing (the orchestration would overwrite the cleared demo state).
+  const actionsLocked = demo.status === "orchestrating";
   return (
     <section
       className="dvb-demo-bar"
@@ -94,7 +98,7 @@ export function DemoSessionBar({
           <button
             type="button"
             data-testid="demo-rerun-run"
-            disabled={rerunBusy || demo.sessionId === null}
+            disabled={rerunBusy || actionsLocked || demo.sessionId === null}
             onClick={onRerun}
           >
             再跑一个 Run（看 journal 实时流动）
@@ -102,7 +106,7 @@ export function DemoSessionBar({
           <button
             type="button"
             data-testid="demo-cleanup"
-            disabled={cleanupBusy || demo.sessionId === null}
+            disabled={cleanupBusy || actionsLocked || demo.sessionId === null}
             onClick={onCleanup}
           >
             结束演示并清理

@@ -45,6 +45,25 @@ describe("DemoSessionBar — orchestrating", () => {
     expect(screen.queryByTestId("demo-rerun-run")).not.toBeInTheDocument();
     expect(screen.queryByTestId("demo-cleanup")).not.toBeInTheDocument();
   });
+
+  it("disables the actions while the orchestration is still in flight (a mid-flight cleanup would race the landing)", () => {
+    const phases = markDemoPhase(initialDemoPhases(), "create", "done", SESSION);
+    render(
+      <DemoSessionBar
+        demo={baseState({ phases, sessionId: SESSION })}
+        rerunBusy={false}
+        cleanupBusy={false}
+        rerunError={null}
+        cleanupError={null}
+        onRerun={() => {}}
+        onCleanup={() => {}}
+      />,
+    );
+    // the kept session id is visible mid-flight, but the actions stay locked
+    // until the orchestration settles (landed or failed) — no cleanup/landing race
+    expect(screen.getByTestId("demo-rerun-run")).toBeDisabled();
+    expect(screen.getByTestId("demo-cleanup")).toBeDisabled();
+  });
 });
 
 describe("DemoSessionBar — landed (three elements, §4.3)", () => {

@@ -208,6 +208,10 @@ describe("AppShell demo wiring — home entry (§4.2 Monitor card demo gate)", (
     renderShellAt("/");
 
     await user.click(await screen.findByTestId("home-monitor-demo-start"));
+    // wait for the orchestration to SETTLE (landed) before cleaning up —
+    // the actions are deliberately locked mid-flight (no cleanup/landing race)
+    const demoBar = await screen.findByTestId("demo-session-bar");
+    await waitFor(() => expect(demoBar).toHaveAttribute("data-demo-status", "landed"));
     const cleanup = await screen.findByTestId("demo-cleanup");
     await waitFor(() => expect(cleanup).toBeEnabled());
     await user.click(cleanup);
@@ -298,6 +302,10 @@ describe("AppShell demo wiring — failure keeps the session cleanable (§8 row 
     renderShellAt("/");
 
     await user.click(await screen.findByTestId("home-monitor-demo-start"));
+    // wait for the orchestration to SETTLE (landed) before cleaning up —
+    // the actions are deliberately locked mid-flight (no cleanup/landing race)
+    const demoBar = await screen.findByTestId("demo-session-bar");
+    await waitFor(() => expect(demoBar).toHaveAttribute("data-demo-status", "landed"));
     const cleanup = await screen.findByTestId("demo-cleanup");
     await waitFor(() => expect(cleanup).toBeEnabled());
     await user.click(cleanup);

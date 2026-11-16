@@ -94,14 +94,16 @@ test("home entry: full orchestration lands pre-anchored on Monitor, rerun adds a
   // §4.3 discipline held across the whole period so far: zero verify.
   expect(verifyRequests).toEqual([]);
 
-  // 「结束演示并清理」: DELETE session (204) + local demo state clear —
-  // the bar disappears, the page leaves the disposed session's scope, and
-  // the server answers 404 for the disposed id.
+  // 「结束演示并清理」: stop (→stopped) + DELETE session (204) + local demo
+  // state clear — the bar disappears, the page leaves the disposed session's
+  // scope, and the server records lifecycle "disposed" (the runtime keeps
+  // the session registered in the absorbing DISPOSED state — it does not 404).
   await page.getByTestId("demo-cleanup").click();
   await expect(page.getByTestId("demo-session-bar")).toHaveCount(0);
   await expect(page).not.toHaveURL(/session=/);
   const disposed = await request.get(`/api/v1/sessions/${sessionId}`);
-  expect(disposed.status()).toBe(404);
+  expect(disposed.status()).toBe(200);
+  expect(((await disposed.json()) as { lifecycle: string }).lifecycle).toBe("disposed");
   expect(verifyRequests).toEqual([]);
 });
 
@@ -126,5 +128,6 @@ test("monitor entry: the guide-seat button drives the same orchestration and lan
   await page.getByTestId("demo-cleanup").click();
   await expect(page.getByTestId("demo-session-bar")).toHaveCount(0);
   const disposed = await page.request.get(`/api/v1/sessions/${sessionId}`);
-  expect(disposed.status()).toBe(404);
+  expect(disposed.status()).toBe(200);
+  expect(((await disposed.json()) as { lifecycle: string }).lifecycle).toBe("disposed");
 });
