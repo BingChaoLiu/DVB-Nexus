@@ -32,7 +32,13 @@ from typing import Protocol
 
 from fastapi import APIRouter
 
-from api.dto.runs import RunAcceptedDTO, RunStatusDTO, RunSubmitRequest
+from api.dto.runs import (
+    RunAcceptedDTO,
+    RunListItemDTO,
+    RunStatusDTO,
+    RunSubmitRequest,
+)
+from api.errors import OPENAPI_ERROR_RESPONSES
 from application.errors import NotFoundError
 
 __all__ = ["RunsPort", "build_runs_router"]
@@ -54,6 +60,12 @@ class RunsPort(Protocol):
 
     async def get_run(self, session_id: str, run_id: str) -> RunStatusDTO | None: ...
 
+    async def list_runs(self, session_id: str) -> list[RunListItemDTO]:
+        """The SPEC-408 §6.3 read face (ticket #94): submission-order ASC.
+        Unknown session raises ``NotFoundError``; a known session without
+        runs answers an empty list."""
+        ...
+
 
 def build_runs_router(port: RunsPort) -> APIRouter:
     """Build the §4.3 run router (mounted under the frozen prefix)."""
@@ -71,6 +83,17 @@ def build_runs_router(port: RunsPort) -> APIRouter:
         # route performs no generation work itself — prepare/schedule is
         # the port's concern; progress is event-borne, never polled here.
         return await port.submit(session_id, request)
+
+    @router.get(
+        "/sessions/{session_id}/runs",
+        response_model=list[RunListItemDTO],
+        responses=OPENAPI_ERROR_RESPONSES,
+    )
+    async def list_runs(session_id: str) -> list[RunListItemDTO]:
+        # SPEC-408 §6.3 (ticket #94): submitted_at ASC (the eight-step
+        # narrative order), read-only, no pagination — the bound is pinned
+        # by the port implementation and declared on the ticket.
+        return await port.list_runs(session_id)
 
     @router.get(
         "/sessions/{session_id}/runs/{run_id}", response_model=RunStatusDTO

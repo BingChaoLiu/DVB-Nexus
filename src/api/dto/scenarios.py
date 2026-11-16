@@ -50,7 +50,14 @@ class ScenarioSummaryDTO(_StrictDTO):
 class ScenarioDetailDTO(_StrictDTO):
     """``GET /scenarios/{id}`` — the exported document (hidden
     reference solution absent by construction; ``initial_topology`` keeps
-    its authored camelCase keys, the #45 canonical-example authority)."""
+    its authored camelCase keys, the #45 canonical-example authority).
+
+    ``content_hash`` (SPEC-408 §6.4, ticket #94) is the loader's pinned
+    SHA-256 of the scenario version — the version-pinning identity
+    (SPEC-205 §5) read back so verify can cite the true binding instead
+    of a declared constant string. Injected by the port from the
+    document; the export face itself does not carry it.
+    """
 
     schema_version: str
     scenario_id: str
@@ -64,6 +71,7 @@ class ScenarioDetailDTO(_StrictDTO):
     objectives: list[str]
     hints: list[dict[str, Any]]
     pass_criteria: list[dict[str, Any]]
+    content_hash: str
 
 
 class ScenarioSolutionDTO(_StrictDTO):

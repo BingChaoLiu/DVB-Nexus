@@ -30,15 +30,18 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from fastapi import APIRouter, Response
+from fastapi import APIRouter, Query, Response
 from pydantic import BaseModel
 
 from api.dto.sessions import (
     CreateSessionRequest,
+    SessionDetailDTO,
+    SessionListItemDTO,
     SessionValidationDTO,
     SessionViewDTO,
     SnapshotDTO,
 )
+from api.errors import OPENAPI_ERROR_RESPONSES
 from application.errors import NotFoundError
 
 __all__ = ["SessionsPort", "build_sessions_router"]
@@ -70,6 +73,17 @@ class SessionsPort(Protocol):
     async def snapshot(
         self, session_id: str, *, journal_seq_cursor: int | None
     ) -> SnapshotDTO: ...
+
+    async def list_sessions(self, *, limit: int) -> list[SessionListItemDTO]:
+        """The SPEC-408 §6.1 read face (ticket #94): newest-first, capped."""
+        ...
+
+    async def get_session_detail(
+        self, session_id: str
+    ) -> SessionDetailDTO | None:
+        """The SPEC-408 §6.2 read face (ticket #94): the view shape plus
+        the provenance pair; ``None`` renders the uniform 404."""
+        ...
 
 
 def _require_found(view: BaseModel | None, what: str) -> BaseModel:
@@ -124,6 +138,35 @@ def build_sessions_router(port: SessionsPort) -> APIRouter:
         # (SPEC-200 §4); the route layer never authors a journal_seq.
         return _require_found(
             await port.snapshot(session_id, journal_seq_cursor=journal_seq_cursor),
+            f"session {session_id!r}",
+        )
+
+    # --- SPEC-408 §6 read-only increments (ticket #94) ----------------------
+    # Additive GET faces only: zero write paths, zero state migrations
+    # (SPEC-408 §6); errors ride the unified envelope via the port.
+
+    @router.get(
+        "/sessions",
+        response_model=list[SessionListItemDTO],
+        responses=OPENAPI_ERROR_RESPONSES,
+    )
+    async def list_sessions(
+        limit: int = Query(default=20, ge=1, le=100),
+    ) -> list[SessionListItemDTO]:
+        # §6.1: newest-first, default 20, hard cap 100, no pagination —
+        # the limit bounds are schema-enforced here so the rejection is
+        # the SPEC-500 §6 row-400 envelope (REQUEST_BODY_INVALID).
+        return await port.list_sessions(limit=limit)
+
+    @router.get(
+        "/sessions/{session_id}",
+        response_model=SessionDetailDTO,
+        responses=OPENAPI_ERROR_RESPONSES,
+    )
+    async def get_session_detail(session_id: str) -> SessionDetailDTO:
+        # §6.2: the existing view shape + scenario_id?/created_at_ms.
+        return _require_found(
+            await port.get_session_detail(session_id),
             f"session {session_id!r}",
         )
 
