@@ -162,6 +162,69 @@
   flex-wrap: wrap;
 }
 
+/* Current-action primary elevation (SPEC-408 §4.4 REQ-UI-408-010): the
+   current-action button — run triggers AND diagnose/verify alike, the
+   mechanism is block-agnostic — fills with the accent; everything else
+   keeps the browser-default secondary look. No ordinal decorations. */
+.dvb-lab-btn-primary {
+  background: var(--dvb-accent, #2563eb);
+  border: 1px solid var(--dvb-accent, #2563eb);
+  color: #ffffff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.dvb-lab-btn-primary:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+/* Always-on guidance bar under the Stepper (SPEC-408 §4.4 REQ-UI-408-008). */
+.dvb-lab-action-guide {
+  margin: 0;
+  padding: 0.45rem 0.75rem;
+  border: 1px solid var(--dvb-border, #d0d4dc);
+  border-left: 3px solid var(--dvb-accent, #2563eb);
+  border-radius: 6px;
+  background: var(--dvb-chip-bg, #f7f8fa);
+  font-size: 0.875rem;
+}
+
+/* Stepper current-action pointer marker (render-layer orientation aid,
+   NOT a fact and NOT a punch card — light-up stays fact-driven). */
+.dvb-lab-step-current {
+  outline: 1px solid var(--dvb-accent, #2563eb);
+  border-radius: 4px;
+}
+
+/* Stepper steps are buttons now (定位非打卡) — reset the chrome away so the
+   strip keeps its former look; clicking locates, it never stamps. */
+button.dvb-lab-step {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+/* Scroll-locator flash (SPEC-408 §4.4「高亮闪示」): a one-shot background
+   pulse on the targeted section; removed again by the console after
+   FLASH_RESET_MS. */
+@keyframes dvb-lab-section-flash-pulse {
+  0% {
+    background-color: color-mix(in srgb, var(--dvb-accent, #2563eb) 16%, transparent);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+.dvb-lab-section-flash {
+  animation: dvb-lab-section-flash-pulse 1.1s ease-out forwards;
+  border-radius: 6px;
+}
+
 .dvb-lab-error,
 .dvb-lab-start-error {
   color: var(--dvb-danger, #b42318);
