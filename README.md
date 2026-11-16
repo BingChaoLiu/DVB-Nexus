@@ -33,6 +33,8 @@ DVBNEXUS_DB_PATH="D:/dvbnexus-data/dvbnexus.db" python -m uvicorn bootstrap.asgi
 cd frontend && npm install && npm run dev   # http://localhost:5173
 ```
 
+**Windows 一键启动**：双击仓库根目录的 [`start.cmd`](start.cmd)——自动检查依赖、启动后端（127.0.0.1:8765）与前端（固定 127.0.0.1:5188，strictPort，避开易被占用的 5173），服务就绪后自动打开浏览器。重复运行安全（已启动的服务自动跳过）；停止 = 关闭对应服务窗口；自动化场景可 `start.cmd -NoOpen` 跳过开浏览器。
+
 完整步骤见[使用文档](docs/user-guide/README.zh-CN.md) / full steps in the [user guide](docs/user-guide/README.en.md)。
 
 ## 编译与构建
