@@ -1,7 +1,7 @@
 ---
 spec_id: SPEC-406
 title: Training Lab
-version: 0.5.0
+version: 0.5.1
 status: APPROVED
 phase: MVP
 owner: Frontend
@@ -91,7 +91,7 @@ requirements: [REQ-UI-406-001, REQ-UI-406-002, REQ-UI-406-003, REQ-UI-406-004, R
   1. `POST /api/v1/sessions`，body = `{scenario_id, topology_id, topology_revision, seed, deterministic, clock_config}`——`scenario_id` 为文档值；其余字段取场景文档投影（`initial_topology.topology_id/revision`、`simulation_config.seed/mode/clock`）。服务端场景分支按文档治理（请求同名字段 permissive-ignored，OQ-6）；请求体携带文档投影值是**自文档化**姿态，不构成第二治理源。
   2. 201 应答 `lifecycle:"ready"` → 自动 `POST .../start` → `running`（runs 面要求 RUNNING session；两跳应答的 `SessionViewDTO` 均为步进事实）。
   3. 成功 → 导航 `?scenario=<id>&session=<session_id>` 进控制台；422 `SIM_VALIDATION_FAILED`（过闸失败）按 §8 渲染 path-addressed violations。
-- session 存在性纪律：一次一个作用域 experiment（无 session 列表端点；`?session=` 深链重挂以 `GET .../snapshot` 为准）；404 `SIM_SESSION_NOT_FOUND` → 回列表 + 显式错误态。
+- session 存在性纪律：一次一个作用域 experiment（0.5.1 修订：只读 session 列表已随 SPEC-408 §6.1 落地，Lab 开局与深链语义不变；`?session=` 深链重挂以 `GET .../snapshot` 为准）；404 `SIM_SESSION_NOT_FOUND` → 回列表 + 显式错误态。
 
 ### 4.4 hints 渐进揭示（REQ-UI-406-004）
 
@@ -223,6 +223,7 @@ POST /api/v1/sessions/{session_id}/runs/{recovery_run_id}/verify
 ```
 
 - **content_hash 申报句**：loader 钉扎的内容哈希（SPEC-205 §5）无 REST 回读面（详情导出剥离 hidden 后不可重算 canonical 哈希）；`content_hash` 按引擎语义为**声明性标识**（服务端核验面 = run↔session 归属 `SIM_VERIF_RUN_MISMATCH`；reveal 门匹配 = `scenario_id`）。Lab 发送固定声明串 `lab-ui-unpinned`，禁伪造哈希。钉扎哈希的 API 回读属 additive 后端面（§10 申报）。
+  - **0.5.1 停用注记**：该 additive 面已随 SPEC-408 §6.4 增量③采纳——`ScenarioDetailDTO` 增加 `content_hash` 读回，Lab verify 预填改用真实钉扎哈希（SPEC-408 §4.3/§7.5）；上方「固定声明串 `lab-ui-unpinned`」口径停用（见 §10 申报 2 修订）。判据直通、run 不自动猜等其余申报语义不变。
 - 判据直通禁改写：Lab 不增删改 `pass_criteria`（通关口径 = 文档声明，非 UI 编排）。
 
 ### 7.5 参考解门控编排（REQ-UI-406-007）
@@ -267,7 +268,7 @@ POST /api/v1/sessions/{session_id}/runs/{recovery_run_id}/verify
 - 上游实现：`src/api` barrel（`createSession/startSession/submitRun/getRun/diagnoseRun/listDiagnoses/verifyRun` + 本票新增三函数）；`src/query/keys.ts` `qk.scenarios/qk.scenario`；`src/components/ui`（Badge/Panel/EmptyState）；`routes.tsx` 既有 `/lab` 条目；`features/monitor/components` barrel（三组件导出）。
 - 下游消费：无（M5 终票）。共享面接触 = §6 + Lab Pack 五 JSON；跳转接线对 #65 导出的单向消费（§7.6）。
 - **申报 1（Analyze HTTP 面）**：M4 裁定 B 冻结 REST analyze 501、Analyze 桥进程内——观测类判据（`psi_*`/`cc_continuous`/`no_unexpected_cc_error`）的 normalized `ts.*` 证据无 HTTP 生产面，纯 REST 链路诚实 INCONCLUSIVE（§4.9）。LAB 不做、也禁做任何绕行（禁伪造候选/禁本地观测推断）。观测类 PASS 可达性 = 后端伴随票决策（本票无后端面）。
-- **申报 2（钉扎哈希回读面）**：`ScenarioDetailDTO` 不含 loader `content_hash`；verify `scenario.content_hash` 为声明串（§7.4）。若需真实钉扎哈希上卡 = additive 后端小票（详情 DTO 加字段），本票禁入。
+- **申报 2（钉扎哈希回读面→已由 SPEC-408 增量③采纳，0.5.1 修订）**：原申报「`ScenarioDetailDTO` 不含 loader `content_hash`，verify 发声明串（§7.4）」已被 SPEC-408 §6.4 增量③兑现——详情 DTO additive 增加 `content_hash`，Lab verify 预填真实钉扎哈希（SPEC-408 §4.3/§7.5）；本规格 §7.4 声明串口径停用（§7.4 停用注记）。
 - **申报 3（起服 CWD 核验结论）**：`frontend/scripts/start-backend.mjs` 以 `cwd: TREE_ROOT`（= worktree 仓库根）spawn uvicorn `bootstrap.asgi:app`，而 `build_production_app` 缺省 `scenario_dir = Path("scenarios")`（CWD-relative，裁定 F）——**CWD 已是仓库根，`scenarios/` 可被扫描，start-backend 零改动**。已实机验证：worktree 起服 + `GET /api/v1/scenarios` 200 列出置入文件、detail 200、reveal 无 PASS 403、`POST /sessions{scenario_id}` 201 `ready`、start→runs 202→completed、verify（`fault_inactive` 单判据、baseline=Inject run）200 PASS、reveal 200。**无需 start-backend additive 方案。**
 
 ## 11. 测试向量
@@ -298,6 +299,7 @@ POST /api/v1/sessions/{session_id}/runs/{recovery_run_id}/verify
 - **AC-406-06（REQ-006）**：八步 stepper 与 CONTEXT.md 闭环逐字对应；状态映射 = §7.3 表（纯函数单测穷举绿）；Analyze 步不可用徽章诚实；「stepper 进度 ≠ 通关判定」旁注可见。
 - **AC-406-07（REQ-007）**：通关（verdict=PASS）前 `/solution` 零请求（E2E 请求监听断言）且面板锁定；PASS 后展开渲染服务端文本（或 null 显式文案）；403 服务端门分支锁定 + message；SC-01 全链 E2E（开局→三 run→verify PASS→展开）真后端绿；SC-04 INCONCLUSIVE 诚实卡 + 锁定保持。
 - **AC-406-08（全门）**：`npm run lint/typecheck/test:run/build/dto:check/e2e` 绿 + 后端三门绿 + `python -I tools/check_specs.py` 0 failed；closed-loop 八步全绿（Create/Inject 翻转后）。
+- **AC-406-09（SPEC-408 §4.4 引导层，0.5.1 增）**：Lab 引导层落位——「当前动作」指针（首个未完成步、乱序不回退、Analyze 恒跳过）+ 常驻指引条精确到按钮文案；Stepper 可点击定位（不改变点亮 + 免责条保留）；run 三按钮常驻分立 + 当前动作主级化跨区块一致；hints 改 localStorage 按场景键（重置控制 + 「本地记录，非服务端事实」明示）；开局自动基线第三跳（声明条 + 失败静默回退）；场景库 row 单入口「查看详情」；initial_topology 统计行 + 中文结构化渲染 + 原始文档折叠；空态三问文案按 SPEC-408 §4.6 Lab 组落位——细则与验收以 SPEC-408 §4.4/§12.1 为准。
 
 ## 13. 非目标
 

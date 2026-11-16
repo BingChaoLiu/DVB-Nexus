@@ -1,10 +1,10 @@
 # Frontend Spec Index
 
-**Package version:** 0.5.0
+**Package version:** 0.5.1
 **Status:** APPROVED
 **Normative parent:** DVB Sandbox SPEC-001/002/003；消费平台契约 SPEC-500/501/503 与 SPEC-305
 
-[范围预批准 ticket #18](https://github.com/BingChaoLiu/DVB-Nexus/issues/18)（2026-11-14）：SPEC-400～406 的 MVP 切集已裁决为**范围级预批准**（下表「MVP 切集」列为裁决内容）；各 spec 实体文本编写归 M5 实现流程（SPEC-400/401/402/403/404/405/406 已随实现票 #61/#62/#63/#64/#65/#66/#67 编写，均 APPROVED 0.5.0（ticket [#15](https://github.com/BingChaoLiu/DVB-Nexus/issues/15) 批准记录））。SPEC-407 Timeline & Replay UI（P2）在 `docs/roadmap.md` §3。
+[范围预批准 ticket #18](https://github.com/BingChaoLiu/DVB-Nexus/issues/18)（2026-11-14）：SPEC-400～406 的 MVP 切集已裁决为**范围级预批准**（下表「MVP 切集」列为裁决内容）；各 spec 实体文本编写归 M5 实现流程（SPEC-400/401/402/403/404/405/406 已随实现票 #61/#62/#63/#64/#65/#66/#67 编写，均 APPROVED 0.5.0（ticket [#15](https://github.com/BingChaoLiu/DVB-Nexus/issues/15) 批准记录））。SPEC-407 Timeline & Replay UI（P2）在 `docs/roadmap.md` §3。SPEC-408 UX Guidance（旅程与引导层）随 [UX 引导层地图 #84](https://github.com/BingChaoLiu/DVB-Nexus/issues/84) 落笔（[#92](https://github.com/BingChaoLiu/DVB-Nexus/issues/92)，repo 主通读确认后 APPROVED 0.5.1，2026-11-16）；同批 SPEC-400/401/403/406 定点修订（主页四路由区/连线反馈/会话列表区/content_hash，APPROVED 0.5.1）。
 
 | Spec ID | Document | MVP 切集（#18 裁决） | 建议依赖 | MVP priority |
 |---|---|---|---|---|
@@ -15,6 +15,7 @@
 | SPEC-404 | [SPEC-404-packet-inspector.md](SPEC-404-packet-inspector.md) | 最小证据下钻：诊断 evidence locator（pid + packet_index + artifact）可点击 → 按 packet_index × 188 从 artifact content（Range）取单包 → hex + TS header 字段解码（sync/PID/continuity_counter/AF/PCR flag）；不做：PSI section 树、PES、baseline/faulted A/B 对照（后续增强，等位替换不变式保证将来增量小） | SPEC-100/305/503 | P0 |
 | SPEC-405 | [SPEC-405-cli-console.md](SPEC-405-cli-console.md) | 「CLI 对照」= 来源标识区分（非双解析器 diff，SPEC-309 归 roadmap）：TSDuck 调用记录列表（九字段：版本/路径/argv/起止/退出码/stdout/stderr/输入 SHA）+ 调用详情（stderr GBK 原文只展示不解析；exit 0 ≠ 有效内容门语义显式标注）+ source 徽章过滤（generator/internal_parser/tsduck/hardware 四值枚举，hardware MVP 不出现）；不做：交互式命令输入（白名单 argv 由后端封装）、终端仿真、双栏 diff | SPEC-308/501 | P0 |
 | SPEC-406 | [SPEC-406-training-lab-ui.md](SPEC-406-training-lab-ui.md) | 场景库列表（GET /scenarios，Lab Pack v1 SC-01~05）+ 场景详情渲染（目标/分阶段 hints/步骤/pass_criteria）+ 建实验 session（scenario_id 入参 + 预设 topology/seed）+ hints 渐进揭示（点击展开下一层，纯前端无后端参与）+ 通关结果卡（verify 三态 + 判据明细 + 诊断候选跳转，复用 403 组件）+ 八步闭环 stepper（Create→…→Verify 顶部指示）+ hidden_reference_solution 通关后展开；不做：计分/进度存档/多用户、场景编辑器（场景编写归实现流程，#17 既裁） | SPEC-205/206 | P0 |
+| SPEC-408 | [SPEC-408-ux-guidance.md](SPEC-408-ux-guidance.md) | UX 引导层（#84 effort 产物，非 #18 切集）：主页旅程门厅（`/`）+ 全局旅程路标条（URL 派生 + 免责）+ 导航「主页」入口与「主干/进阶」徽标 + 三模块引导细则（Monitor 会话列表区/未知会话态/演示一键/verify 预填不自动猜；Lab 当前动作/Stepper 定位/hints localStorage/开局自动基线/场景库单入口；Topologies 进阶说明条/画布空态/gate 说明区/连线反馈/保存声明）+ 空态三问文案总表 + 后端只读增量四件（session 列表/会话详情/run 列表/场景 content_hash，逐项论证）+ 30 分钟实测验收协议（SC-01 主线；PASS = 服务端三态 + 修复后新 Run 证据） | SPEC-400/401/403/406 | P0 |
 
 ## 裁决要点（详见 ticket #18 决议）
 

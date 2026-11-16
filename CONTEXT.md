@@ -70,6 +70,24 @@ _Avoid_: 用 UI 状态判定通关、把"无告警"等同于"干净"
 **八步闭环（Closed Loop）**:
 MVP 核心验收链路：Create → Generate → Inject → Analyze → Diagnose → Inspect → Recover → Verify，全程有真实数据和可追溯证据。
 
+**当前动作（Current Action）**:
+八步闭环规范顺序（Analyze 为永久缺口，指针跳过）中第一个未完成步；乱序完成的步照常点亮（事实就是事实），指针不回退；全部点亮时指针落在 Verify。
+_Avoid_: 把当前动作当通关进度、把指针位置当服务端事实
+
+**已保存拓扑（Saved Topology）**:
+拓扑库条目，拓扑编辑器的产物，snake_case wire 词汇；仅供拓扑模块载入与校验，主干旅程（Lab 场景）不读取。
+_Avoid_: 与场景初始拓扑混称「拓扑」
+
+**场景初始拓扑（Scenario Initial Topology）**:
+`initial_topology`，场景文档的组成部分，camelCase wire 词汇；Lab 开局由文档治理，拓扑编辑器不消费它。两者 wire 词汇不同、语义同源。
+_Avoid_: 与已保存拓扑混称「拓扑」
+
+### 界面与引导
+
+**空态三问（Three Empty-State Questions）**:
+空态/引导文案的三问句式：这是什么 · 为什么空（空/失败 ≠ 干净）· 下一步去哪；一句话 + 单动作按钮可承载，按钮直接消除空态成因。
+_Avoid_: 把空表渲染成「零问题/干净」、用弹窗 tour 替代静态路标
+
 ### 观察与证据
 
 **观测（Observation）**:

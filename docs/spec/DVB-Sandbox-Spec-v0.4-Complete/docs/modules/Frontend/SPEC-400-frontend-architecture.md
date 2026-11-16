@@ -1,7 +1,7 @@
 ---
 spec_id: SPEC-400
 title: Frontend Architecture
-version: 0.5.0
+version: 0.5.1
 status: APPROVED
 phase: MVP
 owner: Frontend
@@ -14,7 +14,7 @@ requirements: [REQ-UI-400-001, REQ-UI-400-002, REQ-UI-400-003, REQ-UI-400-004]
 
 ## 1. 目标
 
-定义前端 SPA 的**架构权威冻结点**：单 SPA 工程与三路由区骨架、服务端状态模型（查询缓存 + WS journal/hint 触发重取）、TS 类型权威与 CI 漂移锁机制、最小测试面。本规格是 SPEC-401~406 实现票的**共享工程基座**：路由注册、DTO 对齐、api/ws/query 客户端核心与 E2E 骨架在本规格落定，后续票 additive 复用，禁另起第二机制。
+定义前端 SPA 的**架构权威冻结点**：单 SPA 工程与路由区骨架（#61 交付时三路由区；SPEC-408 增补主页 `/` 旅程门厅后为四路由区）、服务端状态模型（查询缓存 + WS journal/hint 触发重取）、TS 类型权威与 CI 漂移锁机制、最小测试面。本规格是 SPEC-401~406 实现票的**共享工程基座**：路由注册、DTO 对齐、api/ws/query 客户端核心与 E2E 骨架在本规格落定，后续票 additive 复用，禁另起第二机制。
 
 依据：MVP 切集预批准（ticket #18）、ADR-0003 第 2 条（React + TypeScript 冻结）、ADR-0009（画布选型 @xyflow/react ^12，实体归属 SPEC-401）、SPEC-500 §3/§4/§6（REST 契约）、SPEC-501 §3/§4/§5/§8（WS 契约）、SPEC-305 §6/§8（观测信封与 hint→REST 矩阵）、CONTEXT.md「通关」「八步闭环」词条（UI 判定禁令）。
 
@@ -22,7 +22,7 @@ requirements: [REQ-UI-400-001, REQ-UI-400-002, REQ-UI-400-003, REQ-UI-400-004]
 
 ### 2.1 In Scope
 
-- 单 SPA 工程骨架：`frontend/` 目录、构建链（Vite + TypeScript）、路由注册表模式、三路由区（Topologies / Monitor / Lab）壳导航。
+- 单 SPA 工程骨架：`frontend/` 目录、构建链（Vite + TypeScript）、路由注册表模式、路由区壳导航（#61 交付时三路由区 Topologies / Monitor / Lab；SPEC-408 增补主页 `/` 后为四区，主页实体与导航徽标归 SPEC-408 §4.1/§4.2）。
 - 服务端状态模型：TanStack Query 查询缓存 + WS journal/hint 触发重取；WS 客户端核心（连接、订阅、重连、close 码纪律）；hint→REST 失效桥（五主题）与节流钩子。
 - TS 类型权威机制：OpenAPI codegen + 不可达模型手写补缺 + CI 漂移锁。
 - 工程门禁：Node/包管理器版本钉扎、前端 lint/typecheck/test/build CI job、DTO 漂移锁 CI job、E2E 冒烟 CI job。
@@ -47,7 +47,7 @@ requirements: [REQ-UI-400-001, REQ-UI-400-002, REQ-UI-400-003, REQ-UI-400-004]
 | 重取（refetch） | hint/journal 触发的对应 REST 查询失效与重新拉取（SPEC-305 §8 矩阵） |
 | DTO 对齐 | 前端 TS 类型与后端 Pydantic DTO（SPEC-500）的一致性；机制见 §7，漂移由 CI 捕获（REQ-UI-400-003） |
 | 八步闭环 | Create → Generate → Inject → Analyze → Diagnose → Inspect → Recover → Verify（CONTEXT.md 词条）；E2E 冒烟骨架按此链编排 |
-| 三路由区 | Topologies / Monitor / Lab 三个一级路由区（#18 切集） |
+| 四路由区 | 主页 `/`（旅程门厅，SPEC-408 §4.2 增补）+ Topologies / Monitor / Lab 三个一级路由区（#18 切集三区；#61 交付时为三路由区） |
 
 ## 4. 架构
 
@@ -77,7 +77,7 @@ frontend/
 
 - 一张路由注册表（`src/app/routes.tsx` 导出 `appRoutes` 数组）：每条目 = 一级路由区（path + 惰性加载的页面元素）。壳布局从注册表渲染导航与 `<Outlet/>`。
 - 后续票增路由 = **追加一个条目 + 一行 import**，不触碰共享壳逻辑；共享面 additive-only（裁定 C）。
-- 三路由区（MVP 切集）：`/topologies`、`/monitor`、`/lab`；本票交付可导航的占位区（区域标识渲染即验收），页面实体归 SPEC-401/403/406。
+- 路由区（MVP 切集三区 + SPEC-408 增补主页）：`/`（主页旅程门厅，实体归 SPEC-408 §4.2）、`/topologies`、`/monitor`、`/lab`；#61 交付三区可导航占位（区域标识渲染即验收），页面实体归 SPEC-401/403/406/408。壳导航含「主页」入口，Lab 条目徽「主干」、Topologies 条目徽「进阶」（SPEC-408 §4.1）。
 
 ### 4.3 服务端状态模型（REQ-UI-400-002）
 
@@ -156,7 +156,7 @@ frontend/
 
 - 双 webServer（Playwright）：后端 = uvicorn 加载 `src/bootstrap/asgi.py`（`DVBNEXUS_DB_PATH` 指向临时目录；Python 解释器解析顺序 = 显式环境变量 → 本树 `.venv` → 主仓共享 `.venv`，`PYTHONPATH=<本树>/src` 置前防 editable-install 指向主仓的共享 venv 陷阱）；前端 = 生产构建后的 `vite preview`（代理 `/api`、`/ws` 到后端）。CI 单 job 内同时具备 Python 与 Node。
 - 冒烟骨架两文件：
-  1. **shell 冒烟（本票即真实通过）**：加载 SPA → 三路由区逐区导航断言；建 session（REST 驱动）→ WS subscribe → `ready` 帧到达断言（验证 asgi 入口 + 泵循环 + 代理三条链路真实可用）。
+  1. **shell 冒烟（本票即真实通过）**：加载 SPA → 路由区逐区导航断言（#61 交付时三路由区；SPEC-408 实施后主页 `/` 并入断言面）；建 session（REST 驱动）→ WS subscribe → `ready` 帧到达断言（验证 asgi 入口 + 泵循环 + 代理三条链路真实可用）。
   2. **八步闭环骨架（混合驱动收敛制，批准裁定）**：按 §3 八步编排 `test.step` 骨架，步骤映射镜像既有 API 级全链路先例（Create=POST /sessions；Generate=空 plan run；Inject=带 plan run 202；Analyze=进程内桥——REST analyze 冻结 501 不变；Diagnose=POST diagnose；Inspect=events+artifact content Range；Recover=再跑空 plan；Verify=POST verify 三态）。每步显式标注 `driver: "rest" | "ui"` + 归属票号：本票落地时 HTTP 面可真实驱动的步骤以 `driver: "rest"` 跑真实断言（Create/Generate/Recover/事件查询）；UI 面未落地的步骤同样允许 REST 驱动（同标注 + 归属票号），**归属票落地后 additive 翻转自己名下步骤为 `driver: "ui"`**（该 spec 文件自合入起为共享面）。例外：Analyze 步骤维持**跳过 + 标注**（M4 裁定 B 不变：进程内桥无 HTTP 面、REST analyze 冻结 501），待该面决策变化方可翻转。八步全程经 UI 通过是**验收时点属性**（后端全链路与各页面实体可用为前提），不是本票开工阻塞（票面验收明文）。
 
 ## 8. 错误处理
@@ -188,7 +188,7 @@ frontend/
 ## 11. 测试向量
 
 - 组件/交互测试（Vitest + Testing Library，关键交互最小面）：
-  - 壳导航：三路由区可达、注册表驱动渲染；
+  - 壳导航：路由区可达（#61 交付时三区；SPEC-408 实施后含主页 `/` 与「主干/进阶」徽标）、注册表驱动渲染；
   - api 客户端：信封解析 → `ApiError` 字段（error_code/details.errors/request_id）逐键断言；501 冻结路由走「未接线」呈现分支；
   - WS 状态机：1013 慢消费 reason 解析 → 重连携带 `last_journal_seq`；4404 不重连；指数退避触发（fake WebSocket + fake timers）；
   - 失效桥：五主题 hint → 对应 query key 失效逐条断言；节流窗口内多帧合并为一次重取；journal 帧增量并入按 `journal_seq` 全序；
@@ -198,7 +198,7 @@ frontend/
 
 ## 12. 验收标准
 
-- **AC-400-01**（REQ-UI-400-001）：单 SPA 三路由区可导航——注册表驱动，三区各自可达并有区域标识；路由增量为「一条目 + 一行 import」模式且壳文件无逐票改动。
+- **AC-400-01**（REQ-UI-400-001）：单 SPA 路由区可导航——注册表驱动，各区可达并有区域标识（#61 交付时三区；SPEC-408 增补主页 `/` 后为四区，主页实体与「主干/进阶」徽标按 SPEC-408 §4.1/§4.2 验收）；路由增量为「一条目 + 一行 import」模式且壳文件无逐票改动。
 - **AC-400-02**（REQ-UI-400-002）：服务端状态 = 查询缓存 + WS journal/hint 触发重取——五主题失效矩阵逐条有测试；journal 增量并入按 `journal_seq` 全序；重连按 close 码纪律（1013 续传 cursor）有测试；前端无第二事实源结构（查询缓存外无服务端事实持有面，评审检查项）。
 - **AC-400-03**（REQ-UI-400-003）：TS 类型权威机制在 CI 运行——漂移锁 job 现场 dump + 重新生成 + diff 断言（注入漂移时 CI 红）；补缺只可缩小校验在位（构造交集时 CI 红）；生成物入库且禁手改。
 - **AC-400-04**（REQ-UI-400-004）：测试最小面在位——关键交互组件测试覆盖 §11 清单；E2E 冒烟骨架就位（shell 冒烟真实通过；八步骨架按 §7.3 混合驱动收敛制编排，每步 `driver` + 归属票号标注）；前端 CI 三 job（lint/test/build、DTO 漂移锁、E2E 冒烟）绿，既有 Python CI job 不受影响。
