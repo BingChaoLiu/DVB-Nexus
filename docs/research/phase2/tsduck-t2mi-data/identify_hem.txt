@@ -1,0 +1,4 @@
+* t2mi: found T2-MI PID 0x0015 (21)
+* t2mi: PID 0x0015 (21), found PLP 0
+* t2mi: summary: found 1 PID's with T2-MI
+* t2mi: PID 0x0015 (21): PLP 0
