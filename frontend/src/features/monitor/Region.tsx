@@ -11,7 +11,14 @@
 // #65/#67 reuse, and are candidates for a one-line keys.ts additive landing.
 import { useCallback, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useSearchParams } from "react-router";
+import { useLocation, useSearchParams } from "react-router";
+// PROTOTYPE (issue #87, DEV-only): example-data suite hooks — variant A adds
+// the one-click demo entry + tracked-session banner; variant C fills the
+// no-session empty state with a static example preview. Both vanish (stock
+// render) when the suite is off.
+import { readExampleDataVariant, type ExampleDataVariantKey } from "../../app/prototype/exampleDataPrototype";
+import { DemoSessionBanner, DemoSessionLauncher } from "../../app/prototype/DataVariantA";
+import { MonitorExamplePreview } from "../../app/prototype/DataVariantC";
 import type { DiagnosisEvidenceDTO, DiagnosisReportDTO, RunStatusDTO, VerificationResultDTO } from "./types";
 import {
   diagnoseRun,
@@ -45,7 +52,7 @@ import { DiagnosisCandidateList, DiagnosisList } from "./diagnosis/DiagnosisList
 import { JournalTail } from "./journal/JournalTail";
 import { ControlBar } from "./lifecycle/ControlBar";
 import type { LifecycleAction, LifecycleWire } from "./lifecycle/lifecycleTable";
-import { OverviewCard, RunTrigger } from "./overview/OverviewCard";
+import { OverviewCard, RunTrigger, DEFAULT_RUN_CONFIG_JSON } from "./overview/OverviewCard";
 import { MetricsPanel } from "./metrics/MetricsPanel";
 import { useSessionStream } from "./stream/useSessionStream";
 import { VerifyResultCard } from "./verify/VerifyResultCard";
@@ -81,15 +88,30 @@ const DIAGNOSE_404_RETRY_INTERVAL_MS = 100;
 
 export default function MonitorRegion() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const { search } = useLocation();
   const sessionId = searchParams.get("session");
+  const dataVariant = readExampleDataVariant(search);
 
   if (sessionId === null || sessionId === "") {
-    return <SessionGuide onTrack={(id) => setSearchParams({ session: id })} />;
+    return <SessionGuide onTrack={(id) => setSearchParams({ session: id })} dataVariant={dataVariant} />;
   }
-  return <MonitorPage key={sessionId} sessionId={sessionId} onUntrack={() => setSearchParams({})} />;
+  return (
+    <MonitorPage
+      key={sessionId}
+      sessionId={sessionId}
+      onUntrack={() => setSearchParams({})}
+      dataVariant={dataVariant}
+    />
+  );
 }
 
-function SessionGuide({ onTrack }: { onTrack: (sessionId: string) => void }) {
+function SessionGuide({
+  onTrack,
+  dataVariant,
+}: {
+  onTrack: (sessionId: string) => void;
+  dataVariant: ExampleDataVariantKey | null;
+}) {
   const [draft, setDraft] = useState("");
   return (
     <div className="dvb-region dvb-mon-page">
@@ -112,11 +134,21 @@ function SessionGuide({ onTrack }: { onTrack: (sessionId: string) => void }) {
         />
         <button type="submit">跟踪</button>
       </form>
+      {dataVariant === "A" && <DemoSessionLauncher />}
+      {dataVariant === "C" && <MonitorExamplePreview />}
     </div>
   );
 }
 
-function MonitorPage({ sessionId, onUntrack }: { sessionId: string; onUntrack: () => void }) {
+function MonitorPage({
+  sessionId,
+  onUntrack,
+  dataVariant,
+}: {
+  sessionId: string;
+  onUntrack: () => void;
+  dataVariant: ExampleDataVariantKey | null;
+}) {
   const queryClient = useQueryClient();
   const wsStatus = useSessionStream(sessionId);
   // SPEC-404 §4.2 deep-link entry: read-only (the tracker owns the param
@@ -294,6 +326,14 @@ function MonitorPage({ sessionId, onUntrack }: { sessionId: string; onUntrack: (
 
   return (
     <div className="dvb-region dvb-mon-page">
+      {dataVariant === "A" && (
+        <DemoSessionBanner
+          sessionId={sessionId}
+          onUntrack={onUntrack}
+          onReplayRun={() => void submitEmptyPlanRun(JSON.parse(DEFAULT_RUN_CONFIG_JSON) as never)}
+          replayBusy={runBusy}
+        />
+      )}
       <header className="dvb-mon-page-header">
         <h2>Monitor</h2>
         <span className="dvb-mon-session">session: {sessionId}</span>

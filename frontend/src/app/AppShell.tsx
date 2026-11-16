@@ -6,6 +6,9 @@
 // localStorage fallback) is active, chrome delegates to the prototype shell;
 // the stock render below is byte-identical to pre-prototype and is what
 // tests and production builds see.
+// PROTOTYPE (issue #87, DEV-only): the example-data suite (?data= A/B/C) is
+// orthogonal to the journey suite — its pill + plan card render in BOTH
+// chrome branches, and vanish entirely (null) when the suite is off.
 import { Suspense } from "react";
 import { NavLink, Outlet, useLocation } from "react-router";
 import { appRoutes } from "./routes";
@@ -14,21 +17,27 @@ import { PrototypeSwitcher } from "./prototype/PrototypeSwitcher";
 import { VariantA } from "./prototype/VariantA";
 import { VariantB } from "./prototype/VariantB";
 import { VariantC } from "./prototype/VariantC";
+import { readExampleDataVariant } from "./prototype/exampleDataPrototype";
+import { ExampleDataSwitcher } from "./prototype/ExampleDataSwitcher";
 
 export function AppShell() {
   const { search } = useLocation();
   const variant = readJourneyVariant(search);
+  const dataVariant = readExampleDataVariant(search);
+  const dataSuite = <ExampleDataSwitcher current={dataVariant ?? "off"} />;
   if (variant !== null) {
     const Chrome = variant === "A" ? VariantA : variant === "B" ? VariantB : VariantC;
     return (
       <>
         <Chrome variant={variant} />
         <PrototypeSwitcher current={variant} />
+        {dataSuite}
       </>
     );
   }
   return (
-    <div className="dvb-shell">
+    <>
+      <div className="dvb-shell">
       <header className="dvb-shell-header">
         <span className="dvb-shell-title">DVB-Nexus</span>
         <nav aria-label="路由区" className="dvb-shell-nav">
@@ -49,5 +58,7 @@ export function AppShell() {
         </Suspense>
       </main>
     </div>
+      {dataSuite}
+    </>
   );
 }

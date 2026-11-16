@@ -1,0 +1,142 @@
+/* PROTOTYPE (issue #87) — example-data suite styles. Throwaway evaluation
+ * chrome + variant styling; reuses theme tokens and the journey prototype's
+ * pill look where the two suites coexist. */
+
+/* ---- data-suite switcher pill (stacked above the journey pill) ---- */
+.dvb-proto-switcher-data {
+  bottom: 58px;
+  border-color: var(--dvb-accent);
+}
+
+/* ---- per-variant plan card (evaluation tooling) ---- */
+.dvb-proto-dataplan {
+  position: fixed;
+  top: 52px;
+  right: 12px;
+  width: min(360px, 42vw);
+  max-height: 70vh;
+  overflow: auto;
+  background: #000;
+  color: #fff;
+  border: 2px solid var(--dvb-accent);
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 13px;
+  line-height: 1.6;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.6);
+  z-index: 100;
+}
+.dvb-proto-dataplan summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+.dvb-proto-dataplan ul {
+  margin: 2px 0 6px;
+  padding-left: 18px;
+}
+.dvb-proto-dataplan-tag {
+  color: var(--dvb-accent);
+  font-weight: 600;
+  margin: 4px 0;
+}
+.dvb-proto-dataplan-foot {
+  color: #aaa;
+  font-size: 12px;
+  border-top: 1px solid #333;
+  padding-top: 6px;
+  margin-top: 6px;
+}
+
+/* ---- variant A: launcher + demo banner ---- */
+.dvb-proto-dv-launcher {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-start;
+}
+.dvb-proto-dv-launcher-compact {
+  margin-top: 0;
+}
+.dvb-proto-dv-cta {
+  font-size: 15px;
+  font-weight: 700;
+  padding: 10px 18px;
+  border: 2px solid var(--dvb-accent);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--dvb-text);
+  cursor: pointer;
+}
+.dvb-proto-dv-cta:hover:not(:disabled) {
+  background: var(--dvb-accent);
+  color: #000;
+}
+.dvb-proto-dv-cta:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.dvb-proto-dv-steps {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  font-size: 13px;
+  color: var(--dvb-text);
+}
+.dvb-proto-dv-step-detail {
+  color: var(--dvb-muted);
+}
+.dvb-proto-dv-step-done { color: #7dd87d; }
+.dvb-proto-dv-step-failed { color: #ff7b7b; }
+.dvb-proto-dv-error {
+  color: #ff7b7b;
+  font-size: 13px;
+  max-width: 560px;
+}
+.dvb-proto-dv-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--dvb-accent);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.dvb-proto-dv-banner button {
+  white-space: nowrap;
+}
+
+/* ---- variant C: example preview ---- */
+.dvb-proto-dv-preview {
+  margin-top: 16px;
+}
+.dvb-proto-dv-c-head {
+  margin: 14px 0 6px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.dvb-proto-dv-c-note {
+  color: var(--dvb-muted);
+  font-size: 13px;
+  line-height: 1.7;
+  margin: 6px 0;
+}
+.dvb-proto-dv-c-journal {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.dvb-proto-dv-c-journal-line {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 12px;
+  padding: 2px 0;
+  color: var(--dvb-text);
+}
+.dvb-proto-dv-c-labrow {
+  margin-bottom: 10px;
+}

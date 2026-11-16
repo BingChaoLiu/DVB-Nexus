@@ -13,7 +13,7 @@
 // Plan A of the §7.6 dual plan; finalized at the merge tip).
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "react-router";
+import { useLocation, useNavigate } from "react-router";
 import {
   diagnoseRun,
   getRun,
@@ -39,6 +39,14 @@ import { buildVerifyBody } from "./labBodies";
 import { deriveStepState, type LabFacts, type LabRunFact } from "./stepperState";
 import { Stepper } from "./Stepper";
 import { SolutionPanel, type SolutionErrorState, type SolutionFetchState } from "./SolutionPanel";
+// PROTOTYPE (issue #87, DEV-only): variant B — the auto-submitted baseline
+// run arrives here as prototypeInitialRuns (registry opens populated) and is
+// declared by BaselineAutoRunNote; variant C fills the empty run registry
+// with a static example row. Stock render when the suite is off.
+import { readExampleDataVariant } from "../../app/prototype/exampleDataPrototype";
+import { BaselineAutoRunNote } from "../../app/prototype/DataVariantB";
+import { LabRunExampleRow } from "../../app/prototype/DataVariantC";
+import "./../../app/prototype/exampleDataPrototype.css";
 
 const POLL_INTERVAL_MS = 200;
 const POLL_WINDOW_MS = 30_000;
@@ -58,13 +66,17 @@ export function ExperimentConsole({
   scenarioId,
   sessionId,
   onBack,
+  prototypeInitialRuns,
 }: {
   scenarioId: string;
   sessionId: string;
   onBack: () => void;
+  /** PROTOTYPE (issue #87, variant B): runs auto-submitted at 开局. */
+  prototypeInitialRuns?: ReadonlyArray<RunStatusDTO>;
 }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const dataVariant = readExampleDataVariant(useLocation().search);
 
   // --- server facts ---------------------------------------------------------
   const snapshotQuery = useQuery({
@@ -89,7 +101,16 @@ export function ExperimentConsole({
   });
 
   // --- run registry (page memory; facts ride getRun answers) ----------------
-  const [registry, setRegistry] = useState<RegistryEntry[]>([]);
+  // PROTOTYPE (issue #87, variant B): seed with the auto-submitted baseline
+  // run so Generate is in flight before the first click.
+  const [registry, setRegistry] = useState<RegistryEntry[]>(
+    () =>
+      prototypeInitialRuns?.map((view) => ({
+        view,
+        submittedAtMs: Date.now(),
+        timedOut: false,
+      })) ?? [],
+  );
   const refreshSnapshot = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: qk.snapshot(sessionId) });
     void queryClient.invalidateQueries({ queryKey: [...monitorKeys.diagnoses(sessionId)] });
@@ -243,8 +264,10 @@ export function ExperimentConsole({
   );
 
   const lifecycle = snapshotQuery.data?.lifecycle ?? null;
+  const prototypeBaseline = (prototypeInitialRuns?.length ?? 0) > 0;
   return (
     <div className="dvb-lab-console">
+      {prototypeBaseline && <BaselineAutoRunNote />}
       <Stepper steps={steps} />
       <Panel title={`实验控制台 · ${detailQuery.data?.title ?? scenarioId}`}>
         <button type="button" onClick={onBack}>
@@ -282,7 +305,11 @@ export function ExperimentConsole({
             </button>
           </div>
           {registry.length === 0 ? (
-            <EmptyState title="尚无 Run" note="本页触发的 run 将按注册表呈现（Generate → Inject → Recover）。" />
+            dataVariant === "C" ? (
+              <LabRunExampleRow />
+            ) : (
+              <EmptyState title="尚无 Run" note="本页触发的 run 将按注册表呈现（Generate → Inject → Recover）。" />
+            )
           ) : (
             <ul className="dvb-lab-list">
               {registry.map((entry) => (

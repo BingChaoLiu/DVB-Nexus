@@ -12,6 +12,11 @@ import {
   withVariant,
   type JourneyVariantKey,
 } from "./journeyPrototype";
+// PROTOTYPE (issue #87, DEV-only): when the example-data suite is on variant
+// A, the homepage Monitor card's 下一步 grows the one-click demo entry (the
+// suites compose: journey foyer + demo door).
+import { readExampleDataVariant } from "./exampleDataPrototype";
+import { DemoSessionLauncher } from "./DataVariantA";
 import "./journeyPrototype.css";
 
 export function VariantA({ variant }: { variant: JourneyVariantKey }) {
@@ -69,6 +74,8 @@ function MiniJourneyStrip({
 
 /** Homepage rendered at `/` while variant A is active. */
 export function StartPageA({ variant }: { variant: JourneyVariantKey }) {
+  const { search } = useLocation();
+  const dataVariant = readExampleDataVariant(search);
   return (
     <div className="dvb-proto-home">
       <section className="dvb-panel dvb-proto-hero">
@@ -118,7 +125,16 @@ export function StartPageA({ variant }: { variant: JourneyVariantKey }) {
           <h2 className="dvb-panel-title">Monitor <span className="dvb-proto-badge-info">证据台</span></h2>
           <p><b>这是什么:</b>自由观测台:告警、码流检查器、诊断、事件、CLI 台账。</p>
           <p><b>为什么看着空:</b>它需要「会话」才有内容;从 Lab 实验台进入会自动带上,或手动粘贴 session UUID。</p>
-          <p><b>下一步:</b>先去 Lab 开局;实验中途可随时来取证。</p>
+          {/* PROTOTYPE (issue #87): with the example-data suite on A, the card
+              grows the one-click demo door; stock copy stays as the fallback. */}
+          {dataVariant === "A" ? (
+            <p>
+              <b>下一步:</b>不想等开局?点下面按钮先看一眼真实数据流动;或<a href={withVariant("/lab", variant)}>先去 Lab 开局 →</a>
+              <DemoSessionLauncher compact />
+            </p>
+          ) : (
+            <p><b>下一步:</b>先去 Lab 开局;实验中途可随时来取证。</p>
+          )}
         </div>
         <div className="dvb-panel dvb-proto-module-card dvb-proto-module-adv">
           <h2 className="dvb-panel-title">Topologies <span className="dvb-proto-badge-adv">进阶</span></h2>

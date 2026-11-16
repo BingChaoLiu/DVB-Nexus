@@ -6,10 +6,15 @@
 // (running — the runs face requires RUNNING). Hint reveal state is
 // per-scenario page memory (pure frontend, resets on reload — honest).
 import { useCallback, useState } from "react";
-import { useSearchParams } from "react-router";
-import { createSession, getScenario, isApiError, startSession } from "../../api";
+import { useLocation, useSearchParams } from "react-router";
+import { createSession, getScenario, isApiError, startSession, submitRun, type RunStatusDTO } from "../../api";
 import { qk } from "../../query/keys";
 import { useQueryClient } from "@tanstack/react-query";
+// PROTOTYPE (issue #87, DEV-only): variant B adds a third hop to the §7.1
+// orchestration — the empty-plan baseline run is auto-submitted at 开局 so
+// the console opens with first real data in flight. Stock flow when off.
+import { readExampleDataVariant } from "../../app/prototype/exampleDataPrototype";
+import { LAB_RUN_CONFIG } from "./labGeometry";
 import { buildCreateSessionBody } from "./labBodies";
 import { ScenarioDetail } from "./ScenarioDetail";
 import { ScenarioLibrary } from "./ScenarioLibrary";
@@ -37,6 +42,7 @@ function violationList(details: Record<string, unknown> | undefined): StartError
 
 export default function LabRegion() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const { search } = useLocation();
   const queryClient = useQueryClient();
   const scenarioId = searchParams.get("scenario");
   const sessionId = searchParams.get("session");
@@ -45,6 +51,10 @@ export default function LabRegion() {
   const [revealedHints, setRevealedHints] = useState<Record<string, number>>({});
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<StartErrorShape | null>(null);
+  // PROTOTYPE (issue #87, variant B): the auto-submitted baseline run handed
+  // to the console so its registry opens populated (console remounts per
+  // session via key, so a plain state carrier in the region is enough).
+  const [prototypeInitialRuns, setPrototypeInitialRuns] = useState<RunStatusDTO[]>([]);
 
   const openDetail = useCallback(
     (id: string) => {
@@ -75,6 +85,26 @@ export default function LabRegion() {
         if (started.lifecycle !== "running") {
           throw new Error(`开局异常：start 应答 lifecycle=${started.lifecycle}（期望 running）`);
         }
+        // PROTOTYPE (issue #87, variant B): third hop — auto-submit the
+        // empty-plan baseline run (frozen golden geometry). The console's
+        // poller tracks it to completion; Generate lights up by itself.
+        if (readExampleDataVariant(search) === "B") {
+          try {
+            const accepted = await submitRun(created.session_id, {
+              config: LAB_RUN_CONFIG as unknown as Parameters<typeof submitRun>[1]["config"],
+              fault_plan: [] as Parameters<typeof submitRun>[1]["fault_plan"],
+            });
+            setPrototypeInitialRuns([
+              { run_id: accepted.run_id, status: "running", artifacts: [] } as RunStatusDTO,
+            ]);
+          } catch {
+            // auto-baseline is best-effort: the stock buttons remain, the
+            // engineer can always 生成基线 manually (honest fallback).
+            setPrototypeInitialRuns([]);
+          }
+        } else {
+          setPrototypeInitialRuns([]);
+        }
         setSearchParams({ scenario: id, session: created.session_id });
       } catch (error) {
         if (isApiError(error)) {
@@ -89,7 +119,9 @@ export default function LabRegion() {
         setStarting(false);
       }
     },
-    [queryClient, setSearchParams],
+    // PROTOTYPE (issue #87): search (variant B read) + the initial-runs
+    // setter are additional closure reads of the prototype extension.
+    [queryClient, setSearchParams, search],
   );
 
   const revealNext = useCallback(
@@ -109,6 +141,7 @@ export default function LabRegion() {
           scenarioId={scenarioId}
           sessionId={sessionId}
           onBack={() => openDetail(scenarioId)}
+          prototypeInitialRuns={prototypeInitialRuns}
         />
       </>
     );
