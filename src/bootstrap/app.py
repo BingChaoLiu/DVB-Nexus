@@ -416,15 +416,27 @@ def build_production_app(
     )
     tsduck_call_store = SqliteTSDuckCallStore(connection)
 
+    # SPEC-408 §6 metadata clock (ticket #94): the session/run provenance
+    # stamps ride the same injectable wall-clock source as the rest of the
+    # stack, rendered in milliseconds.
+    def _wall_ms() -> int:
+        return wall_ns() // 1_000_000
+
     sessions_backend = SimulationSessionsBackend(
         runtime,
         resolved_topology_provider,
         session_specs,
         on_session_created=_on_session_created,
         scenario_registry=scenario_registry,
+        now_ms=_wall_ms,
     )
     runs_backend = SimulationRunsBackend(
-        ts_runtime, runtime, session_specs, StoreArtifactSink(store, index=artifact_repository), allocator
+        ts_runtime,
+        runtime,
+        session_specs,
+        StoreArtifactSink(store, index=artifact_repository),
+        allocator,
+        now_ms=_wall_ms,
     )
     artifacts_backend = ArtifactStoreBackend(store, artifact_repository)
     tsduck_calls_backend = TSDuckCallsBackend(tsduck_call_store, journal)

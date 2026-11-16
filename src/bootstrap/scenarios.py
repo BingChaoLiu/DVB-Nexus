@@ -175,7 +175,11 @@ class RegistryScenarioPort:
         # export_scenario_document: hidden solution stripped by default +
         # the executable-content defense-in-depth scan (REQ-SIM-205-003).
         exported = export_scenario_document(document)
-        return ScenarioDetailDTO(**exported)
+        # SPEC-408 §6.4 (ticket #94): the loader's pinned SHA-256 (the
+        # SPEC-205 §5 version-pinning identity) rides the detail answer;
+        # the export face itself does not carry it, so it is injected here
+        # from the document.
+        return ScenarioDetailDTO(content_hash=document.content_hash, **exported)
 
     def reveal(self, scenario_id: str, session_id: str) -> ScenarioSolutionDTO:
         return self._gate.reveal(scenario_id, session_id)

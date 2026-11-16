@@ -11,7 +11,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** List Sessions */
+        get: operations["list_sessions_api_v1_sessions_get"];
         put?: never;
         /** Create Session */
         post: operations["create_session_api_v1_sessions_post"];
@@ -113,7 +114,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** Get Session Detail */
+        get: operations["get_session_detail_api_v1_sessions__session_id__get"];
         put?: never;
         post?: never;
         /** Dispose Session */
@@ -147,7 +149,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** List Runs */
+        get: operations["list_runs_api_v1_sessions__session_id__runs_get"];
         put?: never;
         /** Submit Run */
         post: operations["submit_run_api_v1_sessions__session_id__runs_post"];
@@ -1345,6 +1348,31 @@ export interface components {
             partial: boolean;
         };
         /**
+         * RunListItemDTO
+         * @description One ``GET /sessions/{id}/runs`` row (SPEC-408 §6.3, ticket #94).
+         *
+         *     The list answers in ``submitted_at`` ASC order (the eight-step
+         *     narrative order), no pagination. ``submitted_at_ms`` and
+         *     ``fault_plan_present`` are recorded by the composition layer at
+         *     submission; ``packet_count`` passes through from the completed result
+         *     face (``None`` while running / on failure — the honest null face).
+         */
+        RunListItemDTO: {
+            /** Run Id */
+            run_id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "running" | "completed" | "cancelled" | "failed";
+            /** Submitted At Ms */
+            submitted_at_ms: number;
+            /** Fault Plan Present */
+            fault_plan_present: boolean;
+            /** Packet Count */
+            packet_count?: number | null;
+        };
+        /**
          * RunStatusDTO
          * @description ``GET .../runs/{run_id}`` answer (SPEC-203 §5.2 ``TSRunResult``).
          *
@@ -1393,6 +1421,12 @@ export interface components {
          * @description ``GET /scenarios/{id}`` — the exported document (hidden
          *     reference solution absent by construction; ``initial_topology`` keeps
          *     its authored camelCase keys, the #45 canonical-example authority).
+         *
+         *     ``content_hash`` (SPEC-408 §6.4, ticket #94) is the loader's pinned
+         *     SHA-256 of the scenario version — the version-pinning identity
+         *     (SPEC-205 §5) read back so verify can cite the true binding instead
+         *     of a declared constant string. Injected by the port from the
+         *     document; the export face itself does not carry it.
          */
         ScenarioDetailDTO: {
             /** Schema Version */
@@ -1431,6 +1465,8 @@ export interface components {
             pass_criteria: {
                 [key: string]: unknown;
             }[];
+            /** Content Hash */
+            content_hash: string;
         };
         /**
          * ScenarioIdentityDTO
@@ -1469,6 +1505,62 @@ export interface components {
             title: string;
             /** Difficulty */
             difficulty: string;
+        };
+        /**
+         * SessionDetailDTO
+         * @description ``GET /sessions/{id}`` — the SPEC-408 §6.2 detail read-back
+         *     (ticket #94): the existing ``SessionViewDTO`` wire shape additively
+         *     extended with the provenance pair. ``scenario_id`` was write-only
+         *     before (consumed at create, then dropped — the structural root of
+         *     "data with unknown provenance"); ``created_at_ms`` is the wall clock
+         *     at session creation, recorded by the composition layer.
+         */
+        SessionDetailDTO: {
+            /** Session Id */
+            session_id: string;
+            /** Revision */
+            revision: number;
+            /** Lifecycle */
+            lifecycle: string;
+            /** Virtual Time Ns */
+            virtual_time_ns: number;
+            /** Topology Revision */
+            topology_revision: number;
+            /** Node States */
+            node_states?: {
+                [key: string]: components["schemas"]["NodeStateDTO"];
+            };
+            /** Active Faults */
+            active_faults?: components["schemas"]["FaultRefDTO"][];
+            /** Latest Artifact Refs */
+            latest_artifact_refs?: components["schemas"]["ArtifactRefDTO"][];
+            /** Scenario Id */
+            scenario_id?: string | null;
+            /** Created At Ms */
+            created_at_ms: number;
+        };
+        /**
+         * SessionListItemDTO
+         * @description One ``GET /sessions`` row (SPEC-408 §6.1, ticket #94).
+         *
+         *     The list answers newest-first (``created_at`` DESC, default limit 20,
+         *     hard cap 100, no pagination). ``created_at_ms`` is newly collected
+         *     wall clock — the runtime session spec carries none, so the composition
+         *     layer records it at creation (bootstrap-level metadata, the frozen
+         *     ``SimulationSessionSpec`` stays untouched). ``scenario_id`` closes the
+         *     write-only provenance gap for the list annotation face.
+         */
+        SessionListItemDTO: {
+            /** Session Id */
+            session_id: string;
+            /** Lifecycle */
+            lifecycle: string;
+            /** Created At Ms */
+            created_at_ms: number;
+            /** Scenario Id */
+            scenario_id?: string | null;
+            /** Topology Revision */
+            topology_revision: number;
         };
         /**
          * SessionValidationDTO
@@ -1804,6 +1896,82 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    list_sessions_api_v1_sessions_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionListItemDTO"][];
+                };
+            };
+            /** @description SPEC-500 §6 row 400 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description SPEC-500 §6 row 404 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description SPEC-500 §6 row 409 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description SPEC-500 §6 row 422 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description SPEC-500 §6 row 501 */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description SPEC-500 §6 row 503 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     create_session_api_v1_sessions_post: {
         parameters: {
             query?: never;
@@ -1992,6 +2160,82 @@ export interface operations {
             };
         };
     };
+    get_session_detail_api_v1_sessions__session_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionDetailDTO"];
+                };
+            };
+            /** @description SPEC-500 §6 row 400 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description SPEC-500 §6 row 404 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description SPEC-500 §6 row 409 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description SPEC-500 §6 row 422 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description SPEC-500 §6 row 501 */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description SPEC-500 §6 row 503 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     dispose_session_api_v1_sessions__session_id__delete: {
         parameters: {
             query?: never;
@@ -2050,6 +2294,82 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_runs_api_v1_sessions__session_id__runs_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunListItemDTO"][];
+                };
+            };
+            /** @description SPEC-500 §6 row 400 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description SPEC-500 §6 row 404 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description SPEC-500 §6 row 409 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description SPEC-500 §6 row 422 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description SPEC-500 §6 row 501 */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description SPEC-500 §6 row 503 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
         };

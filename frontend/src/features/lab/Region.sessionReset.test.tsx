@@ -62,6 +62,7 @@ const SCENARIO: ScenarioDetailDTO = {
   schema_version: "1.0",
   scenario_id: "5c010000-0000-4000-8000-000000000001",
   version: "1.0.0",
+  content_hash: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   title: "CC 不连续训练",
   difficulty: "intro",
   initial_topology: {},
