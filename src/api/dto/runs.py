@@ -27,6 +27,7 @@ from api.dto.generator import GeneratorConfigDTO
 __all__ = [
     "RunAcceptedDTO",
     "RunArtifactDTO",
+    "RunListItemDTO",
     "RunStatusDTO",
     "RunSubmitRequest",
 ]
@@ -56,6 +57,23 @@ class RunAcceptedDTO(_StrictDTO):
     run_id: str
     config_hash: str
     status: Literal["running"] = "running"
+
+
+class RunListItemDTO(_StrictDTO):
+    """One ``GET /sessions/{id}/runs`` row (SPEC-408 §6.3, ticket #94).
+
+    The list answers in ``submitted_at`` ASC order (the eight-step
+    narrative order), no pagination. ``submitted_at_ms`` and
+    ``fault_plan_present`` are recorded by the composition layer at
+    submission; ``packet_count`` passes through from the completed result
+    face (``None`` while running / on failure — the honest null face).
+    """
+
+    run_id: str
+    status: Literal["running", "completed", "cancelled", "failed"]
+    submitted_at_ms: int
+    fault_plan_present: bool
+    packet_count: int | None = None
 
 
 class RunArtifactDTO(_StrictDTO):

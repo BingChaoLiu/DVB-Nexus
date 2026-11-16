@@ -10,6 +10,8 @@ The authoritative freeze is the SPEC-500 §4 route table (ticket #13
   501 in the unbound test composition (presence is the freeze
   obligation);
 - §4.2 sessions ×8, §4.3 runs ×2 and §4.6 artifacts ×3 are wired;
+  the SPEC-408 §6 read-only increments (ticket #94) add three GET rows:
+  session list + detail read-back (§4.2 → ×10) and the run list (§4.3 → ×3);
 - §4.5 observation ×8 (SPEC-305 logical endpoints, verbatim);
 - the #80 additive §4.7/§4.8 rows (solution reveal + TSDuck call records);
 - plus the #24 skeleton canary ``GET /api/v1/version`` — the only route
@@ -53,6 +55,12 @@ FROZEN_ROUTE_TABLE: tuple[tuple[str, str], ...] = (
     ("POST", "/sessions/{id}/stop"),
     ("DELETE", "/sessions/{id}"),
     ("GET", "/sessions/{id}/snapshot"),
+    # §4.2 Session — the SPEC-408 §6.1/§6.2 read-only increments (ticket
+    # #94; approved SPEC-500 §4 amendment): session list + detail read-back
+    ("GET", "/sessions"),
+    ("GET", "/sessions/{id}"),
+    # §4.3 Run — the SPEC-408 §6.3 read-only run list (ticket #94)
+    ("GET", "/sessions/{id}/runs"),
     # §4.3 Run (ticket #13 Q-C-①: async job 202, fault_plan in body)
     ("POST", "/sessions/{id}/runs"),
     ("GET", "/sessions/{id}/runs/{run_id}"),

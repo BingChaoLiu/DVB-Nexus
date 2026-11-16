@@ -32,6 +32,8 @@ __all__ = [
     "NodeStateDTO",
     "PortStateDTO",
     "ResourceLimitsDTO",
+    "SessionDetailDTO",
+    "SessionListItemDTO",
     "SessionValidationDTO",
     "SnapshotDTO",
     "TopologyViolationDTO",
@@ -126,6 +128,36 @@ class SessionViewDTO(_StrictDTO):
     node_states: dict[str, NodeStateDTO] = Field(default_factory=dict)
     active_faults: list[FaultRefDTO] = Field(default_factory=list)
     latest_artifact_refs: list[ArtifactRefDTO] = Field(default_factory=list)
+
+
+class SessionListItemDTO(_StrictDTO):
+    """One ``GET /sessions`` row (SPEC-408 §6.1, ticket #94).
+
+    The list answers newest-first (``created_at`` DESC, default limit 20,
+    hard cap 100, no pagination). ``created_at_ms`` is newly collected
+    wall clock — the runtime session spec carries none, so the composition
+    layer records it at creation (bootstrap-level metadata, the frozen
+    ``SimulationSessionSpec`` stays untouched). ``scenario_id`` closes the
+    write-only provenance gap for the list annotation face.
+    """
+
+    session_id: str
+    lifecycle: str
+    created_at_ms: int
+    scenario_id: str | None = None
+    topology_revision: int
+
+
+class SessionDetailDTO(SessionViewDTO):
+    """``GET /sessions/{id}`` — the SPEC-408 §6.2 detail read-back
+    (ticket #94): the existing ``SessionViewDTO`` wire shape additively
+    extended with the provenance pair. ``scenario_id`` was write-only
+    before (consumed at create, then dropped — the structural root of
+    "data with unknown provenance"); ``created_at_ms`` is the wall clock
+    at session creation, recorded by the composition layer."""
+
+    scenario_id: str | None = None
+    created_at_ms: int
 
 
 class SnapshotDTO(SessionViewDTO):
