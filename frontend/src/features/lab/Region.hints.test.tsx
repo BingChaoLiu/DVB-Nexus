@@ -63,6 +63,7 @@ const SCENARIO: ScenarioDetailDTO = {
   schema_version: "1.0",
   scenario_id: SID,
   version: "1.0.0",
+  content_hash: "sha256:hint-fixture",
   title: "CC 不连续训练",
   difficulty: "intro",
   initial_topology: {
