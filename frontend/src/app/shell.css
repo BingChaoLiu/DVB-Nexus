@@ -1,0 +1,79 @@
+/* Shell chrome additions (SPEC-408 §4.1): journey wayfinding bar, nav badges,
+   header guide link, unknown-region state. Tokens come from styles/theme.css. */
+
+.dvb-shell-header {
+  flex-wrap: wrap;
+}
+
+.dvb-shell-guide {
+  margin-left: auto;
+  color: var(--dvb-accent);
+  text-decoration: none;
+  font-size: 14px;
+}
+
+.dvb-shell-guide:hover {
+  text-decoration: underline;
+}
+
+.dvb-nav-badge {
+  margin-left: 6px;
+  font-size: 11px;
+}
+
+/* Journey wayfinding bar — position chip is URL-derived wayfinding only. */
+.dvb-journey-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  padding: 8px 20px;
+  border-bottom: 1px solid var(--dvb-border);
+  background: rgba(30, 41, 59, 0.6);
+  font-size: 13px;
+}
+
+.dvb-journey-nodes {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+}
+
+.dvb-journey-node {
+  display: inline-flex;
+  align-items: center;
+  color: var(--dvb-muted);
+}
+
+.dvb-journey-node-gap {
+  opacity: 0.5;
+}
+
+.dvb-journey-arrow {
+  margin: 0 6px;
+  color: var(--dvb-border);
+}
+
+.dvb-journey-you-are {
+  color: var(--dvb-accent);
+  font-weight: 600;
+}
+
+.dvb-journey-disclaimer {
+  color: var(--dvb-muted);
+}
+
+/* Explicit unknown-region fallback (no redirects, SPEC-408 §4.1). */
+.dvb-unknown-region {
+  margin-top: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dvb-unknown-region a {
+  color: var(--dvb-accent);
+}
