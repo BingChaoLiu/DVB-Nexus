@@ -3,8 +3,13 @@
 // ?session=). routes.tsx registration is #61's entry; this file replaces
 // the #61 placeholder in place (shared shell untouched). The 开局 action
 // runs the §7.1 two-hop orchestration: create (201 ready) → start
-// (running — the runs face requires RUNNING). Hint reveal state is
-// per-scenario page memory (pure frontend, resets on reload — honest).
+// (running — the runs face requires RUNNING). Hint reveal state (SPEC-408
+// §4.4 REQ-UI-408-011) lives in the hintsStorage seam — ONE shared
+// per-scenario localStorage key `dvb-lab-hints:{scenario_id}` is the record;
+// each view instantiates useHintsReveal and Region keys the views by
+// scenario/session so a fresh mount hydrates the same key (刷新不丢; the
+// console embeds the ladder — NO deep link, the ?session= anchor stays).
+// Reveal state never feeds any verify/evidence path — storage → UI display.
 import { useCallback, useState } from "react";
 import { useSearchParams } from "react-router";
 import { createSession, getScenario, isApiError, startSession } from "../../api";
@@ -41,8 +46,6 @@ export default function LabRegion() {
   const scenarioId = searchParams.get("scenario");
   const sessionId = searchParams.get("session");
 
-  // Per-scenario hint reveal counters (component memory — no persistence).
-  const [revealedHints, setRevealedHints] = useState<Record<string, number>>({});
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<StartErrorShape | null>(null);
 
@@ -92,20 +95,16 @@ export default function LabRegion() {
     [queryClient, setSearchParams],
   );
 
-  const revealNext = useCallback(
-    (id: string) => setRevealedHints((prev) => ({ ...prev, [id]: (prev[id] ?? 0) + 1 })),
-    [],
-  );
-
   if (scenarioId !== null && sessionId !== null) {
     return (
       <>
         <h2>Lab</h2>
-        {/* key={sessionId} remounts the console on a ?session= switch —
+        {/* key remounts the console on a ?session= (or scenario) switch —
             SPEC-406 §7.5 rule 4: 面板复位锁定 + 已取文本丢弃（禁跨会话
-            残留；same per-session remount posture as the Monitor 区 key）. */}
+            残留；same per-session remount posture as the Monitor 区 key）.
+            The remount also re-hydrates the hints key (hintsStorage). */}
         <ExperimentConsole
-          key={sessionId}
+          key={`${scenarioId}:${sessionId}`}
           scenarioId={scenarioId}
           sessionId={sessionId}
           onBack={() => openDetail(scenarioId)}
@@ -117,10 +116,12 @@ export default function LabRegion() {
     return (
       <>
         <h2>Lab</h2>
+        {/* key={scenarioId}: entering a different scenario remounts the
+            detail view, re-hydrating ITS hints key (same source, per
+            scenario — never a stale count from another scenario). */}
         <ScenarioDetail
+          key={scenarioId}
           scenarioId={scenarioId}
-          revealedCount={revealedHints[scenarioId] ?? 0}
-          onRevealNext={() => revealNext(scenarioId)}
           onBack={backToLibrary}
           onStart={() => void startExperiment(scenarioId)}
           starting={starting}

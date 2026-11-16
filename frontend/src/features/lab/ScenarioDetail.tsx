@@ -1,34 +1,35 @@
 // Scenario detail (SPEC-406 §4.3, REQ-UI-406-002): the exported document
 // rendered read-only — objectives as the numbered step list, the hints
-// ladder (§4.4), pass_criteria rows (the six-kind closed enum strings
-// verbatim + mandatory + fault_id), and the initial_topology camelCase
-// island as a read-only structure view (the #45 canonical-example keys are
-// rendered AS AUTHORED — no key-name translation). The 开局 action runs the
-// §7.1 two-hop orchestration (create 201 ready → start running).
+// ladder (§4.4, localStorage-backed via useHintsReveal — the SAME shared
+// per-scenario key the console's collapsible block reads/writes), pass_
+// criteria rows (the six-kind closed enum strings verbatim + mandatory +
+// fault_id), and the initial_topology camelCase island as a read-only
+// structure view (the #45 canonical-example keys are rendered AS AUTHORED —
+// no key-name translation). The 开局 action runs the §7.1 two-hop
+// orchestration (create 201 ready → start running).
 import { useQuery } from "@tanstack/react-query";
 import { Badge, EmptyState, Panel } from "../../components/ui";
 import { getScenario, type ScenarioDetailDTO } from "../../api";
 import { qk } from "../../query/keys";
+import { useHintsReveal } from "./hintsStorage";
 import { HintsLadder, type LabHintWire } from "./HintsLadder";
 
 export function ScenarioDetail({
   scenarioId,
-  revealedCount,
-  onRevealNext,
   onBack,
   onStart,
   starting,
   startError,
 }: {
   scenarioId: string;
-  revealedCount: number;
-  onRevealNext: () => void;
   onBack: () => void;
   onStart: () => void;
   starting: boolean;
   startError: { message: string; violations?: ReadonlyArray<{ code: string; path: string; message: string }> } | null;
 }) {
   const query = useQuery({ queryKey: qk.scenario(scenarioId), queryFn: () => getScenario(scenarioId) });
+  // Shared localStorage-backed reveal source (SPEC-408 §4.4 REQ-UI-408-011).
+  const hints = useHintsReveal(scenarioId);
   return (
     <Panel title={`场景详情 ${scenarioId}`}>
       <button type="button" onClick={onBack}>
@@ -44,8 +45,10 @@ export function ScenarioDetail({
       ) : (
         <ScenarioDetailBody
           detail={query.data}
-          revealedCount={revealedCount}
-          onRevealNext={onRevealNext}
+          revealedCount={hints.count}
+          onRevealNext={hints.revealNext}
+          onResetHints={hints.resetHints}
+          hintsStorageOk={hints.storageOk}
           onStart={onStart}
           starting={starting}
           startError={startError}
@@ -59,6 +62,8 @@ function ScenarioDetailBody({
   detail,
   revealedCount,
   onRevealNext,
+  onResetHints,
+  hintsStorageOk,
   onStart,
   starting,
   startError,
@@ -66,6 +71,8 @@ function ScenarioDetailBody({
   detail: ScenarioDetailDTO;
   revealedCount: number;
   onRevealNext: () => void;
+  onResetHints: () => void;
+  hintsStorageOk: boolean;
   onStart: () => void;
   starting: boolean;
   startError: { message: string; violations?: ReadonlyArray<{ code: string; path: string; message: string }> } | null;
@@ -100,6 +107,8 @@ function ScenarioDetailBody({
           hints={detail.hints as unknown as LabHintWire[]}
           revealedCount={revealedCount}
           onRevealNext={onRevealNext}
+          onResetHints={onResetHints}
+          storageAvailable={hintsStorageOk}
         />
       </section>
 
