@@ -77,7 +77,7 @@ test("home entry: full orchestration lands pre-anchored on Monitor, rerun adds a
   });
   const journeyIndex = order.indexOf("div:journey-bar");
   const barIndex = order.indexOf("section:demo-session-bar");
-  const mainIndex = order.indexOf("main");
+  const mainIndex = order.findIndex((key) => key.startsWith("main:"));
   expect(journeyIndex).toBeGreaterThanOrEqual(0);
   expect(barIndex).toBeGreaterThan(journeyIndex);
   expect(mainIndex).toBeGreaterThan(barIndex);
