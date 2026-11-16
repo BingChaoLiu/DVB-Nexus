@@ -88,6 +88,41 @@
   gap: 0.5rem;
 }
 
+/* Collapsible per-stage hints inside the console (SPEC-408 §4.4
+   REQ-UI-408-011): a sibling of the five locator sections — never an
+   anchor target itself. */
+.dvb-lab-hints-details {
+  margin: 0.5rem 0;
+}
+
+.dvb-lab-hints-details > summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.dvb-lab-hints-status-line {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  align-items: baseline;
+}
+
+.dvb-lab-hints-status {
+  color: var(--dvb-text-muted, #4b5563);
+  font-size: 0.8125rem;
+}
+
+.dvb-lab-hints-storage-warn {
+  color: var(--dvb-warn, #b45309);
+  font-size: 0.8125rem;
+}
+
+.dvb-lab-hints-controls {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
 .dvb-lab-hint-list {
   list-style: none;
   margin: 0;
