@@ -8,6 +8,7 @@ import type { TopologyDTO, TopologyNodeDTO } from "../../api/endpoints/topologie
 import {
   canConnect,
   defaultPortsFor,
+  explainConnection,
   fromWire,
   layoutGraph,
   nextConnectionId,
@@ -216,6 +217,139 @@ describe("canConnect — the four UX prechecks (SPEC-401 §7.2)", () => {
   it("rejects unknown handles defensively", () => {
     expect(connect("gen-0", "nope", "mon-0", "ts_in")).toBe(false);
     expect(connect("gen-0", "ts_out", "mon-0", "nope")).toBe(false);
+  });
+});
+
+// SPEC-408 §7.6 (连线落空原因映射): the four prechecks' failures get one-line
+// reasons rendered verbatim in the toolbar status area (约 4 秒自动消失).
+// Expected strings are the spec literals, copied byte-exact (fullwidth
+// punctuation, “” curly quotes) — never recomputed from the implementation.
+describe("explainConnection — the §7.6 reason lines (parallel to canConnect)", () => {
+  const draft = fromWire({
+    topology_id: "t",
+    revision: 1,
+    nodes: [node("gen-0", "ts_generator"), node("mux-0", "ts_mux"), node("mon-0", "ts_monitor")],
+    connections: [
+      { connection_id: "conn-0", from_node: "gen-0", from_port: "ts_out", to_node: "mux-0", to_port: "ts_in_1", plane: "MPEG_TS" },
+    ],
+  });
+
+  const explain = (
+    sourceId: string,
+    sourceHandle: string,
+    targetId: string,
+    targetHandle: string,
+    connections = draft.connections,
+  ) => {
+    const nodes = draft.nodes;
+    const source = nodes.find((n) => n.id === sourceId)!;
+    const target = nodes.find((n) => n.id === targetId)!;
+    return explainConnection({ source, target, sourceHandle, targetHandle, connections });
+  };
+
+  const booleanOf = (
+    sourceId: string,
+    sourceHandle: string,
+    targetId: string,
+    targetHandle: string,
+    connections = draft.connections,
+  ) => {
+    const nodes = draft.nodes;
+    const source = nodes.find((n) => n.id === sourceId)!;
+    const target = nodes.find((n) => n.id === targetId)!;
+    return canConnect({ source, target, sourceHandle, targetHandle, connections });
+  };
+
+  it("returns null exactly when canConnect passes — same checks, same order (cross invariant)", () => {
+    const cases: [string, string, string, string][] = [
+      ["mux-0", "ts_out", "mon-0", "ts_in"], // legal
+      ["mux-0", "ts_in_2", "gen-0", "ts_out"], // direction
+      ["mux-0", "ts_out", "mux-0", "ts_out"], // direction first (same port: output is not target-capable)
+      ["mux-0", "ts_out", "mux-0", "ts_in_2"], // legal same-node different-port
+      ["gen-0", "ts_out", "mon-0", "ts_in"], // cardinality (source full)
+      ["mux-0", "ts_out", "mux-0", "ts_in_1"], // cardinality (target full)
+    ];
+    for (const [sourceId, sourceHandle, targetId, targetHandle] of cases) {
+      expect(explain(sourceId, sourceHandle, targetId, targetHandle) === null).toBe(
+        booleanOf(sourceId, sourceHandle, targetId, targetHandle),
+      );
+    }
+  });
+
+  it("direction failure → 「方向不符（需 输出/双向 → 输入/双向）」", () => {
+    expect(explain("mux-0", "ts_in_2", "gen-0", "ts_out")).toBe("方向不符（需 输出/双向 → 输入/双向）");
+  });
+
+  it("self loop → 「不能连回同一端口」 — reachable only for direction-capable ports (bidirectional stored rows); same node AND same port only", () => {
+    // The MVP registry has no bidirectional ports, so a same-port loop on
+    // registry rows fails the DIRECTION check first (a port is never both
+    // output- and input-capable). The §7.6 self-loop line stays total via the
+    // stored-row drift shape (the wire allows direction bidirectional), the
+    // same defensive posture as the plane test below.
+    const bidiNode = {
+      id: "bidi-0",
+      type: "topology" as const,
+      position: { x: 0, y: 0 },
+      data: {
+        node: {
+          node_id: "bidi-0",
+          node_type: "ts_generator",
+          config: {},
+          ports: [{ port_id: "bi", direction: "bidirectional", plane: "MPEG_TS", max_connections: 4 }],
+        },
+        violationCodes: [],
+      },
+    };
+    const input = {
+      source: bidiNode as unknown as Parameters<typeof explainConnection>[0]["source"],
+      target: bidiNode as unknown as Parameters<typeof explainConnection>[0]["target"],
+      sourceHandle: "bi",
+      targetHandle: "bi",
+      connections: [],
+    };
+    expect(explainConnection(input)).toBe("不能连回同一端口");
+    expect(canConnect(input)).toBe(false); // cross invariant holds on the drift shape too
+    // same-node DIFFERENT-port links are not self loops (both pass direction)
+    expect(explain("mux-0", "ts_out", "mux-0", "ts_in_2")).not.toBe("不能连回同一端口");
+  });
+
+  it("cardinality failure names the FULL port and its registry limit, source side first", () => {
+    // gen-0.ts_out already carries conn-0 (max_connections 1)
+    expect(explain("gen-0", "ts_out", "mon-0", "ts_in")).toBe("“ts_out”连接数已满（上限 1）");
+    // mux-0.ts_in_1 already carries conn-0 → the TARGET side names its own port
+    expect(explain("mux-0", "ts_out", "mux-0", "ts_in_1")).toBe("“ts_in_1”连接数已满（上限 1）");
+  });
+
+  it("plane failure → 「平面不符（当前仅支持 MPEG_TS）」", () => {
+    const rfNode = {
+      id: "rf-0",
+      type: "topology" as const,
+      position: { x: 0, y: 0 },
+      data: {
+        node: {
+          node_id: "rf-0",
+          node_type: "ts_generator",
+          config: {},
+          ports: [{ port_id: "rf_out", direction: "output", plane: "RF", max_connections: 1 }],
+        },
+        violationCodes: [],
+      },
+    };
+    const monNode = draft.nodes.find((n) => n.id === "mon-0")!;
+    expect(
+      explainConnection({
+        source: rfNode as unknown as Parameters<typeof explainConnection>[0]["source"],
+        target: monNode,
+        sourceHandle: "rf_out",
+        targetHandle: "ts_in",
+        connections: [],
+      }),
+    ).toBe("平面不符（当前仅支持 MPEG_TS）");
+  });
+
+  it("unknown/missing handles stay silent (defensive; no spec enumeration for them)", () => {
+    expect(explain("gen-0", "nope", "mon-0", "ts_in")).toBeNull();
+    expect(explain("gen-0", "ts_out", "mon-0", "nope")).toBeNull();
   });
 });
 
