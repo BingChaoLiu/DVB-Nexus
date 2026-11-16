@@ -1,18 +1,22 @@
-// Scenario detail (SPEC-406 §4.3, REQ-UI-406-002): the exported document
+// Scenario detail (SPEC-406 §4.3, REQ-UI-406-002; initial_topology
+// readability per SPEC-408 §4.4 REQ-UI-408-012): the exported document
 // rendered read-only — objectives as the numbered step list, the hints
 // ladder (§4.4, localStorage-backed via useHintsReveal — the SAME shared
 // per-scenario key the console's collapsible block reads/writes), pass_
 // criteria rows (the six-kind closed enum strings verbatim + mandatory +
-// fault_id), and the initial_topology camelCase island as a read-only
-// structure view (the #45 canonical-example keys are rendered AS AUTHORED —
-// no key-name translation). The 开局 action runs the §7.1 two-hop
-// orchestration (create 201 ready → start running).
+// fault_id), and the initial_topology island as a READABLE view: a stats
+// line + Chinese-labelled structured rows (layout translation only — NO
+// key-name semantic translation, NO SVG), with the raw camelCase document
+// folded back verbatim inside <details> (键名原样, the #45 canonical-example
+// authority). The 开局 action runs the §7.1 two-hop orchestration (create
+// 201 ready → start running).
 import { useQuery } from "@tanstack/react-query";
 import { Badge, EmptyState, Panel } from "../../components/ui";
 import { getScenario, type ScenarioDetailDTO } from "../../api";
 import { qk } from "../../query/keys";
 import { useHintsReveal } from "./hintsStorage";
 import { HintsLadder, type LabHintWire } from "./HintsLadder";
+import { summarizeInitialTopology } from "./initialTopology";
 
 export function ScenarioDetail({
   scenarioId,
@@ -77,12 +81,7 @@ function ScenarioDetailBody({
   starting: boolean;
   startError: { message: string; violations?: ReadonlyArray<{ code: string; path: string; message: string }> } | null;
 }) {
-  const topology = detail.initial_topology as {
-    topology_id: string;
-    revision: number;
-    nodes: { nodeId: string; nodeType: string; ports: { portId: string; direction: string; plane: string; maxConnections: number }[] }[];
-    connections: { connectionId: string; from: { nodeId: string; portId: string }; to: { nodeId: string; portId: string } }[];
-  };
+  const topology = summarizeInitialTopology(detail.initial_topology);
   return (
     <div className="dvb-lab-detail">
       <div className="dvb-lab-detail-head">
@@ -134,29 +133,44 @@ function ScenarioDetailBody({
 
       <section>
         <h3 className="dvb-lab-h3">初始拓扑（initial_topology 只读视图）</h3>
-        <div className="dvb-lab-topology dvb-lab-mono" data-testid="lab-topology-view">
-          topology_id: {topology.topology_id} · revision: {topology.revision}
-          <ul>
-            {topology.nodes.map((node) => (
-              <li key={node.nodeId}>
-                nodeId {node.nodeId} · nodeType {node.nodeType}
-                <ul>
-                  {node.ports.map((port) => (
-                    <li key={port.portId}>
-                      portId {port.portId} · direction {port.direction} · plane {port.plane} · maxConnections{" "}
-                      {port.maxConnections}
-                    </li>
-                  ))}
-                </ul>
-              </li>
-            ))}
-            {topology.connections.map((connection) => (
-              <li key={connection.connectionId}>
-                connectionId {connection.connectionId} · from {connection.from.nodeId}/{connection.from.portId} → to{" "}
-                {connection.to.nodeId}/{connection.to.portId}
-              </li>
-            ))}
-          </ul>
+        <div className="dvb-lab-topology" data-testid="lab-topology-view">
+          {topology !== null ? (
+            <>
+              {/* Stats line + Chinese-labelled structured rows (SPEC-408
+                  §4.4): layout translation only — values stay authored-
+                  verbatim; the raw document folds back below (键名原样). */}
+              <div className="dvb-lab-topology-stats" data-testid="lab-topology-stats">
+                {topology.statsLine}
+              </div>
+              <ul className="dvb-lab-topology-structured" data-testid="lab-topology-structured">
+                {topology.nodes.map((node) => (
+                  <li key={node.nodeId}>
+                    {node.line}
+                    <ul>
+                      {node.ports.map((port) => (
+                        <li key={port.portId}>{port.line}</li>
+                      ))}
+                    </ul>
+                  </li>
+                ))}
+                {topology.connections.map((connection) => (
+                  <li key={connection.connectionId}>{connection.line}</li>
+                ))}
+              </ul>
+            </>
+          ) : null}
+          <details className="dvb-lab-topology-raw" data-testid="lab-topology-raw">
+            <summary>查看原始文档（键名原样）</summary>
+            {topology !== null ? (
+              <ul className="dvb-lab-mono">
+                {topology.rawLines.map((line, index) => (
+                  <li key={index}>{line}</li>
+                ))}
+              </ul>
+            ) : (
+              <pre className="dvb-lab-mono">{JSON.stringify(detail.initial_topology, null, 2)}</pre>
+            )}
+          </details>
         </div>
       </section>
 

@@ -1,6 +1,7 @@
-// Lab request-body builders (SPEC-406 §7.1/§7.4) — PURE seams, unit-tested
-// against the §11 vectors. No fetch, no state: the console components call
-// these and hand the result to the api barrel functions.
+// Lab request-body builders (SPEC-406 §7.1/§7.4; verify per SPEC-408 §4.3
+// + §7.5) — PURE seams, unit-tested against the §11 vectors. No fetch, no
+// state: the console components call these and hand the result to the api
+// barrel functions.
 //
 // - Create body: scenario_id (the document identity — the server's scenario
 //   branch is document-governed, 加载即建 SPEC-205 §5; the request's
@@ -10,16 +11,25 @@
 //   half-governed session.
 // - Verify body: the detail's pass_criteria pass through VERBATIM (the
 //   pass/fail contract is the document's declaration, never rewritten by
-//   the UI); scenario identity carries the true scenario_id/version and the
-//   declared content_hash marker (SPEC-406 §7.4 申报句: the loader-pinned
-//   hash has no REST echo face — the marker declares that honestly; the
-//   reveal gate matches on scenario_id). `ui_state` is NEVER sent (the
-//   engine provably ignores it; UI state is not evidence — CONTEXT.md
-//   通关 ban / AC-206-01).
+//   the UI); scenario identity comes from the EDITABLE PREFILL FORM —
+//   scenario_id/version/content_hash prefilled from the scenario detail's
+//   real pinned hash (SPEC-408 §6.4 增量③; the old `lab-ui-unpinned`
+//   declared-marker posture is RETIRED per SPEC-406 §7.4 0.5.1 停用注记).
+//   `ui_state` is NEVER sent (the engine provably ignores it; UI state is
+//   not evidence — CONTEXT.md 通关 ban / AC-206-01).
 import type { CreateSessionRequest, ScenarioDetailDTO, VerifyRunRequest } from "../../api";
 
-/** SPEC-406 §7.4: the declared marker for the unobservable pinned hash. */
-export const VERIFY_CONTENT_HASH_MARKER = "lab-ui-unpinned";
+/** The form-supplied scenario identity + run choice for a verify body.
+ * Runs are NEVER derived automatically (SPEC-408 §7.5: run 不自动猜) —
+ * both run ids arrive from explicit user selection in the console's
+ * editable verify form; baseline rides the body, recovery the endpoint path
+ * (the caller passes it to verifyRun separately). */
+export interface VerifyIdentityInput {
+  baselineRunId: string;
+  scenarioId: string;
+  version: string;
+  contentHash: string;
+}
 
 export function buildCreateSessionBody(detail: ScenarioDetailDTO): CreateSessionRequest {
   const simulation = detail.simulation_config as {
@@ -41,13 +51,13 @@ export function buildCreateSessionBody(detail: ScenarioDetailDTO): CreateSession
   };
 }
 
-export function buildVerifyBody(detail: ScenarioDetailDTO, baselineRunId: string): VerifyRunRequest {
+export function buildVerifyBody(identity: VerifyIdentityInput, detail: ScenarioDetailDTO): VerifyRunRequest {
   return {
-    baseline_run_id: baselineRunId,
+    baseline_run_id: identity.baselineRunId,
     scenario: {
-      scenario_id: detail.scenario_id,
-      version: detail.version,
-      content_hash: VERIFY_CONTENT_HASH_MARKER,
+      scenario_id: identity.scenarioId,
+      version: identity.version,
+      content_hash: identity.contentHash,
     },
     pass_criteria: detail.pass_criteria as VerifyRunRequest["pass_criteria"],
   };

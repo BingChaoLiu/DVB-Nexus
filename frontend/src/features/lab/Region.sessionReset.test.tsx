@@ -180,6 +180,12 @@ describe("LabRegion — session switch reset (SPEC-406 §7.5 rule 4)", () => {
       timeout: 3_000,
     });
 
+    // Verify is the editable prefill form now (SPEC-408 §7.5): the run ids
+    // are the user's EXPLICIT picks (run-2 = inject anchor, run-3 = clean
+    // recovery) — the auto-guess one-click posture is retired, so the walk
+    // fills the two run fields first (identity prefills from the detail).
+    await user.type(screen.getByLabelText("baseline_run_id"), "run-2");
+    await user.type(screen.getByLabelText("recovery_run_id"), "run-3");
     await user.click(screen.getByRole("button", { name: "提交判定（verify）" }));
     expect(await screen.findByTestId("verify-verdict", {}, { timeout: 3_000 })).toHaveTextContent("PASS");
 

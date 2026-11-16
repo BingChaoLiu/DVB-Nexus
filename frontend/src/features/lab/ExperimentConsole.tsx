@@ -1,16 +1,24 @@
-// Experiment console (SPEC-406 §4.3/§4.5/§4.6/§4.7): one scoped scenario
-// session — eight-step stepper + run triggers (Generate/Inject/Recover) +
-// diagnose + evidence/events + verify + the PASS-gated solution panel.
+// Experiment console (SPEC-406 §4.3/§4.5/§4.6/§4.7; opening auto-baseline +
+// verify prefill form per SPEC-408 §4.4/§7.3/§7.5): one scoped scenario
+// session — auto-baseline declaration note (when the §7.3 third hop handed a
+// run in via initialRuns) + eight-step stepper + run triggers
+// (Generate/Inject/Recover) + diagnose + evidence/events + the EDITABLE
+// PREFILL verify form + the PASS-gated solution panel.
 //
 // Wire discipline: run configs use the frozen teaching geometry
 // (labGeometry.ts); Inject submits the scenario document's fault_plan
-// VERBATIM (no UI rewrite); verify bodies come from labBodies.buildVerifyBody
-// (criteria passthrough + declared content_hash marker, no ui_state); the
-// solution panel unlocks only on the card-rendered verdict === "PASS" and
-// the reveal rides the 裁定 F backend gate. Diagnosis candidate jumps use
-// the SPEC-404 §4.2 Monitor deep link (inspect_artifact/inspect_pid/
-// inspect_packet seed the packet inspector without any monitor/** import —
-// Plan A of the §7.6 dual plan; finalized at the merge tip).
+// VERBATIM (no UI rewrite); verify is NEVER auto-guessed — baseline/recovery
+// run ids stay empty until the user explicitly picks them (datalist
+// candidates come from this console's run registry until #95's run-list
+// endpoint lands), scenario identity prefills from the scenario detail's
+// REAL pinned content_hash (the lab-ui-unpinned declared marker is RETIRED,
+// SPEC-406 §7.4 0.5.1 注记), criteria pass through verbatim via
+// labBodies.buildVerifyBody, and no ui_state is ever sent. The solution
+// panel unlocks only on the card-rendered verdict === "PASS" and the reveal
+// rides the 裁定 F backend gate. Diagnosis candidate jumps use the SPEC-404
+// §4.2 Monitor deep link (inspect_artifact/inspect_pid/inspect_packet seed
+// the packet inspector without any monitor/** import — Plan A of the §7.6
+// dual plan; finalized at the merge tip).
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
@@ -78,10 +86,16 @@ export function ExperimentConsole({
   scenarioId,
   sessionId,
   onBack,
+  initialRuns,
 }: {
   scenarioId: string;
   sessionId: string;
   onBack: () => void;
+  /** Runs auto-submitted by the §7.3 opening third hop (Region carrier).
+   * Non-empty ⇒ the standing auto-baseline declaration note renders and the
+   * registry opens already carrying the run; empty/absent ⇒ honest fallback
+   * posture (deep link, or the hop failed — §4.6 copy speaks it). */
+  initialRuns?: ReadonlyArray<RunStatusDTO>;
 }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -114,7 +128,17 @@ export function ExperimentConsole({
   });
 
   // --- run registry (page memory; facts ride getRun answers) ----------------
-  const [registry, setRegistry] = useState<RegistryEntry[]>([]);
+  // Seeded with the §7.3 auto-submitted baseline run so the registry opens
+  // populated and the 200ms poller drives Generate to light up by itself.
+  const hasAutoBaseline = initialRuns !== undefined && initialRuns.length > 0;
+  const [registry, setRegistry] = useState<RegistryEntry[]>(
+    () =>
+      initialRuns?.map((view) => ({
+        view,
+        submittedAtMs: Date.now(),
+        timedOut: false,
+      })) ?? [],
+  );
   const refreshSnapshot = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: qk.snapshot(sessionId) });
     void queryClient.invalidateQueries({ queryKey: [...monitorKeys.diagnoses(sessionId)] });
@@ -176,18 +200,35 @@ export function ExperimentConsole({
   const [solution, setSolution] = useState<SolutionFetchState | null>(null);
   const [solutionError, setSolutionError] = useState<SolutionErrorState | null>(null);
 
+  // Verify prefill form (SPEC-408 §7.5 editable prefill; orchestrator ruling):
+  // scenario identity DERIVES from the scenario detail (REAL pinned hash)
+  // until the user edits the field — edits are stored and win over the
+  // prefill, no effect needed. Run ids are NEVER auto-filled — run 不自动猜,
+  // the user must explicitly pick (datalist suggestions come from this
+  // console's run registry).
+  const [baselineField, setBaselineField] = useState("");
+  const [recoveryField, setRecoveryField] = useState("");
+  const [identityEdits, setIdentityEdits] = useState<{
+    scenario_id?: string;
+    version?: string;
+    content_hash?: string;
+  }>({});
+  const detailData = detailQuery.data;
+  const scenarioField = identityEdits.scenario_id ?? detailData?.scenario_id ?? "";
+  const versionField = identityEdits.version ?? detailData?.version ?? "";
+  const hashField = identityEdits.content_hash ?? detailData?.content_hash ?? "";
+  const verifyReady = [baselineField, recoveryField, scenarioField, versionField, hashField].every(
+    (value) => value.trim() !== "",
+  );
+
   const completed = registry.filter((entry) => entry.view.status === "completed");
   const injectRun = completed.find((entry) =>
     (entry.view.artifacts ?? []).some((artifact) => artifact.kind === "faulted_ts"),
   );
-  const cleanRuns = completed.filter(
-    (entry) =>
-      (entry.view.artifacts ?? []).some((artifact) => artifact.kind === "generated_ts") &&
-      !(entry.view.artifacts ?? []).some((artifact) => artifact.kind === "faulted_ts"),
-  );
-  const recoveryRun = cleanRuns.length > 0 ? cleanRuns[cleanRuns.length - 1] : null;
+  // 命名陷阱照旧（#96 申报）: baselineRunId 指的是注入 Run id（diagnose 的
+  // 「注入锚」）。verify 不再消费任何自动派生 run id — recovery/baseline
+  // 都来自表单的显式选择（run 不自动猜）。
   const baselineRunId = injectRun?.view.run_id ?? "";
-  const recoveryRunId = recoveryRun?.view.run_id ?? "";
 
   const facts: LabFacts = useMemo(
     () => ({
@@ -253,19 +294,33 @@ export function ExperimentConsole({
   }, [baselineRunId, sessionId, refreshSnapshot]);
 
   const runVerify = useCallback(async () => {
-    if (detailQuery.data === undefined || baselineRunId === "" || recoveryRunId === "") return;
+    // The gate mirrors the disabled state: every form field must hold the
+    // user's explicit choice — run ids are never derived here (run 不自动猜).
+    if (detailQuery.data === undefined || !verifyReady) return;
     setVerifying(true);
     setVerifyError(null);
     try {
       setVerdict(
-        await verifyRun(sessionId, recoveryRunId, buildVerifyBody(detailQuery.data, baselineRunId)),
+        await verifyRun(
+          sessionId,
+          recoveryField,
+          buildVerifyBody(
+            {
+              baselineRunId: baselineField,
+              scenarioId: scenarioField,
+              version: versionField,
+              contentHash: hashField,
+            },
+            detailQuery.data,
+          ),
+        ),
       );
     } catch (error) {
       setVerifyError(isApiError(error) ? `${error.errorCode}: ${error.message}` : errorMessage(error));
     } finally {
       setVerifying(false);
     }
-  }, [detailQuery.data, baselineRunId, recoveryRunId, sessionId]);
+  }, [detailQuery.data, verifyReady, baselineField, recoveryField, scenarioField, versionField, hashField, sessionId]);
 
   const revealSolution = useCallback(
     async (id: string, sid: string) => {
@@ -301,6 +356,15 @@ export function ExperimentConsole({
     flashSection === key ? "dvb-lab-section-flash" : undefined;
   return (
     <div className="dvb-lab-console">
+      {/* 常驻自动基线声明条（SPEC-408 §4.4/§7.3; renders ABOVE the Stepper,
+          sibling-ordered before it — the #96 guidance bar stays under it）:
+          the third hop's run is REAL sandbox data; only the submission was
+          automatic. Honest automation disclosure, never a fake row. */}
+      {hasAutoBaseline && (
+        <p className="dvb-lab-autorun-note" data-testid="lab-autorun-note">
+          开局已自动提交基线 Run——真实沙盘数据，非示例。下一步：<strong>注入故障</strong>。
+        </p>
+      )}
       <Stepper steps={steps} onStepSelect={locateStep} />
       {/* 常驻指引条（SPEC-408 §4.4）: next-step name + VERBATIM button copy. */}
       <p className="dvb-lab-action-guide" data-testid="lab-action-guide">
@@ -360,7 +424,13 @@ export function ExperimentConsole({
             </button>
           </div>
           {registry.length === 0 ? (
-            <EmptyState title="尚无 Run" note="本页触发的 run 将按注册表呈现（Generate → Inject → Recover）。" />
+            // §4.6 Lab 组行 3 逐字: this empty state is the §7.3 SILENT
+            // FALLBACK face — the opening auto baseline did not succeed, the
+            // manual flow stands, nothing fakes success.
+            <EmptyState
+              title="尚无 Run"
+              note="本会话尚未触发任何 Run（开局自动基线未成功，回落手动流程，诚实态）。下一步：点击『生成基线（Generate，空 plan）』"
+            />
           ) : (
             <ul className="dvb-lab-list">
               {registry.map((entry) => (
@@ -404,15 +474,28 @@ export function ExperimentConsole({
               report: run {report.run_id} · {report.candidates.length} candidates · {report.warnings?.length ?? 0} warnings
             </div>
           )}
-          <DiagnosisCandidateList
-            candidates={report?.candidates ?? []}
-            onEvidenceSelect={(locator) => jumpToEvidence(locator)}
-            context={<span>场景语境：{detailQuery.data?.title ?? scenarioId}</span>}
-          />
-          <DiagnosisList
-            diagnoses={diagnosesQuery.data ?? []}
-            context={<span>session 诊断表行（GET .../diagnoses）</span>}
-          />
+          {report === null && (diagnosesQuery.data ?? []).length === 0 ? (
+            // §4.6 Lab 组行 4（新增）: diagnose never happens by itself — the
+            // honest empty face BEFORE any diagnose ran on this page.
+            <div data-testid="lab-diagnose-empty">
+              <EmptyState
+                title="尚无诊断报告"
+                note="诊断不自动发生：注入 Run 完成后点击『对注入 Run 评估（diagnose）』；无观测 ≠ 干净，空表是诚实态"
+              />
+            </div>
+          ) : (
+            <>
+              <DiagnosisCandidateList
+                candidates={report?.candidates ?? []}
+                onEvidenceSelect={(locator) => jumpToEvidence(locator)}
+                context={<span>场景语境：{detailQuery.data?.title ?? scenarioId}</span>}
+              />
+              <DiagnosisList
+                diagnoses={diagnosesQuery.data ?? []}
+                context={<span>session 诊断表行（GET .../diagnoses）</span>}
+              />
+            </>
+          )}
         </section>
 
         <section data-testid="lab-section-inspect" ref={(el) => { sectionRefs.current.inspect = el; }} className={sectionClass("inspect")}>
@@ -421,6 +504,16 @@ export function ExperimentConsole({
             <EmptyState title="加载中" note="读取 journal 事件…" />
           ) : eventsQuery.isError ? (
             <div className="dvb-lab-error">{errorMessage(eventsQuery.error)}</div>
+          ) : ((eventsQuery.data?.data.items ?? []) as Array<{ journal_seq: number; event_type?: string }>).length ===
+            0 ? (
+            // §4.6 Lab 组行 5（新增）: an established session with no engine
+            // events yet — empty ≠ error.
+            <div data-testid="lab-events-empty">
+              <EmptyState
+                title="暂无 journal 事件"
+                note="会话已建立但引擎尚未产生事件（空 ≠ 错误）。下一步：触发一个 Run 后回来查看"
+              />
+            </div>
           ) : (
             <ul className="dvb-lab-list">
               {((eventsQuery.data?.data.items ?? []) as Array<{ journal_seq: number; event_type?: string }>)
@@ -436,15 +529,60 @@ export function ExperimentConsole({
 
         <section data-testid="lab-section-verify" ref={(el) => { sectionRefs.current.verify = el; }} className={sectionClass("verify")}>
           <h3 className="dvb-lab-h3">通关判定（Verify）</h3>
-          <div className="dvb-lab-line">
-            recovery_run_id: <span className="dvb-lab-mono">{recoveryRunId === "" ? "（待恢复 Run 完成）" : recoveryRunId}</span>
-            · baseline_run_id（注入锚）: <span className="dvb-lab-mono">{baselineRunId === "" ? "（待注入 Run 完成）" : baselineRunId}</span>
+          {/* Editable prefill form (SPEC-408 §7.5 同口径; the auto-derived
+              one-click posture and the lab-ui-unpinned declared marker are
+              RETIRED). Scenario identity prefills from the detail's REAL
+              pinned hash; run ids are the user's explicit pick — datalist
+              candidates ride this console's run registry (升级到 #95 的
+              run 列表端点待其合入后统一). */}
+          <div className="dvb-lab-verify-form">
+            <label htmlFor="lab-verify-baseline">baseline_run_id</label>
+            <input
+              id="lab-verify-baseline"
+              list="lab-verify-run-candidates"
+              value={baselineField}
+              onChange={(event) => setBaselineField(event.target.value)}
+              placeholder="从 Run 注册表选择或粘贴"
+            />
+            <label htmlFor="lab-verify-recovery">recovery_run_id</label>
+            <input
+              id="lab-verify-recovery"
+              list="lab-verify-run-candidates"
+              value={recoveryField}
+              onChange={(event) => setRecoveryField(event.target.value)}
+              placeholder="从 Run 注册表选择或粘贴（修复后新 Run）"
+            />
+            <label htmlFor="lab-verify-scenario">scenario_id</label>
+            <input
+              id="lab-verify-scenario"
+              value={scenarioField}
+              onChange={(event) => setIdentityEdits((prev) => ({ ...prev, scenario_id: event.target.value }))}
+            />
+            <label htmlFor="lab-verify-version">version</label>
+            <input
+              id="lab-verify-version"
+              value={versionField}
+              onChange={(event) => setIdentityEdits((prev) => ({ ...prev, version: event.target.value }))}
+            />
+            <label htmlFor="lab-verify-hash">content_hash</label>
+            <input
+              id="lab-verify-hash"
+              className="dvb-lab-mono"
+              value={hashField}
+              onChange={(event) => setIdentityEdits((prev) => ({ ...prev, content_hash: event.target.value }))}
+            />
+            <datalist id="lab-verify-run-candidates">
+              {registry.map((entry) => (
+                <option key={entry.view.run_id} value={entry.view.run_id} label={entry.view.status} />
+              ))}
+            </datalist>
           </div>
+          <div className="dvb-lab-line">判定以修复后新 Run 的证据为准；五个字段全部填写后才可提交（run 不自动猜）。</div>
           <button
             type="button"
             className={primary("verify")}
             onClick={() => void runVerify()}
-            disabled={verifying || baselineRunId === "" || recoveryRunId === ""}
+            disabled={verifying || !verifyReady}
           >
             {verifying ? "判定中…" : "提交判定（verify）"}
           </button>
