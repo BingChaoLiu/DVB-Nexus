@@ -16,4 +16,9 @@ export const qk = {
   topology: (topologyId: string, revision: number) => ["topology", topologyId, revision] as const,
   scenarios: () => ["scenarios"] as const,
   scenario: (scenarioId: string) => ["scenario", scenarioId] as const,
+  // SPEC-408 §6 read faces (ticket #95): additive sessions prefix — the list
+  // invalidates as a whole; detail/runs nest under it per session.
+  sessions: () => ["sessions"] as const,
+  sessionDetail: (sessionId: string) => ["sessions", sessionId, "detail"] as const,
+  sessionRuns: (sessionId: string) => ["sessions", sessionId, "runs"] as const,
 };

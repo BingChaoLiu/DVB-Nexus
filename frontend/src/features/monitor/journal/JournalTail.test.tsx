@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 import type { JournalEnvelope } from "../../../ws/SessionStream";
 import { qk } from "../../../query/keys";
 import { JOURNAL_TAIL_N, JournalTail } from "./JournalTail";
+import { MONITOR_EMPTY_STATE_COPY } from "../copy";
 
 const envelope = (seq: number): JournalEnvelope => ({
   schema_version: "1.0",
@@ -55,6 +56,9 @@ describe("JournalTail — cache-driven tail window", () => {
         <JournalTail sessionId="s-1" />
       </QueryClientProvider>,
     );
-    expect(screen.getByText(/journal 流水为空/)).toBeInTheDocument();
+    const c = MONITOR_EMPTY_STATE_COPY.journal;
+    expect(screen.getByText(c.what)).toBeInTheDocument();
+    expect(screen.getByText(c.why)).toBeInTheDocument();
+    expect(screen.getByText(`下一步:${c.next}`)).toBeInTheDocument();
   });
 });

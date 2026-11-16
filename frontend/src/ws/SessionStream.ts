@@ -34,6 +34,11 @@ export interface SessionStreamOptions {
   onHint?: (topic: string, data: Record<string, unknown>) => void;
   onReady?: (replayedFrom: number) => void;
   onStatus?: (status: StreamStatus) => void;
+  /** Close-code observer (SPEC-408 §4.3 ticket #95): every close event is
+   * forwarded verbatim — including the permanent 4404 session-unknown close
+   * the monitor page's unknown-session state branches on. Additive; absent
+   * observers change nothing. */
+  onClose?: (code: number, reason: string) => void;
 }
 
 // The real DOM WebSocket's handler property types are not directly
@@ -171,6 +176,7 @@ export class SessionStream {
 
   #handleClose(code: number, reason: string): void {
     this.#socket = null;
+    this.#options.onClose?.(code, reason);
     if (this.#closedByUser || PERMANENT_CLOSE_CODES.has(code)) {
       this.#setStatus("closed");
       return;

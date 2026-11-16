@@ -7,7 +7,9 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { JournalEnvelope } from "../../../ws/SessionStream";
 import { qk } from "../../../query/keys";
-import { Badge, EmptyState } from "../../../components/ui";
+import { Badge } from "../../../components/ui";
+import { MONITOR_EMPTY_STATE_COPY } from "../copy";
+import { ThreeQuestionState } from "../ThreeQuestionState";
 
 /** Tail window size (SPEC-403 §9 resource posture). */
 export const JOURNAL_TAIL_N = 50;
@@ -27,12 +29,8 @@ export function JournalTail({ sessionId }: { sessionId: string | null }) {
   const items = (data ?? []).slice(-JOURNAL_TAIL_N).reverse();
 
   if (items.length === 0) {
-    return (
-      <EmptyState
-        title="journal 流水为空"
-        note="尚未有任何 journal 帧并入（WS 未连接或该 session 尚无事件）。"
-      />
-    );
+    // §4.6 Monitor 组行 9(文案逐字):零事件是诚实态(空 ≠ 错误)。
+    return <ThreeQuestionState copy={MONITOR_EMPTY_STATE_COPY.journal} />;
   }
   return (
     <ul className="dvb-mon-rows">

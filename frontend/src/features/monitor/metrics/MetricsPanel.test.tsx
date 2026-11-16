@@ -5,6 +5,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { MetricsResponseDTO } from "../types";
+import { MONITOR_EMPTY_STATE_COPY } from "../copy";
 import { METRIC_CATALOG, MetricsPanel } from "./MetricsPanel";
 
 const response = (series: MetricsResponseDTO["data"]["series"]): MetricsResponseDTO => ({
@@ -168,6 +169,10 @@ describe("MetricsPanel — series presentation", () => {
 
   it("renders an explicit empty state when the answer carries no series", () => {
     render(<MetricsPanel sessionId="s-1" virtualTimeNs={1_000} onQueryChange={vi.fn()} data={base} />);
-    expect(screen.getByText(/无指标序列/)).toBeInTheDocument();
+    const c = MONITOR_EMPTY_STATE_COPY.metrics;
+    expect(screen.getByText(c.what)).toBeInTheDocument();
+    // 缺失 ≠ 零(§4.6 行 4 逐字)
+    expect(screen.getByText(c.why)).toBeInTheDocument();
+    expect(screen.getByText(`下一步:${c.next}`)).toBeInTheDocument();
   });
 });

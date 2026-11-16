@@ -91,3 +91,77 @@ describe("VerifyRunForm — request face", () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 });
+
+// ---------------------------------------------------------------------------
+// SPEC-408 §7.5 verify prefill (ticket #95): three-source editable prefill.
+// scenario_id ← session detail; version/content_hash ← scenario detail;
+// baseline/recovery candidates ← the run list datalist. Everything stays
+// editable, and runs are NEVER auto-guessed: with no explicit user run
+// choice there is no submission (zero verify requests).
+describe("VerifyRunForm — editable prefill (SPEC-408 §7.5)", () => {
+  const PREFILL = {
+    scenarioId: "5c010000-0000-4000-8000-000000000001",
+    version: "1.0.0",
+    contentHash: "a".repeat(64),
+  };
+
+  it("renders the three-source prefill into the identity fields (still editable inputs)", () => {
+    render(<VerifyRunForm runCandidates={["r-1", "r-2"]} prefill={PREFILL} onSubmit={vi.fn()} />);
+    expect(screen.getByLabelText("scenario_id")).toHaveValue(PREFILL.scenarioId);
+    expect(screen.getByLabelText("version")).toHaveValue(PREFILL.version);
+    expect(screen.getByLabelText("content_hash")).toHaveValue(PREFILL.contentHash);
+    // run fields stay EMPTY — candidates are suggestions, never values.
+    expect(screen.getByLabelText("recovery_run_id")).toHaveValue("");
+    expect(screen.getByLabelText("baseline_run_id")).toHaveValue("");
+    // datalist carries the run candidates for explicit user selection.
+    const datalist = document.getElementById("verify-run-candidates");
+    expect(datalist?.querySelectorAll("option")).toHaveLength(2);
+  });
+
+  it("prefill arriving late (async detail read-back) still lands, and user edits win over prefill", async () => {
+    const { rerender } = render(<VerifyRunForm runCandidates={["r-1"]} onSubmit={vi.fn()} />);
+    expect(screen.getByLabelText("scenario_id")).toHaveValue("");
+
+    rerender(<VerifyRunForm runCandidates={["r-1"]} prefill={PREFILL} onSubmit={vi.fn()} />);
+    expect(screen.getByLabelText("scenario_id")).toHaveValue(PREFILL.scenarioId);
+
+    // user edit overrides the prefill and survives further prefill re-renders
+    await userEvent.clear(screen.getByLabelText("content_hash"));
+    await userEvent.type(screen.getByLabelText("content_hash"), "user-picked-hash");
+    rerender(<VerifyRunForm runCandidates={["r-1", "r-2"]} prefill={PREFILL} onSubmit={vi.fn()} />);
+    expect(screen.getByLabelText("content_hash")).toHaveValue("user-picked-hash");
+  });
+
+  it("never auto-guesses runs: prefill + candidates but no user run choice → no submission (zero requests)", async () => {
+    const onSubmit = vi.fn();
+    render(<VerifyRunForm runCandidates={["r-base", "r-rec"]} prefill={PREFILL} onSubmit={onSubmit} />);
+    // identity fields are prefilled, candidates are on offer — but the run
+    // inputs are untouched, so the complete gate keeps submission disabled.
+    expect(screen.getByLabelText("recovery_run_id")).toHaveValue("");
+    expect(screen.getByLabelText("baseline_run_id")).toHaveValue("");
+    expect(screen.getByRole("button", { name: "verify" })).toBeDisabled();
+    await userEvent.click(screen.getByRole("button", { name: "verify" }));
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("an explicit user run selection completes the prefilled form and emits the body", async () => {
+    const onSubmit = vi.fn();
+    render(<VerifyRunForm runCandidates={["r-base", "r-rec"]} prefill={PREFILL} onSubmit={onSubmit} />);
+    await userEvent.type(screen.getByLabelText("recovery_run_id"), "r-rec");
+    await userEvent.type(screen.getByLabelText("baseline_run_id"), "r-base");
+    await userEvent.type(screen.getByLabelText("criterion_id"), "fault-cleared");
+    await userEvent.selectOptions(screen.getByLabelText("kind"), "fault_inactive");
+    await userEvent.type(screen.getByLabelText("fault_id"), "fd000000-0000-4000-8000-00000000f1a1");
+    await userEvent.click(screen.getByRole("button", { name: "verify" }));
+    expect(onSubmit).toHaveBeenCalledExactlyOnceWith({
+      recoveryRunId: "r-rec",
+      body: {
+        baseline_run_id: "r-base",
+        scenario: { scenario_id: PREFILL.scenarioId, version: PREFILL.version, content_hash: PREFILL.contentHash },
+        pass_criteria: [
+          { criterion_id: "fault-cleared", kind: "fault_inactive", mandatory: true, fault_id: "fd000000-0000-4000-8000-00000000f1a1" },
+        ],
+      },
+    });
+  });
+});
