@@ -2,11 +2,18 @@
 // template renders as visible Handles — Handle id = port_id verbatim, input
 // on the left / output on the right (ADR-0009 decision 3; no bidirectional
 // ports exist in the MVP registry). Violations light the node body and the
-// violated Handle in place (the §7.4 mapping application).
+// violated Handle in place (the §7.4 mapping application). During a
+// connection drag the page hands the §7.6 illegal-end preview set down
+// through IllegalEndHandlesContext (review-fix F2: per-handle dimming for
+// direction/cardinality/plane/self-loop) — a handle in the set carries
+// dvb-topo-handle-illegal-end; outside a drag the context is empty and no
+// class is ever applied.
+import { useContext } from "react";
 import { Handle, Position } from "@xyflow/react";
 import type { NodeProps } from "@xyflow/react";
 
 import type { TopologyPortDTO } from "../../api";
+import { IllegalEndHandlesContext, illegalHandleKey } from "./connectionFeedback";
 import type { TopologyFlowNode } from "./graphMapping";
 import { nodeTypeSpec } from "./nodeTypes";
 
@@ -36,6 +43,9 @@ export function handlesForNode(ports: TopologyPortDTO[]): RenderedHandle[] {
 export function TopologyNode({ data }: NodeProps<TopologyFlowNode>) {
   const spec = nodeTypeSpec(data.node.node_type);
   const violated = data.violationCodes.length > 0;
+  // §7.6 illegal-end preview (review-fix F2): empty outside a drag — the
+  // idle canvas never dims a handle through this path.
+  const illegalEnds = useContext(IllegalEndHandlesContext);
   return (
     <div className={violated ? "dvb-topo-node dvb-topo-node-violation" : "dvb-topo-node"} data-node-id={data.node.node_id}>
       <div className="dvb-topo-node-title">{spec?.label ?? data.node.node_type}</div>
@@ -45,13 +55,19 @@ export function TopologyNode({ data }: NodeProps<TopologyFlowNode>) {
       )}
       {handlesForNode(data.node.ports).map((handle) => {
         const portViolated = data.violationPorts.includes(handle.port_id);
+        const illegalEnd = illegalEnds.has(illegalHandleKey(data.node.node_id, handle.port_id));
+        const className = portViolated
+          ? "dvb-topo-handle dvb-topo-handle-violation"
+          : illegalEnd
+            ? "dvb-topo-handle dvb-topo-handle-illegal-end"
+            : "dvb-topo-handle";
         return (
           <Handle
             key={handle.port_id}
             type={handle.handleType}
             position={handle.position === "right" ? Position.Right : Position.Left}
             id={handle.port_id}
-            className={portViolated ? "dvb-topo-handle dvb-topo-handle-violation" : "dvb-topo-handle"}
+            className={className}
             data-testid={`dvb-topo-handle-${handle.port_id}`}
           >
             <span className="dvb-topo-handle-label">{handle.port_id}</span>

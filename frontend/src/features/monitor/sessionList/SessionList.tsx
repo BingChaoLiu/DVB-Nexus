@@ -75,10 +75,13 @@ export function SessionList({ onTrack }: { onTrack: (sessionId: string) => void 
 
   if (query.data.length === 0) {
     return (
+      // 表外次级态(review-fix F7 申报): §4.6 总表无「列表为空」行 — 本态
+      // 保留诚实空库口径,行文与 §4.6 行 1 入口三问的 next 枚举衔接(同一
+      // 下一步词表,不另造分叉)。
       <div data-testid="session-list-empty" className="dvb-mon-guide-list">
         <EmptyState
           title="暂无会话记录"
-          note="空 ≠ 错误:服务端尚无会话。从 Lab 选场景开始实验,或点上方「一键演示」后再来。"
+          note="空 ≠ 错误：服务端尚无会话。下一步同入口三问：从 Lab 选场景开始实验；或一键演示；或手输 UUID（此列表为空，暂无可选项）。"
         />
       </div>
     );

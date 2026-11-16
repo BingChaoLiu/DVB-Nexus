@@ -17,25 +17,21 @@
 // PASS is the user's own walk. The zero-verify assertion lives in the tests.
 import {
   createSession,
-  diagnoseRun,
   getRun,
   getScenario,
   isApiError,
   listScenarios,
   startSession,
   submitRun,
-  type DiagnosisReportDTO,
   type RunStatusDTO,
   type ScenarioDetailDTO,
 } from "../../../api";
-import { ApiError } from "../../../api/client";
 import { buildCreateSessionBody } from "../../../features/lab/labBodies";
 import { LAB_RUN_CONFIG } from "../../../features/lab/labGeometry";
+import { diagnoseWith404Retry } from "./diagnoseRetry";
 
 const RUN_POLL_INTERVAL_MS = 200;
 const RUN_POLL_DEADLINE_MS = 30_000;
-const DIAGNOSE_404_RETRY_WINDOW_MS = 10_000;
-const DIAGNOSE_404_RETRY_INTERVAL_MS = 100;
 
 // ---------------------------------------------------------------------------
 // Phase table (§7.4 order — spec authority; the prototype's `baseline` key is
@@ -167,23 +163,6 @@ export async function runAndWait(sessionId: string, faultPlan: ReadonlyArray<unk
   }
 }
 
-/** Diagnose on the injected run: 404-until-drained retry window (the report
- * becomes answerable once the pump committed the run's terminal events). */
-async function diagnoseFaultedRun(sessionId: string, faultedRunId: string): Promise<DiagnosisReportDTO> {
-  const deadline = Date.now() + DIAGNOSE_404_RETRY_WINDOW_MS;
-  for (;;) {
-    try {
-      return await diagnoseRun(sessionId, faultedRunId);
-    } catch (error) {
-      if (error instanceof ApiError && error.status === 404 && Date.now() < deadline) {
-        await new Promise((resolve) => setTimeout(resolve, DIAGNOSE_404_RETRY_INTERVAL_MS));
-        continue;
-      }
-      throw error;
-    }
-  }
-}
-
 /** Pre-anchor resolution (SC-01 = faulted_ts · PID 0 · packet 202): the
  * faulted_ts artifact from the injected run + `fault_plan[0]`'s declared
  * target (hex PID inside `target_id`) + activation packet slot. Any missing
@@ -233,10 +212,14 @@ export async function orchestrateDemoSession(
   emit();
 
   // 1. scenario: the library is filename-ASC, so the introductory SC-01 is
-  //    first — deterministic teaching material.
+  //    first — deterministic teaching material. The empty-registry face
+  //    speaks the §4.6 library-empty semantics (AC-408-09: the stale
+  //    「需 Lab Pack 落位」sentence is retired — SC-01..05 已在库).
   const scenarioDetail: ScenarioDetailDTO = await runPhase("scenario", setPhase, async () => {
     const summaries = await listScenarios();
-    if (summaries.length === 0) throw new Error("场景注册表为空(需 Lab Pack 落位)");
+    if (summaries.length === 0) {
+      throw new Error("场景注册表为空(空库 ≠ 错误)。下一步:`start.cmd` 一键启动后端并完成场景扫描");
+    }
     return getScenario(summaries[0]!.scenario_id);
   });
   setPhase("scenario", "done", scenarioDetail.title);
@@ -274,8 +257,10 @@ export async function orchestrateDemoSession(
   setPhase("recover", "done", recoverRun.run_id);
 
   // 7. diagnose on the injected run so Monitor lands with root-cause
-  //    candidates + evidence deep links.
-  const report = await runPhase("diagnose", setPhase, () => diagnoseFaultedRun(sessionId!, faultedRun.run_id));
+  //    candidates + evidence deep links — rides the SHARED 404-until-drained
+  //    retrier (diagnoseRetry.ts, review-fix F4 单一实现; Monitor's trigger
+  //    consumes the same wrapper).
+  const report = await runPhase("diagnose", setPhase, () => diagnoseWith404Retry(sessionId!, faultedRun.run_id));
   setPhase("diagnose", "done", `${report.candidates.length} candidates · ${faultedRun.run_id}`);
 
   // 8. land (hand-off): the module computes the landing payload and marks

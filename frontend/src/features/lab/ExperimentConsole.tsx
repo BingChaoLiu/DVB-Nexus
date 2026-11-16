@@ -9,8 +9,9 @@
 // (labGeometry.ts); Inject submits the scenario document's fault_plan
 // VERBATIM (no UI rewrite); verify is NEVER auto-guessed — baseline/recovery
 // run ids stay empty until the user explicitly picks them (datalist
-// candidates come from this console's run registry until #95's run-list
-// endpoint lands), scenario identity prefills from the scenario detail's
+// candidates = this console's run registry ⊕ the §6.3 server run list,
+// deduped, submitted_at ASC — Monitor 同口径, review-fix F1), scenario
+// identity prefills from the scenario detail's
 // REAL pinned content_hash (the lab-ui-unpinned declared marker is RETIRED,
 // SPEC-406 §7.4 0.5.1 注记), criteria pass through verbatim via
 // labBodies.buildVerifyBody, and no ui_state is ever sent. The solution
@@ -28,6 +29,7 @@ import {
   getScenario,
   getSnapshot,
   listDiagnoses,
+  listSessionRuns,
   queryEvents,
   revealScenarioSolution,
   submitRun,
@@ -74,8 +76,30 @@ const STEP_SECTION: Record<CurrentActionKey, SectionKey> = {
 
 interface RegistryEntry {
   view: RunStatusDTO;
+  /** Submission time — the §6.3 server submitted_at_ms for list-reconstructed
+   * rows, the accept wall-clock for page-submitted ones (the datalist's ASC
+   * order rides this). */
   submittedAtMs: number;
+  /** THIS page's poll-window origin: the 30s window runs from the moment the
+   * page learned of the run, never from a server timestamp long past. null =
+   * a derived §6.3 row (the window anchors at this page's first poll of it,
+   * inside the poller — event time, never render time). */
+  pollSinceMs: number | null;
   timedOut: boolean;
+  /** §6.3 list fact (review-fix F1): true/false = list-reconstructed row
+   * (clean/faulted facts ride fault_plan_present); null = page-memory run
+   * (facts stay on the artifact-kind path). */
+  faultPlanPresent: boolean | null;
+}
+
+/** §7.3 hop-3 carrier (review-fix F6 诚实化): the at-accept MINIMUM face —
+ * run id + async status only. It does NOT claim the full RunStatusDTO
+ * read-back shape: artifacts/packet faces are simply not held at accept time
+ * (omitted, never fabricated) — the console's poller fills the real face
+ * from getRun answers. RunStatusDTO values are assignable to it. */
+export interface AcceptedRunCarrier {
+  run_id: string;
+  status: RunStatusDTO["status"];
 }
 
 function errorMessage(error: unknown): string {
@@ -91,11 +115,12 @@ export function ExperimentConsole({
   scenarioId: string;
   sessionId: string;
   onBack: () => void;
-  /** Runs auto-submitted by the §7.3 opening third hop (Region carrier).
-   * Non-empty ⇒ the standing auto-baseline declaration note renders and the
-   * registry opens already carrying the run; empty/absent ⇒ honest fallback
-   * posture (deep link, or the hop failed — §4.6 copy speaks it). */
-  initialRuns?: ReadonlyArray<RunStatusDTO>;
+  /** Runs auto-submitted by the §7.3 opening third hop (Region carrier —
+   * the honest at-accept minimum face, F6). Non-empty ⇒ the standing
+   * auto-baseline declaration note renders and the registry opens already
+   * carrying the run; empty/absent ⇒ the mount-time §6.3 run-list fetch
+   * reconstructs the facts face (review-fix F1). */
+  initialRuns?: ReadonlyArray<AcceptedRunCarrier>;
 }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -126,23 +151,79 @@ export function ExperimentConsole({
     queryFn: () => listDiagnoses(sessionId),
     retry: 1,
   });
+  // §6.3 run list (SPEC-408 §7.5「Monitor 与 Lab 同口径」; review-fix F1):
+  // the mount-time fetch that survives refresh/deep-link/manual entry. It
+  // feeds the verify datalist (registry ⊕ list, dedup, submitted_at ASC) and
+  // honestly rebuilds the facts face when the opening hop's carrier is
+  // absent. Same qk key as Monitor — one invalidation bridge.
+  const runsListQuery = useQuery({
+    queryKey: [...qk.sessionRuns(sessionId)],
+    queryFn: () => listSessionRuns(sessionId),
+    retry: 1,
+  });
+  const serverRuns = runsListQuery.data;
 
   // --- run registry (page memory; facts ride getRun answers) ----------------
   // Seeded with the §7.3 auto-submitted baseline run so the registry opens
   // populated and the 200ms poller drives Generate to light up by itself.
-  const hasAutoBaseline = initialRuns !== undefined && initialRuns.length > 0;
+  // §7.3 note (review-fix F1): the declaration rides the hop carrier when
+  // present AND honestly rebuilds on refresh/deep-link — the first §6.3
+  // list row being an empty-plan run IS the session's opening baseline (the
+  // Lab opening always attempts it first; an manual regeneration after a
+  // failed hop is indistinguishable from the list face and declared so in
+  // the review-fix REPORT). The §4.6 fallback copy stays gated on BOTH
+  // faces (registry + server list) being empty.
+  const reconstructedBaseline =
+    serverRuns !== undefined &&
+    serverRuns.length > 0 &&
+    serverRuns[0] !== undefined &&
+    !serverRuns[0].fault_plan_present;
+  const hasAutoBaseline =
+    (initialRuns !== undefined && initialRuns.length > 0) || reconstructedBaseline;
   const [registry, setRegistry] = useState<RegistryEntry[]>(
     () =>
       initialRuns?.map((view) => ({
-        view,
+        view: { run_id: view.run_id, status: view.status },
         submittedAtMs: Date.now(),
+        pollSinceMs: Date.now(),
         timedOut: false,
+        faultPlanPresent: null,
       })) ?? [],
   );
   const refreshSnapshot = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: qk.snapshot(sessionId) });
     void queryClient.invalidateQueries({ queryKey: [...monitorKeys.diagnoses(sessionId)] });
+    void queryClient.invalidateQueries({ queryKey: [...qk.sessionRuns(sessionId)] });
   }, [queryClient, sessionId]);
+
+  // §6.3 reconstruction (review-fix F1): runs the server already knows about
+  // (refresh / deep link / manual entry — the opening hop's carrier is
+  // empty) join the face as DERIVED rows. No setState-in-effect mirror: the
+  // derived rows recompute at render from serverRuns ⊖ registry (dedup by
+  // run_id keeps page-memory rows authoritative). Their faces carry the
+  // at-accept minimum + packet_count passthrough; the artifact list is NOT
+  // available from the §6.3 face, so NO artifact chips render until a live
+  // getRun answer pulls the row into page memory (the poller's upsert below
+  // — event-time setState — fills the real face). Completed derived rows
+  // stay derived: there is nothing to poll.
+  const derivedRows: RegistryEntry[] = useMemo(() => {
+    if (serverRuns === undefined) return [];
+    const known = new Set(registry.map((entry) => entry.view.run_id));
+    return serverRuns
+      .filter((row) => !known.has(row.run_id))
+      .map((row): RegistryEntry => ({
+        view: {
+          run_id: row.run_id,
+          status: row.status,
+          packet_count: row.packet_count ?? undefined,
+        },
+        submittedAtMs: row.submitted_at_ms,
+        pollSinceMs: null,
+        timedOut: false,
+        faultPlanPresent: row.fault_plan_present,
+      }));
+  }, [registry, serverRuns]);
+  const rowEntries = useMemo(() => [...registry, ...derivedRows], [registry, derivedRows]);
 
   const submit = useCallback(
     async (faultPlan: ReadonlyArray<unknown>) => {
@@ -152,33 +233,74 @@ export function ExperimentConsole({
       });
       setRegistry((prev) => [
         ...prev,
-        { view: { run_id: accepted.run_id, status: "running", artifacts: [] } as RunStatusDTO, submittedAtMs: Date.now(), timedOut: false },
+        // Honest at-accept face (F6): run_id + status only — artifacts are
+        // NOT claimed until a real getRun answer holds them.
+        {
+          view: { run_id: accepted.run_id, status: "running" },
+          submittedAtMs: Date.now(),
+          pollSinceMs: Date.now(),
+          timedOut: false,
+          faultPlanPresent: null,
+        },
       ]);
     },
     [sessionId],
   );
 
+  // Poll-window origins for DERIVED §6.3 rows: the 30s window anchors at this
+  // page's first poll of the run — written at event time (inside the interval
+  // callback) only, never during render.
+  const pollSinceRef = useRef<Map<string, number>>(new Map());
+
+  // Event-time registry writes for rows a poll touched (review-fix F1): a
+  // derived §6.3 row PULLS INTO page memory at its first poll answer (face)
+  // or timeout marking — until then it stays render-derived. Page-memory
+  // rows update in place as before.
+  const upsertRowFace = useCallback((face: RunStatusDTO, faultPlanPresent: boolean | null) => {
+    setRegistry((prev) =>
+      prev.some((entry) => entry.view.run_id === face.run_id)
+        ? prev.map((entry) => (entry.view.run_id === face.run_id ? { ...entry, view: face } : entry))
+        : [
+            ...prev,
+            { view: face, submittedAtMs: Date.now(), pollSinceMs: Date.now(), timedOut: false, faultPlanPresent },
+          ],
+    );
+  }, []);
+  const markRowTimedOut = useCallback((entry: RegistryEntry) => {
+    setRegistry((prev) =>
+      prev.some((item) => item.view.run_id === entry.view.run_id)
+        ? prev.map((item) => (item.view.run_id === entry.view.run_id ? { ...item, timedOut: true } : item))
+        : [...prev, { ...entry, pollSinceMs: Date.now(), timedOut: true }],
+    );
+  }, []);
+
   // Single 200ms poller over pending runs (30s window → explicit timeout).
-  // The effect re-arms on every registry change, so `registry` is read from
-  // the closure (no ref access).
+  // The effect re-arms on every rowEntries change, so `rowEntries` is read
+  // from the closure (no ref access). Derived §6.3 rows poll exactly like
+  // page-memory rows (§7.5 同口径: a running row is a running row).
+  // NOTE (review-fix F4 职责声明): this is deliberately NOT the demo
+  // module's runAndWait — the loop owns per-tick rendering integration
+  // (each poll's answer updates the registry row in place, driving the
+  // stepper facts); a pure submit-and-wait shape would drop the live rows.
   useEffect(() => {
-    const pending = registry.filter((entry) => entry.view.status === "running" && !entry.timedOut);
+    const pending = rowEntries.filter((entry) => entry.view.status === "running" && !entry.timedOut);
     if (pending.length === 0) return;
     const timer = setInterval(() => {
       void (async () => {
         for (const entry of pending) {
-          if (Date.now() - entry.submittedAtMs > POLL_WINDOW_MS) {
-            setRegistry((prev) =>
-              prev.map((item) => (item.view.run_id === entry.view.run_id ? { ...item, timedOut: true } : item)),
-            );
+          let since = entry.pollSinceMs;
+          if (since === null) {
+            since = pollSinceRef.current.get(entry.view.run_id) ?? Date.now();
+            pollSinceRef.current.set(entry.view.run_id, since);
+          }
+          if (Date.now() - since > POLL_WINDOW_MS) {
+            markRowTimedOut(entry);
             continue;
           }
           try {
             const latest = await getRun(sessionId, entry.view.run_id);
             if (latest.status !== entry.view.status) {
-              setRegistry((prev) =>
-                prev.map((item) => (item.view.run_id === latest.run_id ? { ...item, view: latest } : item)),
-              );
+              upsertRowFace(latest, entry.faultPlanPresent);
               if (latest.status !== "running") refreshSnapshot();
             }
           } catch {
@@ -188,7 +310,7 @@ export function ExperimentConsole({
       })();
     }, POLL_INTERVAL_MS);
     return () => clearInterval(timer);
-  }, [registry, sessionId, refreshSnapshot]);
+  }, [rowEntries, sessionId, refreshSnapshot, upsertRowFace, markRowTimedOut]);
 
   // --- diagnose / verify / solution page state ------------------------------
   const [report, setReport] = useState<DiagnosisReportDTO | null>(null);
@@ -221,32 +343,61 @@ export function ExperimentConsole({
     (value) => value.trim() !== "",
   );
 
-  const completed = registry.filter((entry) => entry.view.status === "completed");
+  const completed = rowEntries.filter((entry) => entry.view.status === "completed");
   const injectRun = completed.find((entry) =>
     (entry.view.artifacts ?? []).some((artifact) => artifact.kind === "faulted_ts"),
   );
-  // 命名陷阱照旧（#96 申报）: baselineRunId 指的是注入 Run id（diagnose 的
-  // 「注入锚」）。verify 不再消费任何自动派生 run id — recovery/baseline
-  // 都来自表单的显式选择（run 不自动猜）。
-  const baselineRunId = injectRun?.view.run_id ?? "";
+  // 名实一致（review-fix F5，#96 命名陷阱解除）: 该变量指注入 Run id
+  // （diagnose 的「注入锚」）。verify 不消费任何自动派生 run id —
+  // recovery/baseline 都来自表单的显式选择（run 不自动猜）。
+  const injectRunId = injectRun?.view.run_id ?? "";
 
   const facts: LabFacts = useMemo(
     () => ({
       sessionLifecycle: snapshotQuery.data?.lifecycle ?? null,
-      runs: registry.map(
+      runs: rowEntries.map(
         (entry): LabRunFact => ({
           runId: entry.view.run_id,
           status: entry.view.status,
           artifacts: entry.view.artifacts ?? [],
+          faultPlanPresent: entry.faultPlanPresent,
         }),
       ),
       reportFetched: report !== null,
       eventsSeen: eventsQuery.data?.data.items?.length ?? 0,
       verdictFetched: verdict !== null,
     }),
-    [snapshotQuery.data, registry, report, eventsQuery.data, verdict],
+    [snapshotQuery.data, rowEntries, report, eventsQuery.data, verdict],
   );
   const steps = deriveStepState(facts);
+
+  // §7.5 datalist candidates (review-fix F1, Monitor 同口径): the page
+  // registry ⊕ the §6.3 server list — dedup by run_id, submitted_at ASC
+  // (the §6.3 contract order = the eight-step narrative order). Survives
+  // refresh/deep-link/manual entry; run ids are still NEVER auto-filled —
+  // the user picks explicitly.
+  const runCandidates = useMemo(() => {
+    const merged: Array<{ runId: string; at: number; status: string }> = [
+      ...rowEntries.map((entry) => ({
+        runId: entry.view.run_id,
+        at: entry.submittedAtMs,
+        status: entry.view.status,
+      })),
+      ...(serverRuns ?? []).map((row) => ({
+        runId: row.run_id,
+        at: row.submitted_at_ms,
+        status: row.status,
+      })),
+    ];
+    const seen = new Set<string>();
+    return merged
+      .sort((a, b) => a.at - b.at)
+      .filter((row) => {
+        if (seen.has(row.runId)) return false;
+        seen.add(row.runId);
+        return true;
+      });
+  }, [rowEntries, serverRuns]);
 
   // --- current action (SPEC-408 §7.2): pointer over the §7.3 facts ----------
   const current = deriveCurrentAction(steps);
@@ -278,11 +429,11 @@ export function ExperimentConsole({
   }, []);
 
   const runDiagnose = useCallback(async () => {
-    if (baselineRunId === "") return;
+    if (injectRunId === "") return;
     setDiagnosing(true);
     setReportError(null);
     try {
-      setReport(await diagnoseRun(sessionId, baselineRunId));
+      setReport(await diagnoseRun(sessionId, injectRunId));
       refreshSnapshot();
     } catch (error) {
       setReportError(
@@ -291,7 +442,7 @@ export function ExperimentConsole({
     } finally {
       setDiagnosing(false);
     }
-  }, [baselineRunId, sessionId, refreshSnapshot]);
+  }, [injectRunId, sessionId, refreshSnapshot]);
 
   const runVerify = useCallback(async () => {
     // The gate mirrors the disabled state: every form field must hold the
@@ -423,17 +574,32 @@ export function ExperimentConsole({
               恢复重跑（Recover，空 plan）
             </button>
           </div>
-          {registry.length === 0 ? (
+          {rowEntries.length === 0 ? (
             // §4.6 Lab 组行 3 逐字: this empty state is the §7.3 SILENT
             // FALLBACK face — the opening auto baseline did not succeed, the
-            // manual flow stands, nothing fakes success.
-            <EmptyState
-              title="尚无 Run"
-              note="本会话尚未触发任何 Run（开局自动基线未成功，回落手动流程，诚实态）。下一步：点击『生成基线（Generate，空 plan）』"
-            />
+            // manual flow stands, nothing fakes success. It may ONLY speak
+            // once the §6.3 server list has confirmed emptiness (review-fix
+            // F1: in-flight → the loading face; failed → 失败 ≠ 空库 face —
+            // the fallback copy asserts server-side emptiness and must not
+            // render unverified).
+            runsListQuery.isPending ? (
+              <div data-testid="lab-runlist-loading">
+                <EmptyState title="尚无 Run" note="正在读取服务端 Run 列表（§6.3）…读取完成前不下「未触发」结论" />
+              </div>
+            ) : runsListQuery.isError ? (
+              <div className="dvb-lab-error" data-testid="lab-runlist-error">
+                Run 列表读取失败（失败 ≠ 空库）：{errorMessage(runsListQuery.error)}
+                。下一步：确认后端已运行（仓库根 `start.cmd`）
+              </div>
+            ) : (
+              <EmptyState
+                title="尚无 Run"
+                note="本会话尚未触发任何 Run（开局自动基线未成功，回落手动流程，诚实态）。下一步：点击『生成基线（Generate，空 plan）』"
+              />
+            )
           ) : (
             <ul className="dvb-lab-list">
-              {registry.map((entry) => (
+              {rowEntries.map((entry) => (
                 <li key={entry.view.run_id} className="dvb-lab-row" data-testid={`lab-run-row-${entry.view.run_id}`}>
                   <span className="dvb-lab-mono">{entry.view.run_id}</span>
                   <Badge
@@ -464,7 +630,7 @@ export function ExperimentConsole({
             type="button"
             className={primary("diagnose")}
             onClick={() => void runDiagnose()}
-            disabled={diagnosing || baselineRunId === ""}
+            disabled={diagnosing || injectRunId === ""}
           >
             {diagnosing ? "评估中…" : "对注入 Run 评估（diagnose）"}
           </button>
@@ -533,8 +699,8 @@ export function ExperimentConsole({
               one-click posture and the lab-ui-unpinned declared marker are
               RETIRED). Scenario identity prefills from the detail's REAL
               pinned hash; run ids are the user's explicit pick — datalist
-              candidates ride this console's run registry (升级到 #95 的
-              run 列表端点待其合入后统一). */}
+              candidates = page registry ⊕ §6.3 server run list (dedup,
+              submitted_at ASC, Monitor 同口径 — review-fix F1). */}
           <div className="dvb-lab-verify-form">
             <label htmlFor="lab-verify-baseline">baseline_run_id</label>
             <input
@@ -572,8 +738,8 @@ export function ExperimentConsole({
               onChange={(event) => setIdentityEdits((prev) => ({ ...prev, content_hash: event.target.value }))}
             />
             <datalist id="lab-verify-run-candidates">
-              {registry.map((entry) => (
-                <option key={entry.view.run_id} value={entry.view.run_id} label={entry.view.status} />
+              {runCandidates.map((candidate) => (
+                <option key={candidate.runId} value={candidate.runId} label={candidate.status} />
               ))}
             </datalist>
           </div>

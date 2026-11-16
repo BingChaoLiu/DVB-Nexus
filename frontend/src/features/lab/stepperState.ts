@@ -15,6 +15,9 @@
 //   artifacts only for non-empty plans — a server-side artifact-kind fact,
 //   not a UI guess about plan contents);
 // - "faulted run" = a COMPLETED run carrying `faulted_ts`;
+// - §6.3 list-reconstructed rows (review-fix F1) hold NO artifact list —
+//   their clean/faulted facts ride the server's fault_plan_present boolean
+//   verbatim (never a fabricated artifact);
 // - Recover = a SECOND distinct clean run (run registry keys are unique
 //   run_ids, so counting ≥ 2 IS the distinctness fact);
 // - Analyze = the declared gap: the analysis bridge is in-process (M4
@@ -25,6 +28,11 @@ export interface LabRunFact {
   runId: string;
   status: "running" | "completed" | "cancelled" | "failed";
   artifacts: ReadonlyArray<{ kind: string }>;
+  /** The §6.3 run-list fact (SPEC-408 §7.5 同口径; review-fix F1): rows
+   * reconstructed from GET /sessions/{id}/runs carry NO artifact list — the
+   * clean/faulted facts ride the server's own fault_plan_present boolean.
+   * null = a page-memory run (facts stay on the artifact-kind path). */
+  faultPlanPresent: boolean | null;
 }
 
 export interface LabFacts {
@@ -55,15 +63,21 @@ const CREATE_LIFECYCLES = new Set(["running", "paused"]);
 
 function isCompletedCleanRun(entry: LabRunFact): boolean {
   if (entry.status !== "completed") return false;
+  // §6.3 list fact wins when held (review-fix F1): fault_plan_present=true
+  // is never clean; false + no artifact face IS clean (the list answers
+  // plan presence directly — no artifact fabrication).
+  if (entry.faultPlanPresent !== null) return !entry.faultPlanPresent;
   const kinds = entry.artifacts.map((artifact) => artifact.kind);
   return kinds.includes("generated_ts") && !kinds.includes("faulted_ts");
 }
 
 function isCompletedFaultedRun(entry: LabRunFact): boolean {
-  return (
-    entry.status === "completed" &&
-    entry.artifacts.some((artifact) => artifact.kind === "faulted_ts")
-  );
+  if (entry.status !== "completed") return false;
+  // §6.3 list fact wins when held (review-fix F1) — the server's
+  // fault_plan_present boolean replaces the faulted_ts artifact detection
+  // for list-reconstructed rows (artifact chips stay unrendered there).
+  if (entry.faultPlanPresent !== null) return entry.faultPlanPresent;
+  return entry.artifacts.some((artifact) => artifact.kind === "faulted_ts");
 }
 
 /** The §7.3 mapping table as a pure function (exhaustively unit-tested). */

@@ -5,12 +5,14 @@
 // literals byte-exact — the page renders them verbatim (约 4 秒自动消失).
 import { describe, expect, it } from "vitest";
 
-import { fromWire, type TopologyFlowEdge, type TopologyFlowNode } from "./graphMapping";
+import { explainConnection, fromWire, type TopologyFlowEdge, type TopologyFlowNode } from "./graphMapping";
 import {
   CONNECTION_HINT_VISIBLE_MS,
   connectionAttempted,
   connectionStarted,
   idleConnectionFeedback,
+  illegalEndHandles,
+  illegalHandleKey,
   type ConnectionAttempt,
 } from "./connectionFeedback";
 
@@ -54,9 +56,14 @@ const attempt = (nodeId: string, handleId: string, handleType: "source" | "targe
 
 describe("connectionStarted — drag/click-connect preview marker", () => {
   it("records the origin handle type and clears any standing rejection", () => {
-    const standing = { connectingFrom: null, rejection: "不能连回同一端口", attempt: 3 };
+    const standing = { connectingFrom: null, connecting: null, rejection: "不能连回同一端口", attempt: 3 };
     const next = connectionStarted(standing, attempt("gen-0", "ts_out", "source"));
-    expect(next).toEqual({ connectingFrom: "source", rejection: null, attempt: 3 });
+    expect(next).toEqual({
+      connectingFrom: "source",
+      connecting: { nodeId: "gen-0", handleId: "ts_out", handleType: "source" },
+      rejection: null,
+      attempt: 3,
+    });
   });
 
   it("records a target-type origin (drag started from an input handle)", () => {
@@ -138,9 +145,19 @@ describe("connectionAttempted — the §7.6 one-line reason, mapped from the fou
   });
 
   it("dropped on the pane (no end handle) → preview off, standing rejection untouched", () => {
-    const standing = { connectingFrom: "source" as const, rejection: "平面不符（当前仅支持 MPEG_TS）", attempt: 1 };
+    const standing = {
+      connectingFrom: "source" as const,
+      connecting: attempt("gen-0", "ts_out", "source"),
+      rejection: "平面不符（当前仅支持 MPEG_TS）",
+      attempt: 1,
+    };
     const feedback = connectionAttempted(standing, attempt("gen-0", "ts_out", "source"), null, graph);
-    expect(feedback).toEqual({ connectingFrom: null, rejection: "平面不符（当前仅支持 MPEG_TS）", attempt: 1 });
+    expect(feedback).toEqual({
+      connectingFrom: null,
+      connecting: null,
+      rejection: "平面不符（当前仅支持 MPEG_TS）",
+      attempt: 1,
+    });
   });
 
   it("no start in flight is a no-op (defensive; RF never ends what it never started)", () => {
@@ -169,5 +186,150 @@ describe("connectionAttempted — the §7.6 one-line reason, mapped from the fou
 describe("CONNECTION_HINT_VISIBLE_MS — the §4.5 约 4 秒 auto-dismiss window", () => {
   it("is pinned at 4000 ms", () => {
     expect(CONNECTION_HINT_VISIBLE_MS).toBe(4000);
+  });
+});
+
+// §7.6 拖拽预览全量降透明 (review-fix F2): while an attempt is in flight the
+// ILLEGAL END set is computed per visible handle from the SAME four prechecks
+// canConnect runs — direction / cardinality / plane / self loop ALL enter the
+// preview, not just the drag direction. canConnect's signature stays frozen
+// (it remains the legality authority); this mapping only reads it.
+describe("illegalEndHandles — the four-precheck preview set (§7.6)", () => {
+  /** A stored row on a plane OUTSIDE the MVP enablement (the §7.6 plane
+   * line's honest face: plane mismatch AND non-enabled both fire —
+   * MVP_ENABLED_PLANES pins ["MPEG_TS"], the wire union admits more). */
+  const draftWithForeignPlane = fromWire({
+    topology_id: "t",
+    revision: 1,
+    nodes: [
+      {
+        node_id: "gen-0",
+        node_type: "ts_generator",
+        config: {},
+        ports: [{ port_id: "ts_out", direction: "output", plane: "MPEG_TS", max_connections: 1 }],
+      },
+      {
+        node_id: "legacy-0",
+        node_type: "ts_monitor",
+        config: {},
+        ports: [{ port_id: "rf_in", direction: "input", plane: "RF", max_connections: 5 }],
+      },
+      {
+        node_id: "mon-0",
+        node_type: "ts_monitor",
+        config: {},
+        ports: [{ port_id: "ts_in", direction: "input", plane: "MPEG_TS", max_connections: 1 }],
+      },
+    ],
+    connections: [],
+  });
+  const emptyGraph = {
+    nodes: draftWithForeignPlane.nodes as TopologyFlowNode[],
+    connections: draftWithForeignPlane.connections as TopologyFlowEdge[],
+  };
+  const fromSource = attempt("gen-0", "ts_out", "source");
+
+  it("direction: input handles can end a source-started attempt (lit)", () => {
+    const illegal = illegalEndHandles(fromSource, emptyGraph);
+    expect(illegal.has(illegalHandleKey("mon-0", "ts_in"))).toBe(false);
+  });
+
+  it("self loop: the ORIGIN handle itself is in the set (same node + same port per the §7.6 rule)", () => {
+    const illegal = illegalEndHandles(fromSource, emptyGraph);
+    expect(illegal.has(illegalHandleKey("gen-0", "ts_out"))).toBe(true);
+  });
+
+  it("plane: a non-MPEG_TS (non-enabled) plane handle is in the set even though direction fits", () => {
+    const illegal = illegalEndHandles(fromSource, emptyGraph);
+    expect(illegal.has(illegalHandleKey("legacy-0", "rf_in"))).toBe(true);
+  });
+
+  it("cardinality: a FULL endpoint port puts its handles in the set (source side full → every end dim)", () => {
+    const fullGraph = {
+      nodes: draft.nodes as TopologyFlowNode[],
+      connections: draft.connections as TopologyFlowEdge[],
+    };
+    // conn-0 already occupies gen-0.ts_out (max 1) → the SOURCE side is full:
+    // no end can make the connection legal, so every candidate end is illegal.
+    const illegal = illegalEndHandles(fromSource, fullGraph);
+    expect(illegal.has(illegalHandleKey("mon-0", "ts_in"))).toBe(true);
+    expect(illegal.has(illegalHandleKey("mux-0", "ts_in_2"))).toBe(true);
+    // TARGET-side fullness: mux.ts_in_1 carries conn-0; starting from
+    // mux.ts_out, ending on mux.ts_in_1 exceeds the target's max.
+    const fromMuxSource = attempt("mux-0", "ts_out", "source");
+    const illegalTarget = illegalEndHandles(fromMuxSource, fullGraph);
+    expect(illegalTarget.has(illegalHandleKey("mux-0", "ts_in_1"))).toBe(true);
+    // ...while the free ts_in_2 stays lit.
+    expect(illegalTarget.has(illegalHandleKey("mux-0", "ts_in_2"))).toBe(false);
+    expect(illegalTarget.has(illegalHandleKey("mon-0", "ts_in"))).toBe(false);
+  });
+
+  it("direction (dedicated): an OUTPUT handle is never a legal end for a source-started attempt", () => {
+    // The start node must be in the graph for the set to compute.
+    const graphWithMux = {
+      nodes: (draft.nodes as TopologyFlowNode[]).filter((n) => n.id === "gen-0" || n.id === "mux-0"),
+      connections: [],
+    };
+    const illegalMux = illegalEndHandles(attempt("gen-0", "ts_out", "source"), graphWithMux);
+    expect(illegalMux.has(illegalHandleKey("mux-0", "ts_out"))).toBe(true);
+    expect(illegalMux.has(illegalHandleKey("mux-0", "ts_in_1"))).toBe(false);
+    expect(illegalMux.has(illegalHandleKey("mux-0", "ts_in_2"))).toBe(false);
+  });
+
+  it("a target-type start mirrors the ends: only source-capable, precheck-passing handles stay lit", () => {
+    const illegal = illegalEndHandles(attempt("mon-0", "ts_in", "target"), emptyGraph);
+    // mon.ts_in as the held origin: same-node-same-handle self loop → illegal.
+    expect(illegal.has(illegalHandleKey("mon-0", "ts_in"))).toBe(true);
+    // gen.ts_out → mon.ts_in is legal (normalized source→target) → lit.
+    expect(illegal.has(illegalHandleKey("gen-0", "ts_out"))).toBe(false);
+    // legacy rf_in → mon.ts_in: plane mismatch (RF vs MPEG_TS) → illegal.
+    expect(illegal.has(illegalHandleKey("legacy-0", "rf_in"))).toBe(true);
+  });
+
+  it("no attempt in flight → empty set (preview off)", () => {
+    expect(illegalEndHandles(null, emptyGraph).size).toBe(0);
+  });
+
+  it("cross-invariant: a handle outside the set is exactly one explainConnection accepts", () => {
+    const graph = emptyGraph;
+    const illegal = illegalEndHandles(fromSource, graph);
+    const genNode = graph.nodes.find((n) => n.id === "gen-0")!;
+    for (const node of graph.nodes) {
+      for (const port of node.data.node.ports) {
+        const verdict = explainConnection({
+          source: genNode,
+          target: node,
+          sourceHandle: "ts_out",
+          targetHandle: port.port_id,
+          connections: graph.connections,
+        });
+        if (illegal.has(illegalHandleKey(node.id, port.port_id))) {
+          expect(verdict).not.toBeNull();
+        } else {
+          expect(verdict).toBeNull();
+        }
+      }
+    }
+  });
+});
+
+describe("connectionStarted/connectionAttempted — the in-flight attempt rides the feedback state", () => {
+  const graph = { nodes: draft.nodes as TopologyFlowNode[], connections: draft.connections as TopologyFlowEdge[] };
+
+  it("connectionStarted carries the origin attempt (the preview set derives from it)", () => {
+    const started = connectionStarted(idleConnectionFeedback, attempt("gen-0", "ts_out", "source"));
+    expect(started.connecting).toEqual({ nodeId: "gen-0", handleId: "ts_out", handleType: "source" });
+  });
+
+  it("connectionAttempted clears the in-flight attempt (preview off after the attempt lands)", () => {
+    const started = connectionStarted(idleConnectionFeedback, attempt("gen-0", "ts_out", "source"));
+    const ended = connectionAttempted(started, started.connecting, attempt("mon-0", "ts_in", "target"), graph);
+    expect(ended.connecting).toBeNull();
+    const dropped = connectionAttempted(started, started.connecting, null, graph);
+    expect(dropped.connecting).toBeNull();
+  });
+
+  it("idle feedback holds no attempt", () => {
+    expect(idleConnectionFeedback.connecting).toBeNull();
   });
 });

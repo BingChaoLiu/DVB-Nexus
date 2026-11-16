@@ -200,7 +200,10 @@ describe("orchestrateDemoSession — §7.4 happy path", () => {
 });
 
 describe("orchestrateDemoSession — failure stops in place (§8 row 1)", () => {
-  it("empty scenario registry: scenario phase fails with the explicit reason, nothing else runs", async () => {
+  // AC-408-09: the stale「需 Lab Pack 落位」sentence is RETIRED — the honest
+  // face speaks the §4.6 library-empty semantics (registry empty + start.cmd
+  // guidance), review-fix F3.
+  it("empty scenario registry: scenario phase fails with the honest §4.6-aligned reason, nothing else runs", async () => {
     listScenariosMock.mockResolvedValue([]);
     const updates: DemoProgress[] = [];
     await expect(orchestrateDemoSession((p) => updates.push(p))).rejects.toThrow(/场景注册表为空/);
@@ -209,6 +212,9 @@ describe("orchestrateDemoSession — failure stops in place (§8 row 1)", () => 
     const scenario = final.phases.find((p) => p.key === "scenario")!;
     expect(scenario.state).toBe("failed");
     expect(scenario.detail).toContain("场景注册表为空");
+    // The stale sentence is gone; the §4.6 start.cmd guidance style is in.
+    expect(scenario.detail).not.toContain("Lab Pack");
+    expect(scenario.detail).toContain("start.cmd");
     expect(createSessionMock).not.toHaveBeenCalled();
     expect(submitRunMock).not.toHaveBeenCalled();
   });

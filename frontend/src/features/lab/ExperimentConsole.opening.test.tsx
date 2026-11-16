@@ -21,6 +21,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   DiagnosisDTO,
   RunAcceptedDTO,
+  RunListItemDTO,
   RunStatusDTO,
   ScenarioDetailDTO,
   SnapshotDTO,
@@ -35,6 +36,7 @@ vi.mock("../../api", async (importOriginal) => {
     getSnapshot: vi.fn(),
     queryEvents: vi.fn(),
     listDiagnoses: vi.fn(),
+    listSessionRuns: vi.fn(),
     submitRun: vi.fn(),
     getRun: vi.fn(),
     verifyRun: vi.fn(),
@@ -46,6 +48,7 @@ import {
   getScenario,
   getSnapshot,
   listDiagnoses,
+  listSessionRuns,
   queryEvents,
   submitRun,
   verifyRun,
@@ -57,6 +60,7 @@ const mocked = {
   getSnapshot: vi.mocked(getSnapshot),
   queryEvents: vi.mocked(queryEvents),
   listDiagnoses: vi.mocked(listDiagnoses),
+  listSessionRuns: vi.mocked(listSessionRuns),
   submitRun: vi.mocked(submitRun),
   getRun: vi.mocked(getRun),
   verifyRun: vi.mocked(verifyRun),
@@ -95,6 +99,7 @@ function setupApiMocks() {
   );
   mocked.queryEvents.mockResolvedValue({ data: { items: [], total: 0 } } as never);
   mocked.listDiagnoses.mockResolvedValue([] satisfies DiagnosisDTO[]);
+  mocked.listSessionRuns.mockResolvedValue([] satisfies RunListItemDTO[]);
   mocked.submitRun.mockImplementation(async (_sessionId, body) => {
     runSeq += 1;
     submitted.set(`run-${runSeq}`, (body.fault_plan ?? []).length > 0);
@@ -171,14 +176,19 @@ describe("ExperimentConsole — auto-baseline declaration note (§4.4/§7.3)", (
 });
 
 describe("ExperimentConsole — §4.6 Lab 组 honest empty states", () => {
-  it("empty run registry speaks the fallback copy verbatim (自动基线未成功 → 回落手动流程)", async () => {
+  it("empty run registry + empty §6.3 list speak the fallback copy verbatim (自动基线未成功 → 回落手动流程)", async () => {
     renderConsole();
-    expect(await screen.findByText("尚无 Run", {}, { timeout: 3_000 })).toBeInTheDocument();
+    // The fallback note may only render AFTER the §6.3 list confirmed
+    // emptiness (F1) — await the note itself, not the section title (the
+    // loading face shares the title while the fetch is in flight).
     expect(
-      screen.getByText(
+      await screen.findByText(
         "本会话尚未触发任何 Run（开局自动基线未成功，回落手动流程，诚实态）。下一步：点击『生成基线（Generate，空 plan）』",
+        {},
+        { timeout: 3_000 },
       ),
     ).toBeInTheDocument();
+    expect(screen.getByText("尚无 Run")).toBeInTheDocument();
   });
 
   it("diagnose section renders its empty copy before any diagnose (新增 §4.6 行 4)", async () => {
@@ -195,6 +205,97 @@ describe("ExperimentConsole — §4.6 Lab 组 honest empty states", () => {
     const empty = await screen.findByTestId("lab-events-empty", {}, { timeout: 3_000 });
     expect(empty).toHaveTextContent("暂无 journal 事件");
     expect(empty).toHaveTextContent("会话已建立但引擎尚未产生事件（空 ≠ 错误）。下一步：触发一个 Run 后回来查看");
+  });
+});
+
+// §6.3 run-list reconstruction (SPEC-408 §7.5 Monitor 与 Lab 同口径;
+// review-fix F1): on refresh/deep-link the opening hop's carrier is empty —
+// the mount-time GET /sessions/{id}/runs fetch honestly rebuilds the facts
+// face (rows, steps, note, datalist) from server facts, never fabricated
+// artifacts, and the §4.6 fallback copy stays gated on BOTH faces empty.
+describe("ExperimentConsole — §6.3 run-list reconstruction (refresh/deep-link honesty, F1)", () => {
+  const listRow = (over: { run_id: string } & Partial<RunListItemDTO>): RunListItemDTO => ({
+    status: "completed",
+    submitted_at_ms: 1_700_000_000_000,
+    fault_plan_present: false,
+    ...over,
+  });
+
+  it("rebuilds rows + steps + note from the server list (no initialRuns carrier); NO pseudo artifact chips", async () => {
+    // Real-session shape: the opening auto-baseline (empty plan) is the FIRST
+    // §6.3 row; the injected run follows it.
+    mocked.listSessionRuns.mockResolvedValue([
+      listRow({ run_id: "srv-baseline", submitted_at_ms: 1_000, fault_plan_present: false, packet_count: 500 }),
+      listRow({ run_id: "srv-inject", submitted_at_ms: 2_000, fault_plan_present: true, packet_count: 600 }),
+    ]);
+    renderConsole();
+
+    await screen.findByTestId("lab-run-row-srv-baseline", {}, { timeout: 3_000 });
+    expect(screen.getByTestId("lab-run-row-srv-inject")).toBeInTheDocument();
+    // The §6.3 face carries NO artifact list — no fabricated chips.
+    expect(screen.getByTestId("lab-run-row-srv-inject").textContent).not.toContain("faulted_ts");
+    // The §7.3 declaration note rides the reconstructed opening baseline
+    // (first list row = empty plan), not just the hop carrier.
+    expect(await screen.findByTestId("lab-autorun-note", {}, { timeout: 3_000 })).toHaveTextContent(
+      "开局已自动提交基线 Run",
+    );
+    // Steps light from the list facts (fault_plan_present → inject; empty plan → generate).
+    await waitFor(() => expect(screen.getByTestId("lab-step-inject")).toHaveTextContent("注入完成"), {
+      timeout: 3_000,
+    });
+    expect(screen.getByTestId("lab-step-generate")).toHaveTextContent("基线完成");
+    // Datalist = registry ⊕ server list, dedup, submitted_at ASC (§7.5 同口径).
+    const options = [...(document.getElementById("lab-verify-run-candidates")?.getElementsByTagName("option") ?? [])].map(
+      (option) => option.value,
+    );
+    expect(options).toEqual(["srv-baseline", "srv-inject"]);
+  });
+
+  it("a running §6.3 row joins the 200ms poller and gains its REAL face (artifact chip) on completion", async () => {
+    mocked.listSessionRuns.mockResolvedValue([
+      listRow({ run_id: "srv-running", status: "running", fault_plan_present: true }),
+    ]);
+    mocked.getRun.mockResolvedValue({
+      run_id: "srv-running",
+      status: "completed",
+      artifacts: [
+        { artifact_id: "srv-running-ts", kind: "faulted_ts", sha256: "ab", byte_size: 1880, partial: false },
+      ],
+    } satisfies RunStatusDTO);
+    renderConsole();
+
+    await screen.findByTestId("lab-run-row-srv-running", {}, { timeout: 3_000 });
+    // No chip before the poll answer (honest absence).
+    expect(screen.getByTestId("lab-run-row-srv-running").textContent).not.toContain("faulted_ts");
+    await waitFor(() => expect(screen.getByTestId("lab-run-row-srv-running")).toHaveTextContent("completed"), {
+      timeout: 3_000,
+    });
+    // The REAL poll answer fills the true artifact face.
+    expect(screen.getByTestId("lab-run-row-srv-running").textContent).toContain("faulted_ts");
+    await waitFor(() => expect(screen.getByTestId("lab-step-inject")).toHaveTextContent("注入完成"), {
+      timeout: 3_000,
+    });
+    expect(mocked.getRun).toHaveBeenCalledWith("s-1", "srv-running");
+  });
+
+  it("a failed §6.3 fetch NEVER speaks the §4.6 fallback copy (失败 ≠ 空库)", async () => {
+    mocked.listSessionRuns.mockRejectedValue(new Error("network down"));
+    renderConsole();
+
+    await screen.findByTestId("lab-runlist-error", {}, { timeout: 3_000 });
+    expect(screen.getByTestId("lab-runlist-error").textContent).toContain("失败 ≠ 空库");
+    expect(screen.getByTestId("lab-runlist-error").textContent).toContain("start.cmd");
+    expect(
+      screen.queryByText(/开局自动基线未成功，回落手动流程/),
+    ).not.toBeInTheDocument();
+  });
+
+  it("while the §6.3 fetch is in flight the empty face is the loading face, not the fallback", async () => {
+    mocked.listSessionRuns.mockReturnValue(new Promise(() => {}));
+    renderConsole();
+
+    await screen.findByTestId("lab-runlist-loading", {}, { timeout: 3_000 });
+    expect(screen.queryByText(/开局自动基线未成功，回落手动流程/)).not.toBeInTheDocument();
   });
 });
 

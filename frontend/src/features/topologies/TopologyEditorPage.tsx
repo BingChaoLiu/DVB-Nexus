@@ -24,9 +24,11 @@ import { qk } from "../../query/keys";
 import { editorReducer, initialEditorState, createNodeFromType } from "./editorState";
 import { canConnect, nextConnectionId, toWire } from "./graphMapping";
 import {
+  IllegalEndHandlesContext,
   connectionAttempted,
   connectionStarted,
   idleConnectionFeedback,
+  illegalEndHandles,
   type ConnectionAttempt,
   type ConnectionFeedback,
 } from "./connectionFeedback";
@@ -296,6 +298,17 @@ function TopologyEditor() {
 
   const notWired = state.error !== null && state.error.errorCode === "HTTP_501";
 
+  // §7.6 拖拽预览 (review-fix F2): while an attempt is in flight the page
+  // computes the ILLEGAL END set for EVERY visible handle from the SAME four
+  // prechecks (canConnect, frozen signature) and hands it to the rendered
+  // Handles via context — direction/cardinality/plane/self-loop all dim
+  // before the drop, not just the drag direction. Idle (connecting === null)
+  // → empty set → no handle is ever dimmed by the preview.
+  const illegalEnds = useMemo(
+    () => illegalEndHandles(feedback.connecting, { nodes: state.nodes, connections: state.connections }),
+    [feedback.connecting, state.nodes, state.connections],
+  );
+
   // #63 (SPEC-402 §7.6): three-part joint gate (G1 completeness ∧ G2 validate
   // report ∧ G3 field errors) — reasons nonempty disables the save entry.
   // The editor renders no session-start entry (SPEC-402 §6.2); monitor/lab
@@ -395,21 +408,23 @@ function TopologyEditor() {
             event.dataTransfer.dropEffect = "move";
           }}
         >
-          <ReactFlow
-            nodes={state.nodes}
-            edges={state.connections}
-            nodeTypes={nodeTypes}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
-            onConnectStart={onConnectStart}
-            onConnectEnd={onConnectEnd}
-            onClickConnectStart={onConnectStart}
-            onClickConnectEnd={onClickConnectEnd}
-            isValidConnection={isValidConnection}
-            connectionMode={ConnectionMode.Strict}
-            fitView
-          />
+          <IllegalEndHandlesContext.Provider value={illegalEnds}>
+            <ReactFlow
+              nodes={state.nodes}
+              edges={state.connections}
+              nodeTypes={nodeTypes}
+              onNodesChange={onNodesChange}
+              onEdgesChange={onEdgesChange}
+              onConnect={onConnect}
+              onConnectStart={onConnectStart}
+              onConnectEnd={onConnectEnd}
+              onClickConnectStart={onConnectStart}
+              onClickConnectEnd={onClickConnectEnd}
+              isValidConnection={isValidConnection}
+              connectionMode={ConnectionMode.Strict}
+              fitView
+            />
+          </IllegalEndHandlesContext.Provider>
           {/* §4.5 item 2: 画布空态三问覆盖层 — only while the canvas has no
               nodes; the first dropped node removes it. pointer-events stay off
               the overlay (link re-enables them) so drops pass through. */}
