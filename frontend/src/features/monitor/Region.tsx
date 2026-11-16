@@ -26,7 +26,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router";
 import type { DiagnosisEvidenceDTO, DiagnosisReportDTO, RunStatusDTO, VerificationResultDTO } from "./types";
 import {
-  diagnoseRun,
   getRun,
   getSnapshot,
   getSessionDetail,
@@ -77,6 +76,9 @@ import { isUnknownSessionState } from "./unknownSession";
 // drives the shell-owned orchestration through the demo controller context
 // (AppShell owns the state; this page only fires startDemo).
 import { useDemoController } from "./demo/DemoSessionContext";
+// ONE shared 404-until-drained diagnose retrier with the demo orchestration
+// (review-fix F4 收拢: the two byte-identical inline loops are gone).
+import { diagnoseWith404Retry } from "./demo/diagnoseRetry";
 import "./monitor.css";
 
 /** Feature-local canonical-convention keys (diagnoses/report faces). */
@@ -96,8 +98,6 @@ interface MetricsBody {
 
 const RUN_POLL_INTERVAL_MS = 200;
 const RUN_POLL_DEADLINE_MS = 30_000;
-const DIAGNOSE_404_RETRY_WINDOW_MS = 10_000;
-const DIAGNOSE_404_RETRY_INTERVAL_MS = 100;
 
 /** A complete session UUID tracks on input (输入即跟踪, §4.3 手输兜底); anything
  * else waits for the explicit submit (no partial-id navigation). */
@@ -245,6 +245,13 @@ function MonitorPage({ sessionId, onUntrack }: { sessionId: string; onUntrack: (
   });
 
   // --- run registry (page state; facts always from getRun answers) ---------
+  // NOTE (review-fix F4 职责声明): this loop is deliberately NOT the demo
+  // module's runAndWait — it owns per-tick rendering integration (every
+  // poll's status answer updates the page registry row in place via
+  // setRuns, so the Run 触发 face stays live during the poll). The pure
+  // submit-and-wait shape would drop the intermediate rows. The byte-identical
+  // diagnose-404 retry loop, by contrast, HAD no rendering duty and is now
+  // the one shared diagnoseWith404Retry (demo/diagnoseRetry.ts).
   const [runs, setRuns] = useState<RunStatusDTO[]>([]);
   const [runBusy, setRunBusy] = useState(false);
 
@@ -341,21 +348,9 @@ function MonitorPage({ sessionId, onUntrack }: { sessionId: string; onUntrack: (
     try {
       // 404-until-drained: the report becomes answerable once the pump has
       // committed the run's terminal journal events (SPEC-306 §5 idempotent).
-      const deadline = Date.now() + DIAGNOSE_404_RETRY_WINDOW_MS;
-      let last: DiagnosisReportDTO | null = null;
-      for (;;) {
-        try {
-          last = await diagnoseRun(sessionId, diagnoseRunId.trim());
-          break;
-        } catch (error) {
-          if (error instanceof ApiError && error.status === 404 && Date.now() < deadline) {
-            await new Promise((resolve) => setTimeout(resolve, DIAGNOSE_404_RETRY_INTERVAL_MS));
-            continue;
-          }
-          throw error;
-        }
-      }
-      setReport(last);
+      // ONE shared retrier with the demo orchestration (review-fix F4).
+      const answer = await diagnoseWith404Retry(sessionId, diagnoseRunId.trim());
+      setReport(answer);
       void queryClient.invalidateQueries({ queryKey: [...monitorKeys.diagnoses(sessionId)] });
     } catch (error) {
       setDiagnoseError(error instanceof ApiError ? `${error.errorCode}: ${error.message}` : String(error));

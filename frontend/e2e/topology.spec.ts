@@ -470,7 +470,7 @@ test("§4.5 guidance: persistent banner, empty overlay show/dismiss, gate note, 
   await expect(declaration).toContainText("此处保存的拓扑仅供本模块载入与校验；Lab 场景使用场景自带初始拓扑，不会自动使用它。");
 });
 
-test("§4.5 item 4: drag preview dims direction-illegal handles; a rejected click-connect shows the §7.6 reason for ~4 s", async ({ page }) => {
+test("§4.5 item 4: drag preview dims illegal handles (direction/cardinality/self-loop 全量口径); a rejected click-connect shows the §7.6 reason for ~4 s", async ({ page }) => {
   await openFreshDraft(page);
 
   await zoomCanvasOut(page);
@@ -506,6 +506,26 @@ test("§4.5 item 4: drag preview dims direction-illegal handles; a rejected clic
   await expect(page.locator(".react-flow__edge")).toHaveCount(1); // nothing illegal reaches the wire
   const hint = page.getByTestId("dvb-topo-connection-hint");
   await expect(hint).toHaveText("“ts_out”连接数已满（上限 1）");
+  await expect(page.getByTestId("dvb-topo-canvas")).not.toHaveAttribute("data-connecting", /.+/);
+
+  // §7.6 全量预览 (review-fix F2): a fresh drag hangs off mux.ts_out — the
+  // FULL ts_in_1 dims (cardinality-illegal though direction-legal) while the
+  // free ts_in_2 stays lit, and the ORIGIN handle dims with the self-loop
+  // rule (same node + same port is never a legal end). Cardinality and the
+  // self loop now enter the preview, not just the drag direction.
+  const muxIn1 = page.locator('[data-node-id="mux-0"]').getByTestId("dvb-topo-handle-ts_in_1");
+  await expectHandleNotCovered(page, muxOut, "mux-0");
+  await muxOut.click();
+  await expect(page.getByTestId("dvb-topo-canvas")).toHaveAttribute("data-connecting", "source");
+  await expect(muxIn1).toHaveCSS("opacity", "0.35");
+  await expect(muxOut).toHaveCSS("opacity", "0.35");
+  await expect(muxIn2).not.toHaveCSS("opacity", "0.35");
+  // Landing on the FULL ts_in_1: the target-side cardinality reason — still
+  // nothing illegal reaches the wire.
+  await expectHandleNotCovered(page, muxIn1, "mux-0");
+  await muxIn1.click();
+  await expect(page.locator(".react-flow__edge")).toHaveCount(1);
+  await expect(hint).toHaveText("“ts_in_1”连接数已满（上限 1）");
   await expect(page.getByTestId("dvb-topo-canvas")).not.toHaveAttribute("data-connecting", /.+/);
 
   // …and auto-dismisses after ~4 s without any interaction (exact 4 000 ms is

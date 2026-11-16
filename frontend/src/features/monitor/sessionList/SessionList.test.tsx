@@ -83,12 +83,20 @@ describe("SessionList — the recent-session rows", () => {
     expect(onTrack).toHaveBeenCalledExactlyOnceWith(ROW_B.session_id);
   });
 
-  it("asks with the server default face and shows the honest empty list", async () => {
+  it("asks with the server default face and shows the honest empty list (copy ties into the §4.6 row-1 entry three questions)", async () => {
     listSessionsMock.mockResolvedValue([]);
     renderList();
     expect(await screen.findByTestId("session-list-empty")).toBeInTheDocument();
     // 空 ≠ 错误:an empty list is a fact, not a failure.
     expect(screen.getByText(/暂无会话记录/)).toBeInTheDocument();
+    // Review-fix F7: the secondary out-of-table state speaks the SAME
+    // next-step enumeration as the §4.6 row-1 entry three questions — the
+    // two faces share one vocabulary (no drift).
+    const emptyFace = screen.getByTestId("session-list-empty");
+    expect(emptyFace.textContent).toContain("入口三问");
+    expect(emptyFace.textContent).toContain("从 Lab 选场景开始实验");
+    expect(emptyFace.textContent).toContain("一键演示");
+    expect(emptyFace.textContent).toContain("手输 UUID");
   });
 });
 

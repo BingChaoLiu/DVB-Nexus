@@ -32,6 +32,7 @@ vi.mock("../../api", async (importOriginal) => {
     getSnapshot: vi.fn(),
     queryEvents: vi.fn(),
     listDiagnoses: vi.fn(),
+    listSessionRuns: vi.fn(),
     submitRun: vi.fn(),
     getRun: vi.fn(),
   };
@@ -44,10 +45,12 @@ import {
   getScenario,
   getSnapshot,
   listDiagnoses,
+  listSessionRuns,
   queryEvents,
   startSession,
   submitRun,
 } from "../../api";
+import type { RunListItemDTO } from "../../api";
 import LabRegion from "./Region";
 
 const mocked = {
@@ -57,6 +60,7 @@ const mocked = {
   getSnapshot: vi.mocked(getSnapshot),
   queryEvents: vi.mocked(queryEvents),
   listDiagnoses: vi.mocked(listDiagnoses),
+  listSessionRuns: vi.mocked(listSessionRuns),
   submitRun: vi.mocked(submitRun),
   getRun: vi.mocked(getRun),
 };
@@ -120,6 +124,7 @@ function setupApiMocks() {
   );
   mocked.queryEvents.mockResolvedValue({ data: { items: [], total: 0 } } as never);
   mocked.listDiagnoses.mockResolvedValue([] satisfies DiagnosisDTO[]);
+  mocked.listSessionRuns.mockResolvedValue([] satisfies RunListItemDTO[]);
   mocked.submitRun.mockImplementation(async (sessionId, body) => {
     expect(sessionId).toBe("s-new");
     submitted.set(`run-${runSeq + 1}`, (body.fault_plan ?? []).length > 0);
@@ -207,13 +212,16 @@ describe("LabRegion — opening auto-baseline third hop (SPEC-408 §7.3)", () =>
     expect(screen.queryByTestId("lab-start-error")).not.toBeInTheDocument();
     expect(screen.queryByTestId("lab-autorun-note")).not.toBeInTheDocument();
 
-    // The empty registry states the fallback honestly (§4.6 Lab 组行 3 逐字).
-    expect(screen.getByText("尚无 Run")).toBeInTheDocument();
+    // The empty registry + the EMPTY §6.3 server list state the fallback
+    // honestly (§4.6 Lab 组行 3 逐字; the copy awaits list confirmation — F1).
     expect(
-      screen.getByText(
+      await screen.findByText(
         "本会话尚未触发任何 Run（开局自动基线未成功，回落手动流程，诚实态）。下一步：点击『生成基线（Generate，空 plan）』",
+        {},
+        { timeout: 3_000 },
       ),
     ).toBeInTheDocument();
+    expect(screen.getByText("尚无 Run")).toBeInTheDocument();
 
     // The pointer stays honest: Generate is still 待办 (no fake progress).
     expect(screen.getByTestId("lab-step-generate")).toHaveTextContent("待办");

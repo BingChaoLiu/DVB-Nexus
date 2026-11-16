@@ -15,7 +15,8 @@ function run(
   status: LabFacts["runs"][number]["status"],
   kinds: string[],
 ): LabFacts["runs"][number] {
-  return { runId, status, artifacts: kinds.map((kind) => ({ kind })) };
+  // Page-memory run: no §6.3 list fact — the artifact-kind path decides.
+  return { runId, status, artifacts: kinds.map((kind) => ({ kind })), faultPlanPresent: null };
 }
 
 function steps(overrides: Partial<Record<keyof LabFacts, unknown>>) {

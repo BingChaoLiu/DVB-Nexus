@@ -114,24 +114,22 @@
   font-weight: 600;
 }
 
-/* §4.5 item 4 preview half: 拖拽中非法把手降透明度. Two pure-CSS hooks over
- * React Flow's own handle classes + the wrapper's data-connecting attribute
- * (set by the connectionFeedback machine):
- * - starting from an output (source-type) handle: every OTHER source handle
- *   dims — direction makes source handles illegal ends (MVP has no
- *   bidirectional ports);
- * - starting from an input (target-type) handle: all target handles dim —
- *   nothing may legally end there;
+/* §4.5 item 4 preview half: 拖拽中非法把手降透明度 (review-fix F2 全量口径).
+ * The page computes the per-handle ILLEGAL END set from the SAME four
+ * prechecks canConnect runs (direction / cardinality / plane / self loop —
+ * §7.6), and TopologyNode stamps dvb-topo-handle-illegal-end on every handle
+ * in the set via IllegalEndHandlesContext. The old direction-only CSS hooks
+ * (dim ALL source/target handles by wrapper attribute) are retired: the set
+ * is strictly more informative. Two rules remain:
+ * - the per-handle illegal class dims (only during a drag — the context is
+ *   empty when idle);
  * - React Flow's hovered-invalid marking (.connectingto without .valid —
- *   fed by isValidConnection) dims a specifically illegal target handle
- *   (cardinality / plane / self loop) at hover time.
- * The origin keeps its class exclusion (.connectingfrom / .clickconnecting)
- * so the handle you hold stays lit. */
-.dvb-topo-canvas[data-connecting="source"] .react-flow__handle.source:not(.connectingfrom):not(.clickconnecting) {
-  opacity: 0.35;
-}
-
-.dvb-topo-canvas[data-connecting="target"] .react-flow__handle.target {
+ *   fed by isValidConnection) keeps dimming the specifically hovered
+ *   illegal target handle at drop-hover time.
+ * The ORIGIN handle is inside the semantic set (self loop = same node + same
+ * port) and dims with the rest — the honest "cannot loop back here" preview;
+ * RF's own .connectingfrom marking still identifies the held handle. */
+.dvb-topo-canvas .react-flow__handle.dvb-topo-handle-illegal-end {
   opacity: 0.35;
 }
 

@@ -99,8 +99,9 @@ export function SaveGateNote({ saving, dirty, pendingCount, reasons }: SaveGateN
  * new rejection (the page remounts via key={attempt}; within one mount a
  * changed rejection string re-arms the timer while `dismissed` resets only on
  * remount — the page contract guarantees that pairing). The preview half
- * (拖拽中非法把手降透明度) is pure CSS over the canvas wrapper's
- * data-connecting hook in topologyEditor.css. */
+ * (拖拽中非法把手降透明度) rides the per-handle illegal-end set
+ * (IllegalEndHandlesContext → dvb-topo-handle-illegal-end, review-fix F2 全量
+ * 四项预检口径) dimmed by topologyEditor.css. */
 export function ConnectionHint({ rejection }: { rejection: string | null }) {
   const [dismissed, setDismissed] = useState(false);
   useEffect(() => {
