@@ -36,6 +36,8 @@ import { DiagnosisCandidateList, DiagnosisList } from "../monitor/components";
 import { VerifyResultCard } from "../monitor/components";
 import { LAB_RUN_CONFIG } from "./labGeometry";
 import { buildVerifyBody } from "./labBodies";
+import { useHintsReveal } from "./hintsStorage";
+import { HintsLadder, type LabHintWire } from "./HintsLadder";
 import { currentActionGuide, deriveCurrentAction, type CurrentActionKey } from "./currentAction";
 import { deriveStepState, type LabFacts, type LabRunFact } from "./stepperState";
 import { Stepper } from "./Stepper";
@@ -83,6 +85,11 @@ export function ExperimentConsole({
 }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  // Shared hint-reveal source (SPEC-408 §4.4 REQ-UI-408-011): the SAME
+  // per-scenario localStorage key as the detail page's ladder — the
+  // collapsible block below embeds hints WITHOUT a deep link (the ?session=
+  // anchor would be lost).
+  const hints = useHintsReveal(scenarioId);
 
   // --- server facts ---------------------------------------------------------
   const snapshotQuery = useQuery({
@@ -317,6 +324,23 @@ export function ExperimentConsole({
               : errorMessage(snapshotQuery.error)}
           </div>
         )}
+        {/* 内嵌分阶段提示（SPEC-408 §4.4 REQ-UI-408-011）: collapsible, fed by
+            the SAME localStorage-backed source as the detail page (the shared
+            per-scenario key via useHintsReveal — no deep link, the ?session=
+            anchor stays). Sits OUTSIDE the five lab-section-* anchors so
+            Stepper locating is untouched. */}
+        <details className="dvb-lab-hints-details" data-testid="lab-hints-section">
+          <summary>分阶段提示</summary>
+          {detailQuery.data !== undefined && (
+            <HintsLadder
+              hints={detailQuery.data.hints as unknown as LabHintWire[]}
+              revealedCount={hints.count}
+              onRevealNext={hints.revealNext}
+              onResetHints={hints.resetHints}
+              storageAvailable={hints.storageOk}
+            />
+          )}
+        </details>
         <section data-testid="lab-section-run" ref={(el) => { sectionRefs.current.run = el; }} className={sectionClass("run")}>
           <h3 className="dvb-lab-h3">Run 触发</h3>
           <div className="dvb-lab-run-actions">
