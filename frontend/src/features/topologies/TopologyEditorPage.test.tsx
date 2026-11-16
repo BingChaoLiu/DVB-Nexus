@@ -5,6 +5,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { TopologyDTO, TopologySummaryDTO, TopologyValidationDTO } from "../../api";
@@ -49,7 +50,11 @@ function renderPage() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      <TopologyEditorPage />
+      {/* The §4.5 guidance links (<Link>) need a router context; the page
+          normally sits inside the app router (createAppRouter). */}
+      <MemoryRouter initialEntries={["/topologies"]}>
+        <TopologyEditorPage />
+      </MemoryRouter>
     </QueryClientProvider>,
   );
 }
@@ -191,5 +196,82 @@ describe("TopologyEditorPage — AC-402-04 no-session-entry assertion", () => {
     for (const forbidden of [/开局/, /开始实验/, /启动\s*session/i, /创建\s*session/i, /session\s*id/i, /跟踪/]) {
       expect(screen.queryByText(forbidden)).toBeNull();
     }
+  });
+});
+
+// SPEC-408 §4.5 guidance faces at the page seam (AC-408-08 / AC-401-07):
+// banner timing, empty-overlay show/dismiss, the gate-note three states plus
+// the saveable zero-noise state, the hover-title removal and the per-save
+// declaration. Connection-failure reasons live at the pure seams
+// (graphMapping/connectionFeedback) and in e2e — no RF drag simulation here.
+describe("TopologyEditorPage — §4.5 guidance faces", () => {
+  it("renders the persistent guidance banner (页顶) with path-string links", async () => {
+    renderPage();
+    const banner = await screen.findByTestId("dvb-topo-guidance");
+    expect(banner).toHaveTextContent("进阶工具");
+    expect(banner).toHaveTextContent("场景自带的初始拓扑"); // 场景初始拓扑 term
+    expect(banner).toHaveTextContent("不会读取这里保存的拓扑"); // 已保存拓扑 side
+    expect(banner).toHaveTextContent("拿到第一次 PASS 之后再回来探索不迟");
+    expect(screen.getByRole("link", { name: "[去 Lab →]" })).toHaveAttribute("href", "/lab");
+    expect(screen.getByRole("link", { name: "[回主页 →]" })).toHaveAttribute("href", "/");
+  });
+
+  it("empty canvas shows the three-question overlay; the first node removes it", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    const overlay = await screen.findByTestId("dvb-topo-empty-overlay");
+    expect(overlay).toHaveTextContent("这是什么");
+    expect(overlay).toHaveTextContent("为什么是空的");
+    expect(overlay).toHaveTextContent("下一步");
+    expect(screen.getByRole("link", { name: "[去 Lab 开始主干旅程 →]" })).toHaveAttribute("href", "/lab");
+
+    await user.click(await screen.findByRole("button", { name: /TS 监测器/ }));
+    await screen.findByText("ts_monitor", { selector: ".dvb-topo-node-type" });
+    expect(screen.queryByTestId("dvb-topo-empty-overlay")).toBeNull();
+  });
+
+  it("gate states: 无修改 → 没有待保存的修改; 配置待填 gate → 暂不能保存：1 处待处理 with its line only; hover title撤除", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    const note = await screen.findByTestId("dvb-topo-gate-note");
+    expect(note).toHaveTextContent("没有待保存的修改");
+
+    await user.click(await screen.findByRole("button", { name: /TS 生成器/ }));
+    await screen.findByText("ts_generator", { selector: ".dvb-topo-node-type" });
+    expect(screen.getByTestId("dvb-topo-gate-note")).toHaveTextContent("暂不能保存：1 处待处理");
+    expect(screen.getByText("配置待填 → 右侧「节点属性」补全")).toBeInTheDocument();
+    expect(screen.queryByText("校验违规 → 见下方「校验」面板")).toBeNull();
+    expect(screen.queryByText("表单字段有误")).toBeNull();
+    // §4.5 item 3: the hover-only title is GONE (invisible on touch = not honest)
+    expect(screen.getByRole("button", { name: /保存为新 revision/ })).not.toHaveAttribute("title");
+  });
+
+  it("saveable → zero noise; saving → 正在保存…; every save shows its own revision declaration", async () => {
+    const user = userEvent.setup();
+    let resolveFirst!: (topology: TopologyDTO) => void;
+    mocked.createTopology.mockImplementationOnce(
+      () => new Promise<TopologyDTO>((resolve) => { resolveFirst = resolve; }),
+    );
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: /TS 监测器/ })); // null-schema type → gate stays open
+    await screen.findByText("ts_monitor", { selector: ".dvb-topo-node-type" });
+    expect(screen.queryByTestId("dvb-topo-gate-note")).toBeNull(); // saveable = zero noise
+
+    const save = screen.getByRole("button", { name: /保存为新 revision/ });
+    expect(save).toBeEnabled();
+    await user.click(save);
+    expect(await screen.findByTestId("dvb-topo-gate-note")).toHaveTextContent("正在保存…");
+    resolveFirst(SAVED);
+    const note = await screen.findByTestId("dvb-topo-save-note");
+    expect(note).toHaveTextContent("已保存为 revision 1。");
+    expect(note).toHaveTextContent("此处保存的拓扑仅供本模块载入与校验；Lab 场景使用场景自带初始拓扑，不会自动使用它。");
+    await waitFor(() => expect(screen.getByTestId("dvb-topo-gate-note")).toHaveTextContent("没有待保存的修改"));
+
+    // EVERY save: a second save updates the declaration to the new revision
+    mocked.saveTopologyRevision.mockResolvedValue({ ...SAVED, revision: 2 });
+    await user.click(screen.getByRole("button", { name: /TS 监测器/ })); // mark dirty again (mon-1)
+    await user.click(screen.getByRole("button", { name: /保存为新 revision/ }));
+    await waitFor(() => expect(mocked.saveTopologyRevision).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByTestId("dvb-topo-save-note")).toHaveTextContent("已保存为 revision 2。"));
   });
 });

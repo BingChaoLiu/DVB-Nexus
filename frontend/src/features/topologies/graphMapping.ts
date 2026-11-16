@@ -151,6 +151,62 @@ export function canConnect({ source, target, sourceHandle, targetHandle, connect
   return true;
 }
 
+// --- §7.6 connection-rejection reasons (SPEC-408 §4.5 item 4 / §7.6) -----------
+//
+// A parallel PURE mapping over the same four prechecks: canConnect keeps its
+// boolean signature and behavior untouched; explainConnection only LABELS the
+// first failed check with its spec reason line. The two stay consistent by
+// construction (same checks, same order) and by a cross-invariant test
+// (explainConnection === null ⟺ canConnect === true). Unknown/missing handles
+// have no §7.6 enumeration → null (silence), the same defensive posture
+// canConnect takes.
+
+const DIRECTION_REASON = "方向不符（需 输出/双向 → 输入/双向）";
+const SELF_LOOP_REASON = "不能连回同一端口";
+const PLANE_REASON = "平面不符（当前仅支持 MPEG_TS）";
+
+/** The one-line reason for the first failed precheck (§7.6 verbatim), or null
+ * when the connection passes all four. Cardinality names the FULL port and
+ * its registry limit; the source endpoint is reported first, matching the
+ * canConnect check order. */
+export function explainConnection({
+  source,
+  target,
+  sourceHandle,
+  targetHandle,
+  connections,
+}: CanConnectInput): string | null {
+  if (!sourceHandle || !targetHandle) return null;
+  const sourcePort = source.data.node.ports.find((p) => p.port_id === sourceHandle);
+  const targetPort = target.data.node.ports.find((p) => p.port_id === targetHandle);
+  if (!sourcePort || !targetPort) return null;
+  // (1) direction — the ConnectionMode.Strict companion (SPEC-202 §5 rule)
+  if (!SOURCE_CAPABLE.has(sourcePort.direction) || !TARGET_CAPABLE.has(targetPort.direction)) {
+    return DIRECTION_REASON;
+  }
+  // (2) self loop = same node AND same port (SPEC-202 §5, canConnect order)
+  if (source.id === target.id && sourceHandle === targetHandle) return SELF_LOOP_REASON;
+  // (3) cardinality — same counting as canConnect
+  const endpointCount = (nodeId: string, portId: string) =>
+    connections.filter(
+      (e) =>
+        (e.source === nodeId && e.sourceHandle === portId) ||
+        (e.target === nodeId && e.targetHandle === portId),
+    ).length;
+  const sourceMax = sourcePort.max_connections ?? Number.POSITIVE_INFINITY;
+  const targetMax = targetPort.max_connections ?? Number.POSITIVE_INFINITY;
+  if (endpointCount(source.id, sourceHandle) + 1 > sourceMax) {
+    return `“${sourceHandle}”连接数已满（上限 ${sourceMax}）`;
+  }
+  if (endpointCount(target.id, targetHandle) + 1 > targetMax) {
+    return `“${targetHandle}”连接数已满（上限 ${targetMax}）`;
+  }
+  // (4) single plane — mismatch OR non-enabled plane share one §7.6 line
+  if (sourcePort.plane !== targetPort.plane) return PLANE_REASON;
+  if (!(MVP_ENABLED_PLANES as readonly SignalPlane[]).includes(sourcePort.plane)) return PLANE_REASON;
+  return null;
+}
+
 // --- deterministic layout (ADR-0009 decision 5) ----------------------------------
 
 export interface LayoutLink {
