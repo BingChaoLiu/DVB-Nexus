@@ -24,6 +24,7 @@ vi.mock("../../../api", async (importOriginal) => {
     submitRun: vi.fn(),
     getRun: vi.fn(),
     diagnoseRun: vi.fn(),
+    stopSession: vi.fn(),
     disposeSession: vi.fn(),
     listSessions: vi.fn(),
     getSnapshot: vi.fn(),
@@ -64,6 +65,7 @@ import {
   queryAlerts,
   querySummary,
   startSession,
+  stopSession,
   submitRun,
   verifyRun,
 } from "../../../api";
@@ -76,6 +78,7 @@ const submitRunMock = vi.mocked(submitRun);
 const getRunMock = vi.mocked(getRun);
 const diagnoseRunMock = vi.mocked(diagnoseRun);
 const disposeSessionMock = vi.mocked(disposeSession);
+const stopSessionMock = vi.mocked(stopSession);
 const listSessionsMock = vi.mocked(listSessions);
 const getSnapshotMock = vi.mocked(getSnapshot);
 const getSessionDetailMock = vi.mocked(getSessionDetail);
@@ -114,6 +117,7 @@ function view(lifecycle: string): SessionViewDTO {
 }
 
 function mockHappyOrchestration(): void {
+  stopSessionMock.mockResolvedValue(view("stopped"));
   listScenariosMock.mockResolvedValue([SC01_SUMMARY]);
   getScenarioMock.mockResolvedValue(SC01_DETAIL);
   createSessionMock.mockResolvedValue(view("ready"));
@@ -208,7 +212,10 @@ describe("AppShell demo wiring — home entry (§4.2 Monitor card demo gate)", (
     await waitFor(() => expect(cleanup).toBeEnabled());
     await user.click(cleanup);
 
+    // SPEC-200 §5 chain: running → stop (stopping→stopped, bounded) → DELETE.
+    expect(stopSessionMock).toHaveBeenCalledWith(SESSION);
     expect(disposeSessionMock).toHaveBeenCalledWith(SESSION);
+    expect(stopSessionMock.mock.invocationCallOrder[0]).toBeLessThan(disposeSessionMock.mock.invocationCallOrder[0]);
     await waitFor(() => expect(screen.queryByTestId("demo-session-bar")).not.toBeInTheDocument());
     // post-dispose: no session param → the 会话列表区 guide seat is the honest view
     expect(await screen.findByTestId("monitor-entry-guide")).toBeInTheDocument();
@@ -275,9 +282,10 @@ describe("AppShell demo wiring — failure keeps the session cleanable (§8 row 
     // fabricated success.
     expect(screen.queryByText(`session: ${SESSION}`)).not.toBeInTheDocument();
 
-    // 已建会话保留可手动清理: kept id visible, cleanup disposes it.
+    // 已建会话保留可手动清理: kept id visible, cleanup runs the stop→dispose chain.
     expect(bar.textContent).toContain(SESSION);
     await user.click(screen.getByTestId("demo-cleanup"));
+    expect(stopSessionMock).toHaveBeenCalledWith(SESSION);
     expect(disposeSessionMock).toHaveBeenCalledWith(SESSION);
     await waitFor(() => expect(screen.queryByTestId("demo-session-bar")).not.toBeInTheDocument());
   });

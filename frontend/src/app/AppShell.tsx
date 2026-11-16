@@ -19,7 +19,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from "react-router";
 import { appRoutes } from "./routes";
 import { GUIDE_URL } from "./journeySteps";
 import { JourneyBar } from "./JourneyBar";
-import { disposeSession, isApiError } from "../api";
+import { disposeSession, isApiError, stopSession } from "../api";
 import { qk } from "../query/keys";
 import {
   buildDemoLandingPath,
@@ -104,16 +104,31 @@ export function AppShell() {
     }
   }, [demo?.sessionId, queryClient, rerunBusy]);
 
-  // 「结束演示并清理」: DELETE /sessions/{id} (204) + local demo state clear.
-  // If the disposed session is the tracked one, leave its scope (the guide
-  // seat is the honest post-dispose view).
+  // 「结束演示并清理」: the SPEC-200 §5 lifecycle chain — a RUNNING demo
+  // session has no direct → disposed edge, so cleanup = stop (running →
+  // stopping → stopped, bounded synchronous answer) THEN DELETE
+  // /sessions/{id} (204, stopped → disposed) + local demo state clear. A
+  // 409 on stop means the session already sits past the stop edge (a
+  // previous cleanup attempt got at least as far) — hand it to the DELETE.
+  // A 404 on the DELETE means the session is already gone server-side —
+  // the cleanup goal holds. If the disposed session is the tracked one,
+  // leave its scope (the guide seat is the honest post-dispose view).
   const cleanupDemo = useCallback(async () => {
     const sessionId = demo?.sessionId ?? null;
     if (sessionId === null || cleanupBusy) return;
     setCleanupBusy(true);
     setCleanupError(null);
     try {
-      await disposeSession(sessionId);
+      try {
+        await stopSession(sessionId);
+      } catch (error) {
+        if (!(isApiError(error) && error.status === 409)) throw error;
+      }
+      try {
+        await disposeSession(sessionId);
+      } catch (error) {
+        if (!(isApiError(error) && error.status === 404)) throw error;
+      }
       setDemo(null);
       const tracked = new URLSearchParams(location.search).get("session");
       if (location.pathname === "/monitor" && tracked === sessionId) {
