@@ -196,15 +196,32 @@ test.describe.serial("eight-step closed loop (SPEC-400 §7.3 skeleton)", () => {
     expect(recoveryRunId).not.toBe(baselineRunId);
   });
 
-  test("Verify — three-state verdict rendered from the server answer (driver: ui, #64 Monitor / #67)", async ({ page }) => {
+  test("Verify — three-state verdict rendered from the server answer (driver: ui, #64 Monitor / #67)", async ({ page, request }) => {
     test.info().annotations.push({ type: "driver", description: 'ui — #64 Monitor verify form + result card (flipped; #67 layers scenario)' });
     await page.goto(`/monitor?session=${sessionId}`);
+    // REQ-UI-408-016 (SPEC-408 §11.1): the scenario identity triple is DERIVED
+    // from the §6 read-back endpoints — scenario_id ← GET /sessions/{id},
+    // version/content_hash ← GET /scenarios/{id} (the real pinned hash). The
+    // former declared fake constants ("cc-discontinuity-lab"/"1.0.0"/
+    // "e2e-smoke") are retired. baseline/recovery stay the REAL run ids the
+    // upstream steps captured; the three-state-tolerant smoke posture below
+    // is unchanged (the true-PASS mainline lives in lab.spec.ts).
+    const detail = await request.get(`/api/v1/sessions/${sessionId}`);
+    expect(detail.status()).toBe(200);
+    const detailJson = (await detail.json()) as { scenario_id?: string | null };
+    const scenarioId = detailJson.scenario_id ?? "";
+    expect(scenarioId).toMatch(/^[0-9a-f-]{36}$/);
+    const scenario = await request.get(`/api/v1/scenarios/${scenarioId}`);
+    expect(scenario.status()).toBe(200);
+    const scenarioJson = (await scenario.json()) as { version: string; content_hash: string };
+    expect(scenarioJson.version).toBeTruthy();
+    expect(scenarioJson.content_hash).toMatch(/^[0-9a-f]{64}$/);
     const faultId = (CC_DISCONTINUITY_FAULT_PLAN[0] as { fault_id: string }).fault_id;
     await page.getByLabel("recovery_run_id").fill(recoveryRunId);
     await page.getByLabel("baseline_run_id").fill(baselineRunId);
-    await page.getByLabel("scenario_id").fill("cc-discontinuity-lab");
-    await page.getByLabel("version").fill("1.0.0");
-    await page.getByLabel("content_hash").fill("e2e-smoke");
+    await page.getByLabel("scenario_id").fill(scenarioId);
+    await page.getByLabel("version").fill(scenarioJson.version);
+    await page.getByLabel("content_hash").fill(scenarioJson.content_hash);
     await page.getByLabel("criterion_id").fill("cc-ok");
     await page.getByLabel("kind").selectOption("cc_continuous");
     await page.getByLabel("fault_id").fill(faultId);
