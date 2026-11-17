@@ -1,0 +1,20 @@
+{
+  "vector_id": "inner-ts-roundtrip",
+  "kind": "generated_ts",
+  "related_specs": [
+    "SPEC-603",
+    "SPEC-600",
+    "SPEC-601",
+    "SPEC-602"
+  ],
+  "generator_version": "research/ffmpeg-t2mi-demuxer @ 2935ab68683247dbdf58ee007e1d919e89a60684 — docs/research/phase2/ffmpeg-t2mi-data/gen_t2mi_sample.py (blob sha256:b779da048dfaf5db8108387283ebf17492bc0a22494ba45c72219aeb673e62b7, N_UPS=3 N_T2MI=2; stdlib-only independent constructor, no src/ts involvement); expected_inner.ts captured verbatim via git show (只读取材, brief §7bis)",
+  "config_hash": "sha256:b779da048dfaf5db8108387283ebf17492bc0a22494ba45c72219aeb673e62b7",
+  "sha256": "sha256:08fcc6347a4e358c59c856371240610e46933ad5ca239ce80314a348075cb5d6",
+  "packet_count": 6,
+  "fault_plan_ref": null,
+  "verification": {
+    "path": "tsduck-cross",
+    "direction": "external-generator-baseline→self-reconstruct + TSDuck live cross NOT TRUSTED (3.45-4798: #105 multi-UP tail loss documented §5.3 on report shapes; checked-in TS-framed variant extracts byte-identical on the same build — framing-dependent behavior, both faces inside the NOT TRUSTED envelope, ruling §10-9 / SPEC-603 §8 row 4; trusted-release registry empty until the §5.3 retest matrix passes)",
+    "evidence_ref": "docs/test-vectors/golden/inner-ts-roundtrip/inner-ts-roundtrip.verification.md"
+  }
+}
