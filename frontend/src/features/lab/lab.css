@@ -350,6 +350,60 @@ button.dvb-lab-step {
   white-space: pre-wrap;
 }
 
+/* 生成过程 只读折叠区 (SPEC-406 §Phase2): static wayfinding — plain rows and
+   cards, no animation, no timeline, no separate page. A sibling of the hints
+   fold (never an anchor target of its own). */
+.dvb-lab-gen-details {
+  margin: 0.5rem 0;
+}
+
+.dvb-lab-gen-details > summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.dvb-lab-gen-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.dvb-lab-gen-stages,
+.dvb-lab-gen-samples {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.dvb-lab-gen-stage {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.dvb-lab-gen-sample {
+  border: 1px solid var(--dvb-border, #d0d4dc);
+  border-radius: 6px;
+  padding: 0.4rem 0.6rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.dvb-lab-gen-sha {
+  overflow-wrap: anywhere;
+}
+
+.dvb-lab-gen-jump {
+  cursor: pointer;
+}
+
 .dvb-lab-stepper {
   display: flex;
   align-items: center;

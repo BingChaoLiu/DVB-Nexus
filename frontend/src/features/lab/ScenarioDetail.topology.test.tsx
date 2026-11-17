@@ -104,3 +104,75 @@ describe("ScenarioDetail — initial_topology readability (AC-408-07)", () => {
     expect(screen.getByTestId("lab-topology-view")).toContainElement(raw);
   });
 });
+
+// SPEC-406 §Phase2 Lab Pack v2 场景承载 (#110 裁决「零特制」): the SC-06
+// three-level subgraph (ts_generator → t2mi_encapsulator → t2mi_demux →
+// ts_mux, T2MI-plane ports) renders through the SAME generic mechanism —
+// stats line + structured rows + verbatim raw fold, no per-type code path.
+const SC06_TOPOLOGY = {
+  topology_id: "topo-labpack-v2",
+  revision: 1,
+  nodes: [
+    {
+      nodeId: "gen-0",
+      nodeType: "ts_generator",
+      config: {},
+      ports: [{ portId: "ts_out", direction: "output", plane: "MPEG_TS", maxConnections: 1 }],
+    },
+    {
+      nodeId: "enc-0",
+      nodeType: "t2mi_encapsulator",
+      config: { bbframe_params: { matype_value: "NM", upl: 188, n_ups: 3 }, plp_assignment: [{ plp_id: 0, source_tag: "main" }] },
+      ports: [
+        { portId: "inner_in", direction: "input", plane: "MPEG_TS", maxConnections: 1 },
+        { portId: "t2mi_out", direction: "output", plane: "T2MI", maxConnections: 1 },
+      ],
+    },
+    {
+      nodeId: "dmx-0",
+      nodeType: "t2mi_demux",
+      config: { plp_filter: { mode: "expected", expected_plp: 0 } },
+      ports: [
+        { portId: "t2mi_in", direction: "input", plane: "T2MI", maxConnections: 1 },
+        { portId: "inner_out", direction: "output", plane: "MPEG_TS", maxConnections: 1 },
+      ],
+    },
+    {
+      nodeId: "mux-0",
+      nodeType: "ts_mux",
+      config: {},
+      ports: [{ portId: "ts_in_1", direction: "input", plane: "T2MI", maxConnections: 1 }],
+    },
+  ],
+  connections: [
+    { connectionId: "cx-0", from: { nodeId: "gen-0", portId: "ts_out" }, to: { nodeId: "enc-0", portId: "inner_in" } },
+    { connectionId: "cx-1", from: { nodeId: "enc-0", portId: "t2mi_out" }, to: { nodeId: "dmx-0", portId: "t2mi_in" } },
+    { connectionId: "cx-2", from: { nodeId: "dmx-0", portId: "inner_out" }, to: { nodeId: "mux-0", portId: "ts_in_1" } },
+  ],
+};
+
+const SC06_DETAIL: ScenarioDetailDTO = {
+  ...DETAIL,
+  scenario_id: "5c010000-0000-4000-8000-000000000006",
+  title: "封装错位：T2MI PLP 映射（业务漂移到非期望 PLP）",
+  difficulty: "intermediate",
+  initial_topology: SC06_TOPOLOGY,
+};
+
+describe("ScenarioDetail — Lab Pack v2 承载（SC-06 三级子图零特制）", () => {
+  it("renders the SC-06 three-level subgraph through the SAME generic mechanism (统计行 + 结构化渲染)", async () => {
+    mocked.getScenario.mockResolvedValue(SC06_DETAIL);
+    renderDetail();
+    const stats = await screen.findByTestId("lab-topology-stats", {}, { timeout: 3_000 });
+    expect(stats).toHaveTextContent("4 节点 · 3 连接 · topology_id topo-labpack-v2/revision 1");
+    const structured = await screen.findByTestId("lab-topology-structured", {}, { timeout: 3_000 });
+    // The Phase 2 node types render verbatim — no special-casing, no label
+    // rewriting (the node-type vocabulary itself is #135's registry face).
+    expect(structured).toHaveTextContent("节点 enc-0（t2mi_encapsulator）");
+    expect(structured).toHaveTextContent("端口 inner_in · 方向 input · 平面 MPEG_TS · 连接上限 1");
+    expect(structured).toHaveTextContent("端口 t2mi_out · 方向 output · 平面 T2MI · 连接上限 1");
+    expect(structured).toHaveTextContent("节点 dmx-0（t2mi_demux）");
+    expect(structured).toHaveTextContent("端口 t2mi_in · 方向 input · 平面 T2MI · 连接上限 1");
+    expect(structured).toHaveTextContent("连接 cx-1：enc-0:t2mi_out → dmx-0:t2mi_in");
+  });
+});
