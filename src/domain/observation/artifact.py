@@ -21,11 +21,18 @@ from domain.observation.ids import OpaqueEntityId
 
 
 class ArtifactKind(str, Enum):
-    """Asset kind (SPEC-003 section 2.7)."""
+    """Asset kind (SPEC-003 section 2.7; SPEC-603 §5 kind increment).
+
+    ``INNER_TS`` is the Phase 2 additive kind (SPEC-603 §14 additive-only):
+    the reconstructed Inner TS stream of the three-level demux chain, landed
+    content-addressed per SPEC-503.  The ts-side kind string mirror lives in
+    ``ts.t2mi.inner_ts.INNER_TS_ARTIFACT_KIND`` (ts purity: one-way mirror).
+    """
 
     INPUT_TS = "input_ts"
     GENERATED_TS = "generated_ts"
     FAULTED_TS = "faulted_ts"
+    INNER_TS = "inner_ts"
     REPORT = "report"
     LOG = "log"
     EVIDENCE = "evidence"
