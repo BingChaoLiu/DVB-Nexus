@@ -33,6 +33,7 @@
 | `bbframe-nups3` | generated_ts | BBFRAME 背靠背帧流（层间交接形态）：3 帧 N_UPS=3 批量 + 尾帧 [3,3,2]（尾帧 2 UP + 188B 0xFF stuffing、DFL 只计实载荷）（SPEC-601 §7/§11，#123） | L1：EN 302 755 §5.1.7 表推导脚本（无 src 参与）+ TSDuck 3.45 零 BBFrame 用户侧能力（#104）**NOT TRUSTED** 无 L2 对拍（裁定 §10-9） | registered |
 | `bbframe-b2-corrupt` | faulted_ts | BBHEADER_SYNC_FAULT corrupt（SYNCD 位翻转、CRC-8 不重算）：帧 0 `crc8_valid=false` + UP 边界扣留 → recovery_failed 证据（SPEC-601 §8），`fault_plan_ref=bbframe-nups3` | L1：独立变换脚本→self-parse（CRC-8 强制校验钉扎，TSDuck 3.45 静默传播缺陷 #104 反转为显式标记） | registered |
 | `bbframe-b2-shift` | faulted_ts | BBHEADER_SYNC_FAULT shift（SYNCD +1 位、CRC-8 重算 MODE 保持）：帧 0 `crc8_valid=true` + `syncd_misaligned`（UP 边界错位；教学点 SYNCD=位距离非同步字节），`fault_plan_ref=bbframe-nups3` | L1：独立变换脚本→self-parse（与 corrupt 对成两种可区分证据形态，逐字节钉扎） | registered |
+| `biss-j96-mode1` | bit_level | BISS Mode 1：J.96 §8 示例 SW `A13DBC42908F`→CW `A13DBC9A42908F61` 派生钉扎 + CSA1 加扰 roundtrip（SPEC-610）；DLL 依赖面 CI 诚实 NOT RUN（ADR-0011 §5） | L1：标准向量推导脚本（`tools/make_golden_biss_j96.py`，纯 Python CSA1 oracle，无 src 参与）+ 人工评审；DLL 对拍本地绿/CI NOT RUN | registered |
 
 ### #14 Q3 三 TODO 落实路径（已闭环）
 

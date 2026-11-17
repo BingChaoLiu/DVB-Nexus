@@ -1,0 +1,27 @@
+{
+  "vector_id": "biss-j96-mode1",
+  "kind": "bit_level",
+  "related_specs": [
+    "SPEC-610",
+    "SPEC-204"
+  ],
+  "generator_version": "tools/make_golden_biss_j96.py (pure-Python CSA1 oracle, research #106 port; no src/ involvement)",
+  "config_hash": "sha256:d0ba2cda9cc2ac34374b73d50cc849879f2d1653458978355b8fc4825aa4b1ed",
+  "sha256": "sha256:9647d274cc8a96b73f4f6b4aaabeaa1c9227935bc2a2294c5e596e6a81db9f94",
+  "packet_count": 6,
+  "fault_plan_ref": null,
+  "biss": {
+    "mode": "1",
+    "session_word": "A13DBC42908F",
+    "derived_cw": "A13DBC9A42908F61",
+    "pid_scope": [
+      256
+    ],
+    "ca_pid": 8191
+  },
+  "verification": {
+    "path": "bit-level-review",
+    "direction": "standard-vector derivation (ITU-T J.96 §8 example SW→CW, formula cross-checked by three independent implementations in research #106) → oracle-generated CSA1 scrambled stream; libdvbcsa static vectors 2/2 independently confirm the oracle (research #106); CI DLL cross-check: honestly NOT RUN (ADR-0011 §5)",
+    "evidence_ref": "docs/test-vectors/golden/biss-j96-mode1/biss-j96-mode1.verification.md"
+  }
+}
