@@ -44,6 +44,7 @@ from ts.biss.biss1 import (
     derive_cw,
     key_fingerprint,
 )
+from ts.biss.cissa import BISS_MODE_1
 from faults.filters.base import FaultTransform
 from ts.packet import TSPacket
 
@@ -165,15 +166,19 @@ class ScramblerTransform(FaultTransform):
     def scramble_summary(self) -> dict[str, Any]:
         """The ``biss.scramble_applied`` payload (reserved emission seam,
         ruling §10-7): ``{pid_scope, packet_count, key_fingerprint,
-        mutation_log_ref}``.  The runtime (#128) emits it at the fault
+        mutation_log_ref, mode}``.  The runtime (#128) emits it at the fault
         terminal-event seam once the run's packet count is final —
         ``mutation_log_ref`` stays ``None`` here because the artifact
-        binding is a runtime concern."""
+        binding is a runtime concern.  The SPEC-611 §5 ``mode`` field
+        (#127 additive) carries ``"1"`` for this CSA1 face; the Mode E
+        transform (``faults.filters.biss_mode_e``) emits ``"E"`` plus the
+        derivation-chain reference."""
         return {
             "pid_scope": sorted(self._pid_scope),
             "packet_count": self._scrambled_count,
             "key_fingerprint": key_fingerprint(self._session_word),
             "mutation_log_ref": None,
+            "mode": BISS_MODE_1,
         }
 
 

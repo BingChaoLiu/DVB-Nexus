@@ -1,0 +1,88 @@
+{
+  "expectations": [
+    {
+      "event_type": "ts.packet_batch_observed",
+      "locator": {
+        "packet_index": 0
+      },
+      "detail": {
+        "pid": 256,
+        "scrambling": 2,
+        "afc": 1,
+        "cc": 0,
+        "pusi": 1,
+        "note": "BISS Mode E scrambled slot (TSC=`10`, BISS marker); payload CISSA-scrambled (TS 103 127 §6.3) under the key composed from the J.96 §9.3 derived chain"
+      }
+    },
+    {
+      "event_type": "ts.packet_batch_observed",
+      "locator": {
+        "packet_index": 1
+      },
+      "detail": {
+        "pid": 256,
+        "scrambling": 2,
+        "afc": 1,
+        "cc": 1,
+        "pusi": 1,
+        "note": "BISS Mode E scrambled slot (TSC=`10`, BISS marker); payload CISSA-scrambled (TS 103 127 §6.3) under the key composed from the J.96 §9.3 derived chain"
+      }
+    },
+    {
+      "event_type": "ts.packet_batch_observed",
+      "locator": {
+        "packet_index": 2
+      },
+      "detail": {
+        "pid": 256,
+        "scrambling": 2,
+        "afc": 1,
+        "cc": 2,
+        "pusi": 1,
+        "note": "BISS Mode E scrambled slot (TSC=`10`, BISS marker); payload CISSA-scrambled (TS 103 127 §6.3) under the key composed from the J.96 §9.3 derived chain"
+      }
+    },
+    {
+      "event_type": "ts.packet_batch_observed",
+      "locator": {
+        "packet_index": 3
+      },
+      "detail": {
+        "pid": 256,
+        "scrambling": 2,
+        "afc": 1,
+        "cc": 3,
+        "pusi": 1,
+        "note": "BISS Mode E scrambled slot (TSC=`10`, BISS marker); payload CISSA-scrambled (TS 103 127 §6.3) under the key composed from the J.96 §9.3 derived chain"
+      }
+    },
+    {
+      "event_type": "ts.packet_batch_observed",
+      "locator": {
+        "packet_index": 4
+      },
+      "detail": {
+        "pid": 256,
+        "scrambling": 2,
+        "afc": 1,
+        "cc": 4,
+        "pusi": 1,
+        "note": "BISS Mode E scrambled slot (TSC=`10`, BISS marker); payload CISSA-scrambled (TS 103 127 §6.3) under the key composed from the J.96 §9.3 derived chain"
+      }
+    },
+    {
+      "event_type": "ts.packet_batch_observed",
+      "locator": {
+        "packet_index": 5
+      },
+      "detail": {
+        "pid": 256,
+        "scrambling": 2,
+        "afc": 1,
+        "cc": 5,
+        "pusi": 1,
+        "note": "BISS Mode E scrambled slot (TSC=`10`, BISS marker); payload CISSA-scrambled (TS 103 127 §6.3) under the key composed from the J.96 §9.3 derived chain"
+      }
+    }
+  ]
+}

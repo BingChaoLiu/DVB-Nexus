@@ -166,12 +166,16 @@ class TestScramblerTransformBehavior:
         )
         transform.apply(0, _in_scope_packet())
         summary = transform.scramble_summary()
+        # #127 (SPEC-611 §5, ruling §10-7) added the `mode` field to the
+        # biss.* emission payloads; this CSA1 face emits "1".
         assert set(summary) == {
             "pid_scope",
             "packet_count",
             "key_fingerprint",
             "mutation_log_ref",
+            "mode",
         }
+        assert summary["mode"] == "1"
         assert summary["pid_scope"] == [0x0100]
         assert summary["packet_count"] == 1
         assert summary["key_fingerprint"] == key_fingerprint(
