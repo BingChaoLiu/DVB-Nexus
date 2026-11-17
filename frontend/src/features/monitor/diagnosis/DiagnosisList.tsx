@@ -8,7 +8,7 @@
 import type { ReactNode } from "react";
 import type { DiagnosisCandidateDTO, DiagnosisDTO, DiagnosisEvidenceDTO } from "../types";
 import { Badge, EmptyState } from "../../../components/ui";
-import { MONITOR_EMPTY_STATE_COPY } from "../copy";
+import { EVENT_HONESTY_COPY, MONITOR_EMPTY_STATE_COPY } from "../copy";
 import { ThreeQuestionState } from "../ThreeQuestionState";
 import { orderDiagnoses } from "./order";
 
@@ -55,11 +55,22 @@ function LocatorButton({
 function ObservationRefs({ refs }: { refs: { journal_seq: number; event_type: string }[] }) {
   return (
     <span className="dvb-mon-refs">
-      {refs.map((ref) => (
-        <span key={ref.journal_seq} className="dvb-mon-ref-chip" title="observation ref（journal 事实引用）">
-          seq {ref.journal_seq} · {ref.event_type}
-        </span>
-      ))}
+      {refs.map((ref) => {
+        // SPEC-403 §Phase2(#134):registered Phase 2 refs carry their honesty
+        // discipline sentence from copy.ts (registry lookup by wire event
+        // type — no hardcoded list here; ts.*/fault.* refs render unchanged).
+        const discipline = EVENT_HONESTY_COPY[ref.event_type as keyof typeof EVENT_HONESTY_COPY];
+        return (
+          <span key={ref.journal_seq} className="dvb-mon-ref-chip" title="observation ref（journal 事实引用）">
+            seq {ref.journal_seq} · {ref.event_type}
+            {discipline !== undefined && (
+              <span className="dvb-mon-ref-discipline" data-testid={`ref-discipline-${String(ref.journal_seq)}`}>
+                {discipline}
+              </span>
+            )}
+          </span>
+        );
+      })}
     </span>
   );
 }

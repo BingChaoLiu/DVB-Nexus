@@ -5,6 +5,8 @@
 //
 // 逐字保障:本文件字符串由规格表程序化提取生成(含全角标点),并由
 // copy.test.ts 以独立提取物钉扎——手工编辑需先对规格。
+import type { Phase2EventType } from "./types";
+
 export interface ThreeQuestionCopy {
   /** 这是什么 */
   what: string;
@@ -79,3 +81,17 @@ export const MONITOR_EMPTY_STATE_COPY = {
  * verbatim — the copy test pins all three carriers.
  */
 export const HONESTY_DISCIPLINE_PHRASES = ["无观测 ≠ 干净", "候选 ≠ 事实", "缺失 ≠ 零"] as const;
+
+/**
+ * SPEC-403 §Phase2(L320)诚实纪律句随事件文案落位(逐字,键 = 事件类型
+ * wire 名,#129 注册表条目):「解扰失败 ≠ 码流损坏」挂在 biss.descramble_failed
+ * (候选 ≠ 事实的解扰面——解扰证据 ≠ 码流损坏判定,ADR-0011 §4),「缺失 ≠ 零」
+ * 挂在 t2mi.plp_mismatch(期望 PLP 不在流内 = 显式缺失,诚实空 ≠ 零流量)。
+ * 规格只锚定这两句——不为其余事件发明文案(诚实禁令:规格外不落句)。
+ * 注册表驱动渲染(journal 尾窗行 + 诊断明细 ref chip)按键查此表;键未命中
+ * = 无纪律句,零渲染副作用。本文件 = 纪律句唯一归属面(票 #134)。
+ */
+export const EVENT_HONESTY_COPY: Partial<Record<Phase2EventType, string>> = {
+  "biss.descramble_failed": "解扰失败 ≠ 码流损坏",
+  "t2mi.plp_mismatch": "缺失 ≠ 零",
+};

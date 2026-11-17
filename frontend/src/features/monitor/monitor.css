@@ -341,3 +341,58 @@
   align-items: center;
   gap: 10px;
 }
+
+/* Phase 2 journal rendering (#134, SPEC-403 §Phase2): registry-driven payload
+   block + honesty discipline sentence chip. */
+.dvb-mon-journal-row-phase2 {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.dvb-mon-journal-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dvb-mon-discipline {
+  align-self: flex-start;
+  font-size: 0.8rem;
+  color: var(--dvb-muted);
+  border: 1px dashed var(--dvb-border);
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+
+.dvb-mon-payload {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dvb-mon-payload-item {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 0.8rem;
+}
+
+.dvb-mon-payload-key {
+  font-family: var(--dvb-mono);
+  color: var(--dvb-muted);
+  min-width: 12ch;
+}
+
+.dvb-mon-payload-value {
+  font-family: var(--dvb-mono);
+  word-break: break-all;
+}
+
+/* Diagnosis 明细 ref chip 的纪律句缀(#134):chip 内随事件文案落位。 */
+.dvb-mon-ref-discipline {
+  margin-left: 6px;
+  color: var(--dvb-muted);
+}

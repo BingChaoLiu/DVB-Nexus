@@ -1,0 +1,48 @@
+{
+  "rule_id": "DIA-T2MI-PLP-MISMATCH",
+  "rule_version": "1.0.0",
+  "code": "DIAG_T2MI_PLP_MISMATCH",
+  "priority": 50,
+  "severity": "error",
+  "confidence": "medium",
+  "title": "PLP mapping mismatch leaves the demux-expected PLP without business",
+  "summary_template": "Demux expects PLP {expected_plp}, stream carries PLP {actual_plp}; the filtered Inner TS carries no business",
+  "match": {
+    "event_type": "t2mi.plp_mismatch",
+    "predicates": [
+      {
+        "field": "payload.expected_plp",
+        "op": "exists",
+        "value": null
+      },
+      {
+        "field": "payload.actual_plp",
+        "op": "exists",
+        "value": null
+      },
+      {
+        "field": "payload.business_absent_evidence",
+        "op": "exists",
+        "value": null
+      }
+    ],
+    "group_by": [
+      "node_id"
+    ],
+    "window": null
+  },
+  "suppression": {
+    "key": [
+      "code",
+      "node_id"
+    ],
+    "window": "per_run"
+  },
+  "suggested_actions": [
+    "Align the encapsulator PLP assignment with the demux expected PLP"
+  ],
+  "expected_evidence": [
+    "t2mi.plp_mismatch"
+  ],
+  "enabled": true
+}
