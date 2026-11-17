@@ -19,10 +19,17 @@ requires-python = ">=3.10"
 # app.py docstring): `uvicorn --factory api.app:create_app` — the #24
 # acceptance evidence gap ("app 可启动") closed in review-fix #7. 0.30 is a
 # current-generation floor; <1 guards against the next major.
+# pycryptodome graduates to a runtime dependency at the #136 integration
+# close (ruling §10-11, #127 REPORT §五-1 追认): ts.biss.cissa consumes
+# AES-128-CBC (pycryptodome) on the BISS2/Mode-E runtime path (SPEC-611
+# §6) — a runtime dep, not a test dep. Floor aligned with the shared
+# .venv install (4.5.0, the version the #106 vector evidence ran on);
+# <5 guards against the next major.
 dependencies = [
     "pydantic>=2,<3",
     "fastapi>=0.110,<1",
     "uvicorn>=0.30,<1",
+    "pycryptodome>=4.5,<5",
 ]
 
 [project.optional-dependencies]
