@@ -439,6 +439,61 @@ class TestPmtPidDriftSchema:
         )
         assert _codes(details) == ["SIM_FAULT_PARAM_INVALID"]
 
+    # --- JSON-wire digit-string keys (ticket #131 orchestrator ruling) ---
+    # JSON object keys are always strings; an all-digit ASCII string key
+    # coerces to its int program number so the scenario wire can carry the
+    # mapping.  The Python int-key path above is unchanged.
+
+    def test_digit_string_program_keys_accepted(self) -> None:
+        details = validate_fault_definition(
+            self._fault(
+                {"new_pid_map": {"1": 0x0900}, "pmt_version_bump": True}
+            )
+        )
+        assert details == ()
+
+    def test_multi_digit_string_keys_accepted(self) -> None:
+        details = validate_fault_definition(
+            self._fault(
+                {"new_pid_map": {"1": 0x0900, "2": 0x0901},
+                 "pmt_version_bump": False}
+            )
+        )
+        assert details == ()
+
+    def test_non_digit_string_program_keys_rejected(self) -> None:
+        details = validate_fault_definition(
+            self._fault(
+                {"new_pid_map": {"program-1": 0x0900},
+                 "pmt_version_bump": False}
+            )
+        )
+        assert _codes(details) == ["SIM_FAULT_PARAM_INVALID"]
+
+    def test_zero_as_digit_string_key_rejected(self) -> None:
+        details = validate_fault_definition(
+            self._fault(
+                {"new_pid_map": {"0": 0x0900}, "pmt_version_bump": False}
+            )
+        )
+        assert _codes(details) == ["SIM_FAULT_PARAM_INVALID"]
+
+    def test_negative_digit_string_key_rejected(self) -> None:
+        details = validate_fault_definition(
+            self._fault(
+                {"new_pid_map": {"-1": 0x0900}, "pmt_version_bump": False}
+            )
+        )
+        assert _codes(details) == ["SIM_FAULT_PARAM_INVALID"]
+
+    def test_bool_program_key_rejected(self) -> None:
+        details = validate_fault_definition(
+            self._fault(
+                {"new_pid_map": {True: 0x0900}, "pmt_version_bump": False}
+            )
+        )
+        assert _codes(details) == ["SIM_FAULT_PARAM_INVALID"]
+
     def test_session_start_activation_rejected(self) -> None:
         details = validate_fault_definition(
             self._fault(
