@@ -18,10 +18,12 @@ invented types, no producer-side total-order fields.
 
 from __future__ import annotations
 
+import logging
 import time
 from typing import Any, Callable, Mapping
 
 from domain.observation import new_event_id, parse_envelope
+from domain.observation.registry import is_registered
 from simulation.lifecycle import LifecycleState
 
 __all__ = [
@@ -32,6 +34,8 @@ __all__ = [
     "WALL_CLOCK_DOMAIN",
     "session_clock_domain",
 ]
+
+_LOGGER = logging.getLogger(__name__)
 
 #: Producer identity (SIMULATION-INTEGRATION-CONTRACT §4 producer duty).
 PRODUCER_ID = "simulation-runtime"
@@ -181,6 +185,24 @@ class SimulationEventEmitter:
         correlation: Mapping[str, Any] | None = None,
         tags: list[str] | None = None,
     ) -> dict[str, Any] | None:
+        # Unregistered-type guard (ticket #128, ruling §10-7): the Phase 2
+        # namespaces (gen.* / t2mi.* / bbframe.* / biss.*) are emitted by
+        # the layered pipeline before #129 lands their registry entries.
+        # ``parse_envelope`` would raise ``EnvelopeError`` on them, so the
+        # guard skips delivery BEFORE envelope construction — debug-logged,
+        # never silent, never a crash into the run outcome.  When #129
+        # registers the types, ``is_registered`` passes them through and
+        # the guard becomes a no-op (verified by both test paths in
+        # tests/unit/simulation/test_gen_events_emission.py).
+        if not is_registered(event_type):
+            _LOGGER.debug(
+                "event type %r is not in the observation registry "
+                "(SPEC-301 section 4) — delivery skipped until the type "
+                "is registered (#129); payload keys: %s",
+                event_type,
+                sorted(payload),
+            )
+            return None
         document = {
             "schema_version": "1.0",
             "event_id": new_event_id(),

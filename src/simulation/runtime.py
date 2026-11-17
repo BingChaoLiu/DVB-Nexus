@@ -717,6 +717,35 @@ class SimulationRuntime:
             severity=severity,
         )
 
+    def emit_generation_event(
+        self,
+        session_id: str,
+        run_id: str,
+        event_type: str,
+        *,
+        payload=None,
+        severity: str = "info",
+    ) -> None:
+        """Emit one run-scoped generation event on this session's clock
+        (ticket #128 — the layered pipeline's ``gen.*`` / ``t2mi.*`` /
+        ``bbframe.*`` / ``biss.*`` emission face, SPEC-303 §Phase2).
+
+        Same posture as :meth:`emit_fault_event`: read-only emission, no
+        command lock, run-scoped attribution; the envelope path is the
+        shared emitter (ADR-0006 — no fourth envelope), whose
+        unregistered-type guard (ruling §10-7) skips the Phase 2 types
+        until #129 lands their registry entries.
+        """
+        session = self._require(session_id)
+        self._emitter.run_event(
+            event_type,
+            session_id,
+            run_id,
+            virtual_time_ns=session.clock.now_ns(),
+            payload=payload,
+            severity=severity,
+        )
+
     # --- internals --------------------------------------------------------------
 
     def _require(self, session_id: str) -> _Session:

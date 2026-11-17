@@ -59,6 +59,18 @@ class ArtifactsPort(Protocol):
 
     def read_content(self, artifact_id: str) -> bytes: ...
 
+    def structure_view(
+        self,
+        artifact_id: str,
+        *,
+        view: str = "ts",
+        expected_plp: int | None = None,
+    ) -> dict:
+        """The layered structure JSON face (#128, additive; the json_map
+        chain assembly, SPEC-404 §Phase2 data source).  Raises
+        ``NotFoundError`` (unknown id) / ``BadRequestError`` (unknown view
+        or a plain MPEG-TS artifact)."""
+
 
 def _parse_single_range(
     header_value: str | None, size: int
@@ -138,6 +150,27 @@ def build_artifacts_router(port: ArtifactsPort) -> APIRouter:
                 "Accept-Ranges": "bytes",
             },
         )
+
+    @router.get("/artifacts/{artifact_id}/structure")
+    async def get_artifact_structure(
+        artifact_id: str,
+        view: str = "ts",
+        expected_plp: int | None = None,
+    ) -> dict:
+        """The layered structure JSON face (#128, additive; SPEC-404
+        §Phase2 data source — the json_map chain assembly, keys = the
+        upstream frozen projections).  Ports without the face keep the
+        honest 501."""
+        structure_face = getattr(port, "structure_view", None)
+        if structure_face is None:
+            raise HTTPException(
+                status_code=501,
+                detail=(
+                    "artifact structure face is not wired on this "
+                    "artifacts port"
+                ),
+            )
+        return structure_face(artifact_id, view=view, expected_plp=expected_plp)
 
     @router.post("/artifacts/{artifact_id}/analyze", status_code=501)
     async def analyze_artifact(artifact_id: str) -> dict:

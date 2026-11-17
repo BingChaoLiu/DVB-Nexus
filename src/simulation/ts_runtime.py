@@ -68,6 +68,10 @@ from typing import Any, Callable, Literal, Mapping, Protocol
 from adapters.storage.artifact_errors import ArtifactNotFoundError
 from adapters.storage.artifact_store import ArtifactStore, SinkCommit
 from faults.errors import SIM_FAULT_EXEC_FAILED, FaultExecutionError
+from faults.mutation_log import (
+    MUTATION_LOG_SCHEMA_VERSION,
+    serialize_mutation_log,
+)
 from faults.targets import parse_target_id
 from simulation.clock import SimulationClockConfig
 from simulation.errors import (
@@ -83,6 +87,13 @@ from simulation.errors import (
     TSWorkerUnavailableError,
 )
 from simulation.fault_plan import FaultDefinition, validate_fault_plan
+from simulation.layered_pipeline import (
+    LayerFaultFilter,
+    is_layered_plan,
+    layered_plan_groups,
+    pipeline_fingerprint_document,
+    run_layered_chain,
+)
 from simulation.runtime import ArtifactRef as SessionArtifactRef
 from simulation.runtime import SimulationRuntime, SimulationSessionSpec
 from ts.canonical_json import canonical_json
@@ -125,6 +136,16 @@ TS_PACKET_SIZE = 188
 ARTIFACT_KIND_GENERATED = "generated_ts"
 ARTIFACT_KIND_FAULTED = "faulted_ts"
 ARTIFACT_KIND_LOG = "log"
+#: The #125/#128 demux-chain face (SPEC-603 §5 kind increment; the ts-side
+#: mirror constant lives in ``ts.t2mi.inner_ts.INNER_TS_ARTIFACT_KIND``).
+ARTIFACT_KIND_INNER_TS = "inner_ts"
+
+#: Sentinel for :meth:`StoreArtifactSink.register`'s ``packet_size``: an
+#: explicit ``None`` means "register honestly packetless" (the layered
+#: outer face is a variable-length T2-MI stream), while the sentinel keeps
+#: the legacy rule (188 for the two TS kinds) for callers that pass
+#: nothing — the MVP call shape is unchanged for every existing sink.
+_LEGACY_PACKET_SIZE = object()
 
 
 # --- SPEC-203 §5 data model -----------------------------------------------------
@@ -176,6 +197,11 @@ class PreparedTSRun:
     fingerprint (fresh uuid4 ``run_id`` each time). The fault plan is
     bound here and nowhere else; ``fault_id`` uuids are identity, not
     semantics, and do not enter the fingerprint.
+
+    ``pipeline`` is the #128 layered-pipeline configuration (additive,
+    default ``None`` = the MVP single-layer path). A layered run executes
+    whenever the pipeline is wired OR the plan routes any fault beyond the
+    TS layer.
     """
 
     session_id: str
@@ -183,6 +209,7 @@ class PreparedTSRun:
     fault_plan: tuple[FaultDefinition, ...]
     config_hash: str
     generator_version: str
+    pipeline: Any | None = None
 
 
 # --- structural ports ------------------------------------------------------------
@@ -253,6 +280,22 @@ class ArtifactSink(Protocol):
         self, sha256: str, config_hash: str, packet_count: int
     ) -> str | None: ...
 
+    def store_inner_ts(
+        self,
+        *,
+        run_id: str,
+        session_id: str,
+        data: bytes,
+        config_hash: str,
+        generator_version: str,
+        partial: bool = False,
+    ) -> str:
+        """Land one reconstructed Inner TS as ``kind=inner_ts`` (#128).
+
+        Layered runs only; sinks without the face keep working for MVP
+        runs (the layered path never calls it on them)."""
+        ...
+
 
 class FaultFilter(Protocol):
     """The semantic stream-filter seam (production impl: #44 faults).
@@ -321,6 +364,7 @@ def compute_config_hash(
     *,
     clock_config: SimulationClockConfig,
     fault_plan: tuple[FaultDefinition, ...],
+    pipeline: Any | None = None,
 ) -> str:
     """The deterministic run fingerprint (SPEC-203 §5.1).
 
@@ -330,6 +374,13 @@ def compute_config_hash(
     plan. Wall clock, session_id, run_id and paths never enter. The plan
     fingerprint uses key-sorted canonical serialization: same plan ⇒ same
     hash, different plan ⇒ different hash.
+
+    ``pipeline`` is the #128 layered-pipeline configuration — additive:
+    ``None`` (every MVP caller) leaves the hash document byte-identical
+    (the existing pins hold); a wired pipeline adds the ``pipeline``
+    projection (geometry + fingerprinted BISS face — key material never
+    enters, ADR-0011 §3). The fault ``layer`` attribute stays OUT of the
+    fingerprint (the #121 regression pin is unchanged).
     """
     document = {
         "generator_version": GENERATOR_VERSION,
@@ -337,6 +388,9 @@ def compute_config_hash(
         "clock": asdict(clock_config),
         "fault_plan": _canonical_plan(fault_plan),
     }
+    projection = pipeline_fingerprint_document(pipeline)
+    if projection is not None:
+        document["pipeline"] = projection
     canonical = canonical_json(document)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
@@ -406,18 +460,29 @@ class StoreArtifactSink:
         config_hash: str,
         generator_version: str,
         partial: bool,
+        packet_size: Any = _LEGACY_PACKET_SIZE,
     ) -> str:
         sink_commit = SinkCommit(
             sha256=commit["sha256"],
             byte_size=commit["byte_size"],
             relative_path=commit["relative_path"] or "",
         )
+        if packet_size is _LEGACY_PACKET_SIZE:
+            resolved_size = (
+                TS_PACKET_SIZE
+                if kind in (ARTIFACT_KIND_GENERATED, ARTIFACT_KIND_FAULTED)
+                else None
+            )
+        else:
+            # Explicit layered-run face: the transmitted T2-MI stream is
+            # variable-length — no packet_size claim (honest registration).
+            resolved_size = packet_size
         return self._store.register(
             sink_commit,
             run_id=run_id,
             session_id=session_id,
             kind=kind,
-            packet_size=TS_PACKET_SIZE if kind in (ARTIFACT_KIND_GENERATED, ARTIFACT_KIND_FAULTED) else None,
+            packet_size=resolved_size,
             packet_count=packet_count,
             generator_version=generator_version,
             config_hash=config_hash,
@@ -434,6 +499,40 @@ class StoreArtifactSink:
             ):
                 return row.artifact_id
         return None
+
+    def store_inner_ts(
+        self,
+        *,
+        run_id: str,
+        session_id: str,
+        data: bytes,
+        config_hash: str,
+        generator_version: str,
+        partial: bool = False,
+    ) -> str:
+        """Land one reconstructed Inner TS (SPEC-603 §5, kind ``inner_ts``).
+
+        The #128 composition binding of the #125 artifact face: content
+        addressing via the store's ``store_bytes`` (引用不复制 — same bytes
+        converge on one file), then the 先文件后索引 index row under
+        ``ArtifactKind.INNER_TS``.
+        """
+        ref = self._store.store_bytes(data, ext=self._ts_ext)
+        commit = SinkCommit(
+            sha256=ref.sha256,
+            byte_size=ref.byte_size,
+            relative_path=ref.relative_path,
+        )
+        return self._store.register(
+            commit,
+            run_id=run_id,
+            session_id=session_id,
+            kind=ARTIFACT_KIND_INNER_TS,
+            packet_size=TS_PACKET_SIZE,
+            packet_count=len(data) // TS_PACKET_SIZE,
+            generator_version=generator_version,
+            config_hash=config_hash,
+        )
 
 
 # --- the adapter ------------------------------------------------------------------
@@ -477,6 +576,8 @@ class TSRuntime:
         session: SimulationSessionSpec,
         config: GeneratorConfig,
         fault_plan=(),
+        *,
+        pipeline=None,
     ) -> PreparedTSRun:
         """Validate and bind: config + plan → frozen :class:`PreparedTSRun`.
 
@@ -486,6 +587,13 @@ class TSRuntime:
         ``SIM_TS_PLAN_INVALID`` detail; an illegal
         :class:`GeneratorConfig` is rejected with ``SIM_TS_CONFIG_INVALID``
         through the SPEC-108 public validator (never re-implemented).
+
+        ``pipeline`` (ticket #128, additive keyword-only) binds the
+        layered-pipeline construction configuration; its shape violations
+        raise ``TSConfigInvalidError`` (config-family, prepare 前拒绝).
+        ADR-0007 contracts are unchanged: the plan still binds at prepare
+        into the deterministic fingerprint and ``run()``'s signature is
+        untouched.
         """
         if not isinstance(session, SimulationSessionSpec):
             raise TypeError(
@@ -507,6 +615,16 @@ class TSRuntime:
                 f"{first.code}: {first.message} (field {first.field!r}; "
                 "SPEC-108 §5 via the public validator)"
             )
+        if pipeline is not None:
+            try:
+                # Shape gate: the frozen configs validate at construction;
+                # a non-config object is a caller error surfaced here.
+                pipeline_fingerprint_document(pipeline)
+            except Exception as exc:
+                raise TSConfigInvalidError(
+                    f"layered pipeline configuration rejected at prepare: "
+                    f"{exc}"
+                ) from exc
         plan = validate_fault_plan(
             fault_plan,
             actual_pmt_pid=config.program.pmt_pid,
@@ -524,8 +642,10 @@ class TSRuntime:
                 config,
                 clock_config=session.clock_config,
                 fault_plan=plan,
+                pipeline=pipeline,
             ),
             generator_version=GENERATOR_VERSION,
+            pipeline=pipeline,
         )
 
     # --- SPEC-203 §4 run / cancel ------------------------------------------------
@@ -578,6 +698,12 @@ class TSRuntime:
                 "construction; the #44 faults package supplies the "
                 "production filter)"
             )
+        # #128 layered pipeline: instantiated when the construction config
+        # is wired OR the plan routes any fault beyond the TS layer (the
+        # MVP plans keep the exact single-layer path — byte-identical).
+        layered = prepared.pipeline is not None or is_layered_plan(
+            prepared.fault_plan
+        )
 
         run_id = str(uuid.uuid4())
         if self._runtime is not None:
@@ -606,6 +732,8 @@ class TSRuntime:
                 cancel_flag=cancel_flag,
                 loop=loop,
                 sink=sink,
+                pipeline=prepared.pipeline,
+                layered=layered,
             )
             outcome = await loop.run_in_executor(pool, self._execute_run, payload)
         except TSWorkerUnavailableError:
@@ -618,6 +746,13 @@ class TSRuntime:
             self._cancel_flags.pop(run_id, None)
 
         artifacts = self._build_artifact_refs(prepared, sink, outcome)
+        if layered:
+            # #128: the layered chain's collected gen.* / t2mi.* /
+            # bbframe.* / biss.* construction events replay through the
+            # guarded emitter (delivery order = worker collection order;
+            # the biss.scramble_applied payloads get the log artifact
+            # binding). Delivery never breaks the run outcome.
+            self._deliver_generation_events(prepared, run_id, outcome, artifacts)
         if self._runtime is not None and prepared.fault_plan:
             # SPEC-204 §8.1 terminal states: APPLIED confirmations (L1, from
             # the §8.2 mutation-log attribution) and the REMOVED window close
@@ -627,6 +762,11 @@ class TSRuntime:
             self._emit_fault_terminal_events(
                 prepared, run_id, outcome.status, artifacts, outcome
             )
+        if layered and outcome.status in ("completed", "cancelled"):
+            # The fault-path BISS face (biss.scramble_applied, from the
+            # filter's reserved summary seam, #126/#127 §10-7) fires at the
+            # fault terminal seam with the mutation-log artifact bound.
+            self._emit_biss_scramble_applied(prepared, run_id, outcome, artifacts)
         await self._close_run(
             prepared.session_id,
             run_id,
@@ -640,7 +780,11 @@ class TSRuntime:
             run_id=run_id,
             status=outcome.status,
             packet_count=outcome.packet_count,
-            byte_count=outcome.packet_count * TS_PACKET_SIZE,
+            byte_count=(
+                outcome.byte_count
+                if outcome.byte_count is not None
+                else outcome.packet_count * TS_PACKET_SIZE
+            ),
             virtual_duration_ns=outcome.virtual_duration_ns,
             artifacts=tuple(artifacts),
             warnings=tuple(outcome.warnings),
@@ -671,6 +815,9 @@ class TSRuntime:
         registration (the sink owns physical landing and the index row)."""
         artifacts: list[ArtifactRef] = []
         partial = outcome.status != "completed"
+        # Layered runs register the transmitted T2-MI faces honestly
+        # packetless (variable-length outer stream, #128).
+        layered = outcome.byte_count is not None
         for kind, commit in outcome.commits.items():
             fields = _commit_fields(commit)
             is_ts_kind = kind in (ARTIFACT_KIND_GENERATED, ARTIFACT_KIND_FAULTED)
@@ -684,6 +831,9 @@ class TSRuntime:
             else:
                 artifact_id = None
             if artifact_id is None:
+                register_kwargs: dict[str, Any] = {}
+                if layered and is_ts_kind:
+                    register_kwargs["packet_size"] = None
                 artifact_id = sink.register(
                     run_id=outcome.run_id,
                     session_id=prepared.session_id,
@@ -693,6 +843,7 @@ class TSRuntime:
                     config_hash=prepared.config_hash,
                     generator_version=GENERATOR_VERSION,
                     partial=partial,
+                    **register_kwargs,
                 )
             artifacts.append(
                 ArtifactRef(
@@ -749,6 +900,7 @@ class TSRuntime:
                 {
                     "fault_id": fault.fault_id,
                     "fault_type": fault.fault_type,
+                    "layer": fault.layer,
                     "injection_index": injection_index,
                     "expected_observations": list(fault.expected_observations),
                 },
@@ -783,6 +935,7 @@ class TSRuntime:
                 payload = {
                     "fault_id": fault.fault_id,
                     "fault_type": fault.fault_type,
+                    "layer": fault.layer,
                     "injection_index": injection_index,
                     "applied_packet_indexes": list(
                         summary["applied_packet_indexes"]
@@ -810,6 +963,7 @@ class TSRuntime:
                     {
                         "fault_id": fault.fault_id,
                         "fault_type": fault.fault_type,
+                        "layer": fault.layer,
                         "injection_index": injection_index,
                         "cleared_reason": "run_end",
                     },
@@ -876,6 +1030,7 @@ class TSRuntime:
                     payload={
                         "fault_id": fault.fault_id,
                         "fault_type": fault.fault_type,
+                        "layer": fault.layer,
                         "injection_index": injection_index,
                     },
                 )
@@ -926,7 +1081,7 @@ class TSRuntime:
 
     # --- worker-side execution (runs on the bounded pool thread) --------------------
 
-    def _instantiate_filter(self, payload: "_RunPayload") -> Any:
+    def _instantiate_filter(self, payload: "_RunPayload", plan=None) -> Any:
         """Call the wired filter factory (#44 append-only hook).
 
         The default two-argument call ``(plan, config)`` is unchanged for
@@ -934,10 +1089,12 @@ class TSRuntime:
         the run binding (``run_id``) is injected as a keyword argument so
         the SPEC-204 §8.2 mutation log can carry the run reference — the
         production faults-package factory accepts it; #43 fakes don't and
-        keep working untouched.
+        keep working untouched.  ``plan`` defaults to the bound fault
+        plan; the layered path passes a single layer's subgroup (#128).
         """
         factory = self._filter_factory
         assert factory is not None  # guarded by the tee gate in run()
+        plan = payload.fault_plan if plan is None else tuple(plan)
         try:
             parameters = inspect.signature(factory).parameters
             accepts_run_id = "run_id" in parameters or any(
@@ -947,12 +1104,12 @@ class TSRuntime:
         except (TypeError, ValueError):  # C builtins without signatures
             accepts_run_id = False
         if accepts_run_id:
-            return factory(
-                payload.fault_plan, payload.config, run_id=payload.run_id
-            )
-        return factory(payload.fault_plan, payload.config)
+            return factory(plan, payload.config, run_id=payload.run_id)
+        return factory(plan, payload.config)
 
     def _execute_run(self, payload: "_RunPayload") -> "_RunOutcome":
+        if payload.layered:
+            return self._execute_layered_run(payload)
         outcome = _RunOutcome(run_id=payload.run_id)
         cancel_flag = payload.cancel_flag
         tee = payload.tee
@@ -1079,6 +1236,272 @@ class TSRuntime:
             tee=payload.tee, run_id=payload.run_id, session_id=payload.session_id
         )
 
+    # --- layered pipeline execution (#128, ADR-0010 §3) ------------------------------
+
+    def _instantiate_layered_filters(
+        self, payload: "_RunPayload", groups: dict, pipeline
+    ) -> tuple[Any | None, dict]:
+        """Route the plan groups to per-layer filter instances.
+
+        The TS group rides the injected factory (the exact MVP path);
+        every other layer composes its registered transforms through
+        :class:`simulation.layered_pipeline.LayerFaultFilter` (the #121
+        pluggable resolution — the filters modules self-register at
+        import, activated by the composition root).  The pipeline's CSA
+        backend factory rides into the scrambler-family builders (ADR-0011
+        §1: a wired factory surfaces DLL absence at construction).
+        """
+        ts_group = groups.get("TS", ())
+        ts_filter = None
+        if ts_group:
+            ts_filter = self._instantiate_filter(payload, ts_group)
+        layer_filters = {
+            layer: LayerFaultFilter(
+                layer,
+                definitions,
+                run_id=payload.run_id,
+                backend_factory=(
+                    pipeline.csa_backend_factory
+                    if pipeline is not None
+                    else None
+                ),
+            )
+            for layer, definitions in groups.items()
+            if layer != "TS"
+        }
+        return ts_filter, layer_filters
+
+    def _execute_layered_run(self, payload: "_RunPayload") -> "_RunOutcome":
+        """The layered chain's run-stage execution (worker thread).
+
+        The chain materializes both faces stage by stage; the tee writes
+        the outermost (transmitted T2-MI) streams; the middle-layer
+        evidence lives in the per-layer §8.2 documents (one wrapper log
+        leg); the receiver face lands ``inner_ts`` artifacts.
+        """
+        from simulation.layered_pipeline import (
+            T2MI_STAGE_LAYER,
+            LayerPipelineConfig,
+        )
+
+        outcome = _RunOutcome(run_id=payload.run_id)
+        try:
+            legs = self._sink_open_legs(payload)
+        except Exception as exc:  # noqa: BLE001 — surfaced as sink failure
+            outcome.fail_with(_RunError.sink_io(exc))
+            return outcome
+        baseline_leg = legs.baseline
+        faulted_leg = legs.faulted
+        log_leg = legs.log
+
+        groups = layered_plan_groups(payload.fault_plan)
+        pipeline = payload.pipeline
+        if pipeline is None:
+            pipeline = LayerPipelineConfig()
+        try:
+            ts_filter, layer_filters = self._instantiate_layered_filters(
+                payload, groups, pipeline
+            )
+        except FaultExecutionError as exc:
+            outcome.fail_with(_RunError.fault_exec(exc))
+            return outcome
+        except Exception as exc:  # noqa: BLE001 — filter construction faults
+            outcome.fail_with(_RunError.generation(exc))
+            return outcome
+
+        def write_chunk(chunk: bytes, leg, what: str) -> bool:
+            try:
+                leg.write(chunk)
+                return True
+            except Exception as exc:  # noqa: BLE001
+                outcome.fail_with(_RunError.sink_io(exc, what=what))
+                return False
+
+        try:
+            chain = run_layered_chain(
+                config=payload.config,
+                pipeline=pipeline,
+                groups=groups,
+                ts_filter=ts_filter,
+                layer_filters=layer_filters,
+                on_activation=(
+                    lambda fault: self._schedule_fault_activated(
+                        payload,
+                        fault,
+                        *self._fault_addressing(fault)[:2],
+                    )
+                ),
+                cancel_check=payload.cancel_flag.is_set,
+            )
+        except FaultExecutionError as exc:
+            outcome.fail_with(_RunError.fault_exec(exc))
+            _abort_legs(baseline_leg, faulted_leg, log_leg)
+            return outcome
+        except Exception as exc:  # noqa: BLE001 — chain/generation faults
+            outcome.fail_with(_RunError.generation(exc))
+            _abort_legs(baseline_leg, faulted_leg, log_leg)
+            return outcome
+
+        if chain.cancelled:
+            outcome.status = "cancelled"
+        if not write_chunk(chain.baseline_outer, baseline_leg, "baseline"):
+            _abort_legs(baseline_leg, faulted_leg, log_leg)
+            return outcome
+        if payload.tee and not write_chunk(
+            chain.faulted_outer, faulted_leg, "faulted"
+        ):
+            _abort_legs(baseline_leg, faulted_leg, log_leg)
+            return outcome
+
+        # Receiver-face artifacts: the demux chain's inner TS per leg
+        # (kind=inner_ts, SPEC-503 content addressing).
+        pipeline_section: dict[str, Any] = {
+            "stage_item_counts": dict(chain.stage_counts),
+            "baseline_outer_bytes": len(chain.baseline_outer),
+            "outer_packet_count": chain.stage_counts.get(T2MI_STAGE_LAYER, 0),
+        }
+        if payload.tee:
+            pipeline_section["faulted_outer_bytes"] = len(chain.faulted_outer)
+        inner_bindings: dict[str, Any] = {}
+        if not chain.cancelled:
+            for label, inner in chain.inner_results.items():
+                try:
+                    artifact_id = payload.sink.store_inner_ts(
+                        run_id=payload.run_id,
+                        session_id=payload.session_id,
+                        data=inner.inner_ts,
+                        config_hash=payload.config_hash,
+                        generator_version=GENERATOR_VERSION,
+                    )
+                except Exception as exc:  # noqa: BLE001 — store raises own types
+                    outcome.fail_with(_RunError.sink_io(exc, what="inner_ts"))
+                    _abort_legs(baseline_leg, faulted_leg, log_leg)
+                    return outcome
+                inner_bindings[label] = {
+                    "artifact_id": artifact_id,
+                    "artifact_ref": inner.artifact_ref,
+                    "reconstruction_status": inner.reconstruction_status,
+                }
+        if inner_bindings:
+            pipeline_section["inner_ts"] = inner_bindings
+
+        if payload.tee and log_leg is not None:
+            log_bytes = _serialize_layered_log_document(
+                run_id=payload.run_id,
+                layers=list(chain.layer_logs),
+                layer_logs=chain.layer_logs,
+                pipeline_section=pipeline_section,
+            )
+            if not write_chunk(log_bytes, log_leg, "log"):
+                _abort_legs(baseline_leg, faulted_leg, log_leg)
+                return outcome
+            outcome.fault_lifecycle = _parse_fault_lifecycle(log_bytes)
+            outcome.layered_log_bytes = log_bytes
+
+        outcome.pipeline_events = chain.events
+        outcome.biss_scramble_summaries = chain.biss_scramble_summaries
+        outcome.packet_count = chain.stage_counts.get(T2MI_STAGE_LAYER, 0)
+        outcome.byte_count = len(chain.baseline_outer)
+        if not chain.cancelled:
+            outcome.status = "completed"
+        for name, leg in (
+            (ARTIFACT_KIND_GENERATED, baseline_leg),
+            (ARTIFACT_KIND_FAULTED, faulted_leg),
+            (ARTIFACT_KIND_LOG, log_leg),
+        ):
+            if leg is None:
+                continue
+            try:
+                outcome.commits[name] = leg.commit()
+            except Exception as exc:  # noqa: BLE001
+                outcome.fail_with(_RunError.sink_io(exc, what=name))
+                _abort_legs(baseline_leg, faulted_leg, log_leg)
+                return outcome
+        return outcome
+
+    # --- layered event delivery (loop side, guarded) ---------------------------------
+
+    def _deliver_generation_events(
+        self,
+        prepared: PreparedTSRun,
+        run_id: str,
+        outcome: "_RunOutcome",
+        artifacts: list[ArtifactRef],
+    ) -> None:
+        """Replay the chain's collected construction events (in order).
+
+        The guard lives in the shared emitter (ruling §10-7): unregistered
+        Phase 2 types are skipped there until #129 lands the registry
+        entries. The ``biss.scramble_applied`` construction payloads get
+        the log artifact binding here (``mutation_log_ref``).
+        """
+        if self._runtime is None:
+            return
+        log_ref = next(
+            (
+                ref.artifact_id
+                for ref in artifacts
+                if ref.kind == ARTIFACT_KIND_LOG
+            ),
+            None,
+        )
+        for event_type, payload in outcome.pipeline_events:
+            if (
+                event_type == "biss.scramble_applied"
+                and log_ref is not None
+                and payload.get("mutation_log_ref") is None
+            ):
+                payload = {**payload, "mutation_log_ref": log_ref}
+            self._emit_generation_event_safe(
+                prepared.session_id, run_id, event_type, payload
+            )
+
+    def _emit_biss_scramble_applied(
+        self,
+        prepared: PreparedTSRun,
+        run_id: str,
+        outcome: "_RunOutcome",
+        artifacts: list[ArtifactRef],
+    ) -> None:
+        """The fault-path BISS face at the fault terminal seam (#126/#127).
+
+        ``ScramblerTransform.scramble_summary()`` is the reserved
+        emission seam; ``mutation_log_ref`` binds the run's log artifact.
+        """
+        if self._runtime is None or not outcome.biss_scramble_summaries:
+            return
+        log_ref = next(
+            (
+                ref.artifact_id
+                for ref in artifacts
+                if ref.kind == ARTIFACT_KIND_LOG
+            ),
+            None,
+        )
+        for summary in outcome.biss_scramble_summaries:
+            payload = dict(summary)
+            if log_ref is not None:
+                payload["mutation_log_ref"] = log_ref
+            self._emit_generation_event_safe(
+                prepared.session_id, run_id, "biss.scramble_applied", payload
+            )
+
+    def _emit_generation_event_safe(
+        self,
+        session_id: str,
+        run_id: str,
+        event_type: str,
+        payload: dict[str, Any],
+    ) -> None:
+        """Delivery wrapper that never breaks the run's SPEC-203 outcome
+        (same teardown-race posture as the fault emission guard)."""
+        try:
+            self._runtime.emit_generation_event(  # type: ignore[union-attr]
+                session_id, run_id, event_type, payload=payload
+            )
+        except Exception:  # noqa: BLE001 — teardown race only
+            pass
+
     def _schedule_progress(self, payload: "_RunPayload", packets: int) -> None:
         """Coalesced ``run_progress`` from the worker thread (SPEC-301 §5)."""
 
@@ -1122,6 +1545,8 @@ def _parse_fault_lifecycle(log_bytes: bytes) -> dict[str, dict[str, Any]]:
     semantics and documents its actual transforms per SPEC-204 §8.2; the
     runtime only reads back that documented evidence shape. Anything
     without the shape parses to an empty attribution — never a crash.
+    The #128 layered wrapper (``layer_logs``) merges every layer's
+    document — the per-layer index spaces stay inside their entries.
     """
     try:
         document = json.loads(log_bytes.decode("utf-8"))
@@ -1130,29 +1555,71 @@ def _parse_fault_lifecycle(log_bytes: bytes) -> dict[str, dict[str, Any]]:
     if not isinstance(document, Mapping):
         return {}
     lifecycle: dict[str, dict[str, Any]] = {}
-    entries = document.get("faults") or []
-    if not isinstance(entries, list):
-        return {}
-    for entry in entries:
-        if not isinstance(entry, Mapping):
+    documents = [document]
+    layer_logs = document.get("layer_logs")
+    if isinstance(layer_logs, Mapping):
+        documents = [
+            layer_document
+            for layer_document in layer_logs.values()
+            if isinstance(layer_document, Mapping)
+        ]
+    for scoped in documents:
+        entries = scoped.get("faults") or []
+        if not isinstance(entries, list):
             continue
-        fault_id = entry.get("fault_id")
-        if not isinstance(fault_id, str) or not fault_id:
-            continue
-        target = entry.get("target")
-        target_map = target if isinstance(target, Mapping) else {}
-        applied = (entry.get("lifecycle") or {}).get("fault.applied")
-        indexes = (
-            [value for value in applied if isinstance(value, int)]
-            if isinstance(applied, list)
-            else []
-        )
-        lifecycle[fault_id] = {
-            "node_id": target_map.get("node_id"),
-            "pid": target_map.get("pid"),
-            "applied_packet_indexes": indexes,
-        }
+        for entry in entries:
+            if not isinstance(entry, Mapping):
+                continue
+            fault_id = entry.get("fault_id")
+            if not isinstance(fault_id, str) or not fault_id:
+                continue
+            target = entry.get("target")
+            target_map = target if isinstance(target, Mapping) else {}
+            applied = (entry.get("lifecycle") or {}).get("fault.applied")
+            indexes = (
+                [value for value in applied if isinstance(value, int)]
+                if isinstance(applied, list)
+                else []
+            )
+            lifecycle[fault_id] = {
+                "node_id": target_map.get("node_id"),
+                "pid": target_map.get("pid"),
+                "applied_packet_indexes": indexes,
+            }
     return lifecycle
+
+
+def _serialize_layered_log_document(
+    *,
+    run_id: str,
+    layers: list[str],
+    layer_logs: dict[str, bytes],
+    pipeline_section: Mapping[str, Any],
+) -> bytes:
+    """The #128 layered wrapper document (additive log shape).
+
+    One log leg for a layered run: per-layer §8.2 documents (each layer's
+    index space preserved inside its own document) plus the ``pipeline``
+    face section (stage counts, outer byte sizes, the ``inner_ts``
+    artifact bindings).  Deterministic serialization (canonical JSON).
+    """
+    parsed_layers: dict[str, Any] = {}
+    for layer in layers:
+        try:
+            parsed_layers[layer] = json.loads(
+                layer_logs[layer].decode("utf-8")
+            )
+        except (UnicodeDecodeError, ValueError):  # defensive: never crash
+            continue
+    document = {
+        "schema_version": MUTATION_LOG_SCHEMA_VERSION,
+        "log_kind": "layered_pipeline_mutation_log",
+        "run_id": run_id,
+        "layers": list(layers),
+        "layer_logs": parsed_layers,
+        "pipeline": dict(pipeline_section),
+    }
+    return serialize_mutation_log(document)
 
 
 def _commit_fields(commit: Any) -> dict[str, Any]:
@@ -1183,6 +1650,8 @@ class _RunPayload:
         "cancel_flag",
         "loop",
         "sink",
+        "pipeline",
+        "layered",
     )
 
     def __init__(
@@ -1197,6 +1666,8 @@ class _RunPayload:
         cancel_flag: threading.Event,
         loop: asyncio.AbstractEventLoop | None,
         sink: ArtifactSink,
+        pipeline: Any | None = None,
+        layered: bool = False,
     ) -> None:
         self.run_id = run_id
         self.session_id = session_id
@@ -1207,6 +1678,8 @@ class _RunPayload:
         self.cancel_flag = cancel_flag
         self.loop = loop
         self.sink = sink
+        self.pipeline = pipeline
+        self.layered = layered
 
 
 class _RunError:
@@ -1268,6 +1741,10 @@ class _RunOutcome:
         "warnings",
         "virtual_duration_ns",
         "fault_lifecycle",
+        "pipeline_events",
+        "biss_scramble_summaries",
+        "byte_count",
+        "layered_log_bytes",
     )
 
     def __init__(self, run_id: str = "") -> None:
@@ -1282,6 +1759,14 @@ class _RunOutcome:
         #: (ticket #56); empty when the log lacks the shape or the run
         #: failed before the log leg was written.
         self.fault_lifecycle: dict[str, dict[str, Any]] = {}
+        #: #128 layered-chain faces: the collected construction events
+        #: (delivered loop-side through the guarded emitter), the fault-path
+        #: BISS scramble summaries (terminal seam), the layered run's byte
+        #: count override and the wrapper log bytes.
+        self.pipeline_events: list[tuple[str, dict[str, Any]]] = []
+        self.biss_scramble_summaries: list[dict[str, Any]] = []
+        self.byte_count: int | None = None
+        self.layered_log_bytes: bytes | None = None
 
     def fail_with(self, error: _RunError) -> None:
         self.status = "failed"

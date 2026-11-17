@@ -80,6 +80,9 @@ FROZEN_ROUTE_TABLE: tuple[tuple[str, str], ...] = (
     # §4.6 Artifact
     ("GET", "/artifacts/{id}"),
     ("GET", "/artifacts/{id}/content"),
+    # §4.6 Artifact — the ticket #128 additive structure face (the json_map
+    # chain assembly, SPEC-404 §Phase2 packet-inspector data source)
+    ("GET", "/artifacts/{id}/structure"),
     ("POST", "/artifacts/{id}/analyze"),
     # §4.7 Scenario
     ("GET", "/scenarios"),
