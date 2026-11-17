@@ -5,6 +5,7 @@
 // #129 extraction, not a copy of the implementation table.
 import { describe, expect, it } from "vitest";
 import { PHASE2_EVENT_TYPES } from "../types";
+import { PHASE2_PAYLOAD_KEYS } from "./payloadKeys.gen";
 import { PHASE2_EVENT_RENDER_TABLE, phase2RenderSpec } from "./eventRender";
 
 // #129 REPORT §2 key-set extraction (base keys per event type; the
@@ -64,5 +65,15 @@ describe("PHASE2_EVENT_RENDER_TABLE — registry-driven rendering surface", () =
     expect(phase2RenderSpec("ts.continuity_error")).toBeNull();
     expect(phase2RenderSpec("fault.applied")).toBeNull();
     expect(phase2RenderSpec("")).toBeNull();
+  });
+
+  it("the table is built from the same-source gen module verbatim (#141 drift lock)", () => {
+    // no local override: every table entry IS the generated key array
+    // (identity, not equality) — a hand-edited table fails here, and a
+    // stale gen module fails npm run payload-keys:check
+    for (const [eventType, spec] of Object.entries(PHASE2_EVENT_RENDER_TABLE)) {
+      expect(spec.payloadKeys).toBe(PHASE2_PAYLOAD_KEYS[eventType as keyof typeof PHASE2_PAYLOAD_KEYS]);
+    }
+    expect(Object.keys(PHASE2_PAYLOAD_KEYS).sort()).toEqual([...PHASE2_EVENT_TYPES].sort());
   });
 });

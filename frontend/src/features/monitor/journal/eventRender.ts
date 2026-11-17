@@ -2,11 +2,14 @@
 // structural table the journal tail window and the diagnosis detail consume —
 // no hardcoded event list in any component (票 #134: 注册表驱动渲染,新事件
 // 类型加表即渲染). Keys are the wire event_type names (#129 registry); the
-// payloadKeys are the #129 REPORT §2 display-order key sets rendered verbatim
+// payloadKeys come from the SAME-SOURCE generated module (#141 —
+// payloadKeys.gen.ts, generated from the backend registry's ordered face,
+// drift-locked by payload-keys:check) rendered verbatim
 // (SPEC-403 L315: wire enums/keys 禁改写). Presentation faces look entries up
 // through phase2RenderSpec — an unregistered type resolves to null and falls
 // back to the generic wire face (ADR-0006 unknown tolerance, zero invention).
 import type { Phase2EventType } from "../types";
+import { PHASE2_PAYLOAD_KEYS } from "./payloadKeys.gen";
 
 export interface Phase2EventRenderSpec {
   /** The #129 payload key set in display order (wire key names verbatim).
@@ -15,45 +18,12 @@ export interface Phase2EventRenderSpec {
   readonly payloadKeys: readonly string[];
 }
 
-export const PHASE2_EVENT_RENDER_TABLE: Record<Phase2EventType, Phase2EventRenderSpec> = {
-  "t2mi.stage_summary": {
-    payloadKeys: ["packet_count", "padding_count", "packet_type_distribution", "plp_distribution"],
-  },
-  "t2mi.plp_mismatch": {
-    payloadKeys: ["expected_plp", "actual_plp", "business_absent_evidence"],
-  },
-  "bbframe.stage_summary": {
-    payloadKeys: ["frame_count", "n_ups_distribution", "stuffing_ratio"],
-  },
-  "bbframe.recovery_failed": {
-    payloadKeys: ["failure_count", "first_failed_frame_index"],
-  },
-  "biss.scramble_applied": {
-    // base five keys + the optional #127 derivation face (mode "E"/"2" fault
-    // transform); absent optional keys render nothing.
-    payloadKeys: [
-      "pid_scope",
-      "packet_count",
-      "key_fingerprint",
-      "mutation_log_ref",
-      "mode",
-      "derivation_ref",
-      "mismatch_variants",
-    ],
-  },
-  "biss.descramble_failed": {
-    payloadKeys: ["pid_scope", "failed_indices_sample", "self_check_kind", "key_fingerprint_ref", "mode"],
-  },
-  "gen.stage_started": {
-    payloadKeys: ["layer"],
-  },
-  "gen.stage_completed": {
-    payloadKeys: ["layer", "item_count"],
-  },
-  "gen.packet_sampled": {
-    payloadKeys: ["layer", "packet_index", "byte_size", "sha256"],
-  },
-};
+export const PHASE2_EVENT_RENDER_TABLE = (
+  Object.keys(PHASE2_PAYLOAD_KEYS) as Phase2EventType[]
+).reduce((table, eventType) => {
+  table[eventType] = { payloadKeys: PHASE2_PAYLOAD_KEYS[eventType] };
+  return table;
+}, {} as Record<Phase2EventType, Phase2EventRenderSpec>);
 
 /** Registry lookup: the render spec for a wire event type, or `null` when the
  * type is not in the table (generic wire face — never a fabricated row). */

@@ -18,7 +18,9 @@
     "e2e": "npm run build && playwright test",
     "serve:backend": "node scripts/start-backend.mjs",
     "dto:sync": "node scripts/dump-openapi.mjs openapi-dump.json && openapi-typescript openapi-dump.json -o src/api/schema.gen.ts",
-    "dto:check": "node scripts/dump-openapi.mjs openapi-dump.json && openapi-typescript openapi-dump.json -o src/api/schema.gen.ts && git diff --exit-code -- src/api/schema.gen.ts && node scripts/check-dto-supplement.mjs openapi-dump.json"
+    "dto:check": "node scripts/dump-openapi.mjs openapi-dump.json && openapi-typescript openapi-dump.json -o src/api/schema.gen.ts && git diff --exit-code -- src/api/schema.gen.ts && node scripts/check-dto-supplement.mjs openapi-dump.json",
+    "payload-keys:sync": "node scripts/dump-payload-keys.mjs",
+    "payload-keys:check": "node scripts/dump-payload-keys.mjs && git diff --exit-code -- src/features/monitor/journal/payloadKeys.gen.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.107.1",
