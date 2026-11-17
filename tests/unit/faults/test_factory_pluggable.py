@@ -111,12 +111,6 @@ class TestSkeletonWiring:
                 "BBFRAME",
             ),
             (
-                FAULT_TYPE_BISS_KEY_MISMATCH,
-                phase2_skeletons.BissKeyMismatchSkeletonTransform,
-                "biss-scrambler-0",
-                "BISS",
-            ),
-            (
                 FAULT_TYPE_PMT_PID_DRIFT,
                 phase2_skeletons.PmtPidDriftSkeletonTransform,
                 "demux-0:pid:0x1000",
@@ -128,7 +122,21 @@ class TestSkeletonWiring:
         self, fault_type, skeleton_class, target_id, layer
     ) -> None:
         # The skeleton tier is immutable module state: resolve directly.
+        # (BISS_KEY_MISMATCH left this list in #126: its downstream
+        # self-registration is live — see test_biss_resolves_to_real_transform.)
         assert transform_builder_for(fault_type) is skeleton_class
+
+    def test_biss_resolves_to_real_transform(self) -> None:
+        """#126 replaced the BISS_KEY_MISMATCH skeleton: importing the
+        owning filter module self-registers the real builder (ruling
+        §10-4) — the resolution order puts it ahead of the skeleton tier."""
+        import faults.filters.scrambler  # noqa: F401 — self-registration
+        from faults.filters.scrambler import BissKeyMismatchTransform
+
+        assert (
+            transform_builder_for(FAULT_TYPE_BISS_KEY_MISMATCH)
+            is BissKeyMismatchTransform
+        )
 
     @pytest.mark.parametrize(
         ("fault_type", "target_id", "layer", "parameters", "activation"),

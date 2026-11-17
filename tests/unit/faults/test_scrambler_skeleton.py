@@ -1,17 +1,12 @@
-"""ADR-0011 §2 — the scrambler filter-type skeleton (ticket #121).
+"""ADR-0011 §2 — the scrambler filter type (layer=BISS).
 
-The filters family gains the ``scrambler`` type in Phase 2: BISS
-scrambling is a per-packet payload transform (header 4 bytes clear,
-length 188 unchanged, packet order unchanged), so the ``apply(index,
-packet)`` contract applies as-is — no new transport-level component.
-Construction features (scenario-declared keys) and fault injection
-(``FaultDefinition.params`` mismatched keys) drive the *same* scrambler
-filter; only the key source differs.
-
-#121 lands the skeleton only (the brief's seam matrix assigns the
-dvbcsa adapter + ``src/ts/biss/`` + the real filter implementation to
-#126).  The skeleton is an honest placeholder: it refuses to transform
-rather than passing packets through unscrambled.
+#121 landed this as an explicit-``NotImplementedError`` skeleton; #126
+(ticket, this tree) replaced the skeleton with the real transform.  This
+file keeps the filter-type identity pins that survive the migration:
+class shape, layer declaration, and the FaultDefinition additive-field
+contract.  The behavioral suite lives in
+``tests/unit/faults/test_biss_key_mismatch_transform.py`` and the
+``ts.biss`` primitive suites.
 """
 
 from __future__ import annotations
@@ -24,12 +19,25 @@ from faults.definition import FaultActivation, FaultDefinition
 from faults.filters.base import FaultTransform
 from faults.filters.scrambler import ScramblerTransform
 from faults.filters.pat_missing import null_packet
+from ts.packet import TSPacket
 
 pytestmark = pytest.mark.unit
 
 
-class TestScramblerSkeleton:
-    def test_skeleton_is_a_fault_transform_subclass(self) -> None:
+def _definition() -> FaultDefinition:
+    return FaultDefinition(
+        fault_id="f-scramble",
+        fault_type="BISS_KEY_MISMATCH",
+        target_id="biss-scrambler-0",
+        parameters={"wrong_session_word": "0123456789AB", "pid_scope": [0x0100]},
+        activation=FaultActivation(kind="session_start", packet_index=None),
+        expected_observations=("biss.descramble_failed",),
+        layer="BISS",
+    )
+
+
+class TestScramblerFilterType:
+    def test_is_a_fault_transform_subclass(self) -> None:
         assert issubclass(ScramblerTransform, FaultTransform)
 
     def test_declared_layer_is_biss(self) -> None:
@@ -37,21 +45,30 @@ class TestScramblerSkeleton:
         # scrambler type with layer="BISS".
         assert ScramblerTransform.LAYER == "BISS"
 
-    def test_apply_refuses_to_silently_pass_through(self) -> None:
-        definition = FaultDefinition(
-            fault_id="f-scramble",
-            fault_type="BISS_KEY_MISMATCH",
-            target_id="biss-scrambler-0",
-            activation=FaultActivation(kind="session_start", packet_index=None),
-            expected_observations=("biss.descramble_failed",),
-            layer="BISS",
+    def test_no_longer_refuses_in_scope_slots(self) -> None:
+        """The #126 real transform scrambles in-scope slots (the #121
+        skeleton's NotImplementedError refusal is retired)."""
+        transform = ScramblerTransform(
+            _definition(),
+            session_word="0123456789AB",
+            pid_scope=(0x0100,),
+            backend=_ShapeBackend(),
         )
-        transform = ScramblerTransform(definition)
-        with pytest.raises(NotImplementedError):
-            transform.apply(0, null_packet())
+        packet = TSPacket(
+            pid=0x0100, continuity_counter=0, payload=null_packet().payload
+        )
+        after = transform.apply(0, packet)
+        assert after.transport_scrambling_control == 0b10
 
-    def test_owner_points_at_ticket_126(self) -> None:
-        assert "#126" in ScramblerTransform._owner_ticket
+    def test_out_of_scope_slots_still_pass_through_untouched(self) -> None:
+        transform = ScramblerTransform(
+            _definition(),
+            session_word="0123456789AB",
+            pid_scope=(0x0100,),
+            backend=_ShapeBackend(),
+        )
+        original = null_packet()
+        assert transform.apply(0, original) is original
 
     def test_fault_definition_stays_frozen_additive(self) -> None:
         # Scrambler consumes the canonical definition shape; the Phase 2
@@ -60,3 +77,13 @@ class TestScramblerSkeleton:
             field.name for field in dataclasses.fields(FaultDefinition)
         }
         assert "layer" in field_names
+
+
+class _ShapeBackend:
+    """Minimal BatchCipherBackend shape (real CSA1 verified elsewhere)."""
+
+    def encrypt_batch(self, payloads, cw):
+        return tuple(bytes(len(p)) for p in payloads)
+
+    def decrypt_batch(self, payloads, cw):
+        return tuple(bytes(len(p)) for p in payloads)

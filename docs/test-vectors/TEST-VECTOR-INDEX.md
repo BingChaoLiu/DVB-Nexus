@@ -28,6 +28,7 @@
 | `cc-discontinuity` | faulted_ts | CC_DISCONTINUITY：相对偏移 delta=3，落点 slot 50，偏移持续（SPEC-204 §6.3），ref 同上 | L2：独立变换脚本→tsduck-analyze（continuity 报 slot 50 missing 3） | registered |
 | `pmt-pid-mismatch-baseline` | generated_ts | PMT_PID_MISMATCH 对的 baseline（同上几何） | L2：self-generate→tsduck-analyze | registered |
 | `pmt-pid-mismatch` | faulted_ts | PMT_PID_MISMATCH：PAT `program_map_PID` 4096→4100 + CRC 重算（SPEC-204 §6.4），ref 同上 | L2：独立变换脚本→tsduck-analyze（tstables 见 PAT 指向 4100、PMT 孤儿在 4096） | registered |
+| `biss-j96-mode1` | bit_level | BISS Mode 1：J.96 §8 示例 SW `A13DBC42908F`→CW `A13DBC9A42908F61` 派生钉扎 + CSA1 加扰 roundtrip（SPEC-610）；DLL 依赖面 CI 诚实 NOT RUN（ADR-0011 §5） | L1：标准向量推导脚本（`tools/make_golden_biss_j96.py`，纯 Python CSA1 oracle，无 src 参与）+ 人工评审；DLL 对拍本地绿/CI NOT RUN | registered |
 
 ### #14 Q3 三 TODO 落实路径（已闭环）
 

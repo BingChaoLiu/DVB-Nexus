@@ -83,10 +83,32 @@ EXPECTED_KINDS: dict[str, str] = {
 }
 
 
+#: Phase 2 additive registrations (SPEC-506 §6: 新登记 = 新三件套 + 索引行
+#: + 本文件 additive 扩行；冻结行本身不动，#136 统一收口 — brief §3.6-5).
+PHASE2_ADDITIONAL_IDS: tuple[str, ...] = (
+    "biss-j96-mode1",
+)
+
+#: Frozen byte identities of the Phase 2 additive registrations.
+PHASE2_ADDITIONAL_SHA256: dict[str, str] = {
+    "biss-j96-mode1": "9647d274cc8a96b73f4f6b4aaabeaa1c9227935bc2a2294c5e596e6a81db9f94",
+}
+
+PHASE2_ADDITIONAL_KINDS: dict[str, str] = {
+    "biss-j96-mode1": "bit_level",
+}
+
+
 def test_first_batch_registered_set_is_exact(golden_loader):
     # registered_ids() enumerates in directory order (sorted); the batch is
-    # compared as a sorted set.
-    assert tuple(golden_loader.registered_ids()) == tuple(sorted(FIRST_BATCH_IDS))
+    # compared as a sorted set.  Phase 2 tickets extend the registered tree
+    # additively (PHASE2_ADDITIONAL_IDS); the #14 frozen batch rows are
+    # untouched and #136 closes the file (brief §3.6-5).
+    registered = tuple(golden_loader.registered_ids())
+    expected = tuple(
+        sorted(FIRST_BATCH_IDS + PHASE2_ADDITIONAL_IDS)
+    )
+    assert registered == expected
 
 
 def test_first_batch_registry_manifests_consistent_with_frozen_table():
@@ -116,6 +138,18 @@ def test_faulted_pair_plan_refs_and_shared_baseline(golden_loader, fault_id: str
     assert faulted.ts_bytes != baseline.ts_bytes
 
 
+def test_phase2_additive_registrations_consistent():
+    from tests._support.paths import GOLDEN_ROOT
+
+    assert set(PHASE2_ADDITIONAL_SHA256) == set(PHASE2_ADDITIONAL_IDS)
+    for vector_id in PHASE2_ADDITIONAL_IDS:
+        manifest = json.loads(
+            (GOLDEN_ROOT / vector_id / "manifest.json").read_text(encoding="utf-8")
+        )
+        assert manifest["sha256"].removeprefix("sha256:") == PHASE2_ADDITIONAL_SHA256[vector_id]
+        assert manifest["kind"] == PHASE2_ADDITIONAL_KINDS[vector_id]
+
+
 def test_spec506_registration_validator_passes(tmp_path):
     """SPEC-506 §8 validator tool: trio/sha/event-type/pair/index gates."""
     result = subprocess.run(
@@ -131,7 +165,12 @@ def test_spec506_registration_validator_passes(tmp_path):
         result.stdout.decode("utf-8", "replace")
         + result.stderr.decode("utf-8", "replace")
     )
-    assert "14 registered vector(s) validated" in result.stdout.decode("utf-8", "replace")
+    # The frozen "14 registered" count pin retired to #136 (brief §3.6-5):
+    # Phase 2 golden tickets extend the tree additively, so the validator
+    # gate asserts success + the marker line, not a pinned count.
+    assert "registered vector(s) validated" in result.stdout.decode(
+        "utf-8", "replace"
+    )
 
 
 def test_index_lists_every_first_batch_id_as_registered():
