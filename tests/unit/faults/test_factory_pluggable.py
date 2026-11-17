@@ -99,12 +99,6 @@ class TestSkeletonWiring:
         ("fault_type", "skeleton_class", "target_id", "layer"),
         [
             (
-                FAULT_TYPE_T2MI_PLP_MISMATCH,
-                phase2_skeletons.T2miPlpMismatchSkeletonTransform,
-                "t2mi-demux-0",
-                "T2MI",
-            ),
-            (
                 FAULT_TYPE_BBHEADER_SYNC_FAULT,
                 phase2_skeletons.BBHeaderSyncFaultSkeletonTransform,
                 "t2mi-enc-0",
@@ -122,8 +116,10 @@ class TestSkeletonWiring:
         self, fault_type, skeleton_class, target_id, layer
     ) -> None:
         # The skeleton tier is immutable module state: resolve directly.
-        # (BISS_KEY_MISMATCH left this list in #126: its downstream
-        # self-registration is live — see test_biss_resolves_to_real_transform.)
+        # (BISS_KEY_MISMATCH left this list in #126 and
+        # T2MI_PLP_MISMATCH in #124: their downstream self-registrations
+        # are live — see test_biss_resolves_to_real_transform /
+        # test_t2mi_plp_resolves_to_real_transform.)
         assert transform_builder_for(fault_type) is skeleton_class
 
     def test_biss_resolves_to_real_transform(self) -> None:
@@ -136,6 +132,18 @@ class TestSkeletonWiring:
         assert (
             transform_builder_for(FAULT_TYPE_BISS_KEY_MISMATCH)
             is BissKeyMismatchTransform
+        )
+
+    def test_t2mi_plp_resolves_to_real_transform(self) -> None:
+        """#124 replaced the T2MI_PLP_MISMATCH skeleton: importing the
+        owning filter module self-registers the real builder (ruling
+        §10-4) — the resolution order puts it ahead of the skeleton tier."""
+        import faults.filters.t2mi_plp_mismatch  # noqa: F401 — self-registration
+        from faults.filters.t2mi_plp_mismatch import T2miPlpMismatchTransform
+
+        assert (
+            transform_builder_for(FAULT_TYPE_T2MI_PLP_MISMATCH)
+            is T2miPlpMismatchTransform
         )
 
     @pytest.mark.parametrize(
@@ -183,11 +191,15 @@ class TestSkeletonWiring:
             assert filter_instance is not None
 
     def test_skeleton_transform_is_explicitly_not_implemented(self) -> None:
+        # Subject is a still-skeleton primitive (PMT_PID_DRIFT stays the
+        # #128-owned skeleton; T2MI_PLP_MISMATCH went real in #124,
+        # BBHEADER_SYNC_FAULT in #123 — each with its own layer-face
+        # refusal instead of the placeholder NotImplementedError).
         from faults.filters.pat_missing import null_packet
 
-        transform = transform_builder_for(FAULT_TYPE_T2MI_PLP_MISMATCH)(
+        transform = transform_builder_for(FAULT_TYPE_PMT_PID_DRIFT)(
             _definition(
-                FAULT_TYPE_T2MI_PLP_MISMATCH, "t2mi-demux-0", "T2MI"
+                FAULT_TYPE_PMT_PID_DRIFT, "demux-0:pid:0x1000", "TS"
             )
         )
         assert isinstance(transform, FaultTransform)
