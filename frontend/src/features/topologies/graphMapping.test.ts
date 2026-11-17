@@ -320,7 +320,7 @@ describe("explainConnection — the §7.6 reason lines (parallel to canConnect)"
     expect(explain("mux-0", "ts_out", "mux-0", "ts_in_1")).toBe("“ts_in_1”连接数已满（上限 1）");
   });
 
-  it("plane failure → 「平面不符（当前仅支持 MPEG_TS）」", () => {
+  it("plane failure → 「平面不符（当前支持 MPEG_TS / T2MI）」 (SPEC-401 §Phase2 扩容文案)", () => {
     const rfNode = {
       id: "rf-0",
       type: "topology" as const,
@@ -344,12 +344,70 @@ describe("explainConnection — the §7.6 reason lines (parallel to canConnect)"
         targetHandle: "ts_in",
         connections: [],
       }),
-    ).toBe("平面不符（当前仅支持 MPEG_TS）");
+    ).toBe("平面不符（当前支持 MPEG_TS / T2MI）");
   });
 
   it("unknown/missing handles stay silent (defensive; no spec enumeration for them)", () => {
     expect(explain("gen-0", "nope", "mon-0", "ts_in")).toBeNull();
     expect(explain("gen-0", "ts_out", "mon-0", "nope")).toBeNull();
+  });
+});
+
+// SPEC-401 §Phase2: MVP_ENABLED_PLANES = ["MPEG_TS","T2MI"] (mirror of the
+// #121 domain frozenset) — the plane precheck admits T2MI links verbatim, and
+// the three-level encapsulation chain (三级封装 gen→enc→demux→mon) becomes
+// expressible on the canvas with NO precheck-code change (the constant is the
+// only plane authority on this side).
+describe("plane precheck on the Phase 2 enabled set (T2MI links admitted)", () => {
+  const t2miDraft = fromWire({
+    topology_id: "t",
+    revision: 1,
+    nodes: [node("gen-0", "ts_generator"), node("enc-0", "t2mi_encapsulator"), node("dmx-0", "t2mi_demux"), node("mon-0", "ts_monitor")],
+    connections: [],
+  });
+
+  const verdictOf = (sourceId: string, sourceHandle: string, targetId: string, targetHandle: string) => {
+    const nodes = t2miDraft.nodes;
+    const input = {
+      source: nodes.find((n) => n.id === sourceId)!,
+      target: nodes.find((n) => n.id === targetId)!,
+      sourceHandle,
+      targetHandle,
+      connections: t2miDraft.connections,
+    };
+    return { can: canConnect(input), reason: explainConnection(input) };
+  };
+
+  it("the three-level chain passes all four prechecks (MPEG_TS → T2MI → MPEG_TS links)", () => {
+    expect(verdictOf("gen-0", "ts_out", "enc-0", "inner_in")).toEqual({ can: true, reason: null });
+    expect(verdictOf("enc-0", "t2mi_out", "dmx-0", "t2mi_in")).toEqual({ can: true, reason: null });
+    expect(verdictOf("dmx-0", "inner_out", "mon-0", "ts_in")).toEqual({ can: true, reason: null });
+  });
+
+  it("an MPEG_TS→T2MI mix still fails the plane precheck with the §Phase2 reason line", () => {
+    // demux.inner_out (MPEG_TS output) against a T2MI-cast input handle shape:
+    // the stored-row drift posture — cast gen.ts_out as a T2MI port to build
+    // the mismatch (direction-capable ends, disagreeing planes).
+    const nodes = t2miDraft.nodes;
+    const gen = nodes.find((n) => n.id === "gen-0")!;
+    const dmx = nodes.find((n) => n.id === "dmx-0")!;
+    const mismatch = {
+      source: gen,
+      target: dmx,
+      sourceHandle: "ts_out",
+      targetHandle: "t2mi_in",
+      connections: t2miDraft.connections,
+    };
+    expect(canConnect(mismatch)).toBe(false);
+    expect(explainConnection(mismatch)).toBe("平面不符（当前支持 MPEG_TS / T2MI）");
+  });
+
+  it("a non-enabled plane stays rejected (RF defensive posture unchanged)", () => {
+    const verdict = verdictOf("gen-0", "ts_out", "mon-0", "ts_in");
+    // gen.ts_out is occupied nowhere, mon.ts_in is free — this pair is LEGAL
+    // (both MPEG_TS); the RF rejection lives in the drift-shape tests above
+    // and keeps its assertion there.
+    expect(verdict.can).toBe(true);
   });
 });
 

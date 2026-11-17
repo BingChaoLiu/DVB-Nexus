@@ -1,22 +1,32 @@
 // Field inventory for the node inspector (SPEC-402 §5.1, APPROVED 0.5.0):
-// the single hand-written descriptor table for the ONE frozen node config
-// schema (GeneratorConfigDTO — the only non-null config_schema in the MVP
-// NodeType registry). Data sources, in authority order:
+// the hand-written descriptor tables for the frozen node config schemas,
+// selected per node type through fieldInventoryFor. MVP carried exactly one
+// non-null config_schema (GeneratorConfigDTO — the #62 approval); Phase 2
+// (SPEC-401 §Phase2, ticket #135) adds T2miEncapsulatorConfigDTO /
+// T2miDemuxConfigDTO whose lists live in nodeTypes.ts (OWN face) hand-written
+// to the #121 backend schemas — no generated wire DTO exists yet.
+// Data sources, in authority order:
 //   1. generated wire types  frontend/src/api/schema.gen.ts
 //      (GeneratorConfigDTO / ProgramDTO / ElementaryStreamDTO — key sets and
 //      @default values verbatim, fieldInventory.test.ts transcribes them as
 //      the drift lock);
-//   2. SPEC-108 §4 JSON↔DTO mapping + §5 validation constraints (hint text
-//      ONLY — presentation, never client-side enforcement);
+//   2. the #121 backend config schemas (domain.topology.node_types) for the
+//      Phase 2 lists (constraint notes are hint text ONLY — presentation,
+//      never client-side enforcement);
 //   3. the NodeType registry pointer (config_schema) — this module never
-//      invents fields for any other node type.
+//      invents fields for a schema it has no list for.
 // This is NOT a JSON Schema engine (SPEC-402 §2.2): no schema parser, no
 // runtime introspection, no control derivation — the renderer (NodeInspector)
-// switches on the six frozen ControlKinds and nothing else.
-import { nodeTypeSpec } from "../nodeTypes";
+// switches on the frozen ControlKinds and nothing else.
+import { T2MI_DEMUX_FIELD_INVENTORY, T2MI_ENCAPSULATOR_FIELD_INVENTORY, nodeTypeSpec, type NodeTypeSpec } from "../nodeTypes";
 
-/** The closed control-kind set (SPEC-402 §5.2). No fifth form. */
-export type ControlKind = "number" | "text" | "select" | "locked-checkbox" | "group" | "rows";
+/** The closed control-kind set (SPEC-402 §5.2 six MVP kinds + the Phase 2
+ * additive "checkbox" — the #121 demux/encapsulator schemas carry free
+ * booleans (strict_crc has a wire default, npd_enabled is required) that the
+ * locked-checkbox (contract-single-value) cannot represent faithfully.
+ * #135 deviation note: the six-kind freeze predates the Phase 2 schemas; the
+ * renderer stays switch-based, no engine). */
+export type ControlKind = "number" | "text" | "select" | "locked-checkbox" | "checkbox" | "group" | "rows";
 
 export interface FieldDescriptor {
   /** Config-root-relative dot path. Rows use the `[]` index placeholder,
@@ -143,6 +153,26 @@ export function initialValueFor(descriptor: FieldDescriptor): unknown {
   return descriptor.initial !== undefined ? descriptor.initial : descriptor.wireDefault;
 }
 
+// --- per-schema inventory lookup (SPEC-402 §5.1 × SPEC-401 §Phase2) ------------
+
+/** The descriptor list for one config_schema pointer. The MVP list is defined
+ * here; the Phase 2 lists are nodeTypes.ts exports (hand-written to the #121
+ * backend schemas). `null` (opaque config) and an unlisted pointer →
+ * undefined: the honest "no inventory" state — the frontend never guesses
+ * fields. */
+export function fieldInventoryFor(configSchema: NodeTypeSpec["config_schema"]): FieldDescriptor[] | undefined {
+  switch (configSchema) {
+    case "GeneratorConfigDTO":
+      return GENERATOR_FIELD_INVENTORY;
+    case "T2miEncapsulatorConfigDTO":
+      return T2MI_ENCAPSULATOR_FIELD_INVENTORY;
+    case "T2miDemuxConfigDTO":
+      return T2MI_DEMUX_FIELD_INVENTORY;
+    default:
+      return undefined;
+  }
+}
+
 // --- G1 completeness (existence only — SPEC-402 §7.3) -------------------------
 
 /** G1 purity: a "filled" number is a finite number (null/NaN = unfilled); a
@@ -179,12 +209,15 @@ function levelComplete(fields: FieldDescriptor[], config: Record<string, unknown
 }
 
 /** G1 (SPEC-402 §7.3): does this draft node's config have every required
- * field filled? `config_schema = null` types (and unregistered types — the
- * frontend never guesses their shape) are trivially complete; a generator
- * config that is not a plain object is incomplete (opaque kept, gate blocks). */
+ * field filled? `config_schema = null` types (and unregistered types, and
+ * non-null pointers without a frontend inventory — the frontend never
+ * guesses their shape) are trivially complete; a typed config that is not a
+ * plain object is incomplete (opaque kept, gate blocks). */
 export function isConfigComplete(nodeType: string, config: unknown): boolean {
   const spec = nodeTypeSpec(nodeType);
   if (spec === undefined || spec.config_schema === null) return true;
+  const inventory = fieldInventoryFor(spec.config_schema);
+  if (inventory === undefined) return true;
   if (!isPlainObject(config)) return false;
-  return levelComplete(GENERATOR_FIELD_INVENTORY, config);
+  return levelComplete(inventory, config);
 }

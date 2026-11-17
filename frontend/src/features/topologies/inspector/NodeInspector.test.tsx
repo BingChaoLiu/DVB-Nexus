@@ -211,3 +211,53 @@ describe("NodeInspector (SPEC-402 §4.1)", () => {
     void onApply;
   });
 });
+
+// --- Phase 2 (SPEC-401 §Phase2 × SPEC-402 §5.1): the per-schema tables -------
+
+describe("NodeInspector — Phase 2 schemas (T2miEncapsulator/T2miDemux via fieldInventoryFor)", () => {
+  it("renders the encapsulator descriptors from its own table (no generator fields leak)", () => {
+    render(<NodeInspector node={flowNode("t2mi_encapsulator", {}, "enc-0")} fieldErrors={[]} onApply={vi.fn()} />);
+    expect(screen.getByText("plp_assignment（PLP 分配表）")).toBeInTheDocument();
+    expect(screen.getByText("bbframe_params（BBFrame 封装参数）")).toBeInTheDocument();
+    expect(screen.getByText("plp_assignment.entries")).toBeInTheDocument(); // rows header (row fields appear after 增行)
+    expect(screen.getByText("bbframe_params.npd_enabled")).toBeInTheDocument();
+    // generator-only fields stay absent — the table selection is by schema name
+    expect(screen.queryByText("seed")).not.toBeInTheDocument();
+    expect(screen.queryByText("program（节目）")).not.toBeInTheDocument();
+  });
+
+  it("applies a filled encapsulator form as the exact #121 wire shape (checkbox → boolean, rows → entries)", async () => {
+    const onApply = vi.fn();
+    render(<NodeInspector node={flowNode("t2mi_encapsulator", {}, "enc-0")} fieldErrors={[]} onApply={onApply} />);
+    await userEvent.click(screen.getByRole("button", { name: "增行" }));
+    await userEvent.type(screen.getByText("plp_assignment.entries[].plp_id").nextElementSibling as HTMLInputElement, "0");
+    await userEvent.type(screen.getByText("plp_assignment.entries[].source_tag").nextElementSibling as HTMLInputElement, "inner");
+    await userEvent.type(screen.getByText("bbframe_params.matype_value").nextElementSibling as HTMLInputElement, "0");
+    await userEvent.type(screen.getByText("bbframe_params.upl").nextElementSibling as HTMLInputElement, "1504");
+    await userEvent.type(screen.getByText("bbframe_params.n_ups").nextElementSibling as HTMLInputElement, "1");
+    await userEvent.type(screen.getByText("bbframe_params.issy_mode").nextElementSibling as HTMLInputElement, "simple");
+    // npd_enabled: leave the free checkbox untouched → serializes boolean false
+    await userEvent.click(screen.getByRole("button", { name: "应用到草稿" }));
+    expect(onApply).toHaveBeenCalledWith("enc-0", {
+      plp_assignment: { entries: [{ plp_id: 0, source_tag: "inner" }] },
+      bbframe_params: { matype_value: 0, upl: 1504, n_ups: 1, issy_mode: "simple", npd_enabled: false },
+    });
+  });
+
+  it("renders the demux descriptors and applies mode/expected_plp with the strict_crc default riding along", async () => {
+    const onApply = vi.fn();
+    render(<NodeInspector node={flowNode("t2mi_demux", {}, "dmx-0")} fieldErrors={[]} onApply={onApply} />);
+    expect(screen.getByText("plp_filter（期望 PLP 过滤）")).toBeInTheDocument();
+    // plp_filter.mode: the wire Literal enum rendered verbatim
+    const modeSelect = within(screen.getByText("plp_filter.mode").parentElement!).getByRole("combobox");
+    await userEvent.selectOptions(modeSelect, "expected");
+    await userEvent.type(screen.getByText("plp_filter.expected_plp").nextElementSibling as HTMLInputElement, "0");
+    // strict_crc: untouched free checkbox prefilled with its wire default true
+    expect(screen.getByRole("checkbox")).toBeChecked();
+    await userEvent.click(screen.getByRole("button", { name: "应用到草稿" }));
+    expect(onApply).toHaveBeenCalledWith("dmx-0", {
+      plp_filter: { mode: "expected", expected_plp: 0 },
+      strict_crc: true,
+    });
+  });
+});

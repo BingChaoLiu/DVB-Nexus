@@ -6,7 +6,8 @@
 // generated schema this suite goes red on both sides of the diff.
 import { describe, expect, it } from "vitest";
 
-import { GENERATOR_FIELD_INVENTORY, isConfigComplete } from "./fieldInventory";
+import { GENERATOR_FIELD_INVENTORY, fieldInventoryFor, isConfigComplete } from "./fieldInventory";
+import { T2MI_DEMUX_FIELD_INVENTORY, T2MI_ENCAPSULATOR_FIELD_INVENTORY } from "../nodeTypes";
 
 // --- independent source of truth (schema.gen.ts, verbatim key sets) ----------
 
@@ -119,9 +120,22 @@ describe("fieldInventory (SPEC-402 §5.1, TV-402-05)", () => {
     );
   });
 
-  it("pins the closed set of six control kinds (SPEC-402 §5.2)", () => {
+  it("pins the control kinds: the MVP six on the generator table (SPEC-402 §5.2), checkbox additive on Phase 2 (#135)", () => {
     const kinds = new Set(collectAll().map((f) => f.kind));
     expect([...kinds].sort()).toEqual(["group", "locked-checkbox", "number", "rows", "select", "text"].sort());
+    const phase2Kinds = new Set(
+      [
+        ...T2MI_ENCAPSULATOR_FIELD_INVENTORY,
+        ...(T2MI_ENCAPSULATOR_FIELD_INVENTORY.find((f) => f.path === "plp_assignment")?.children ?? []),
+        ...(T2MI_ENCAPSULATOR_FIELD_INVENTORY.find((f) => f.path === "plp_assignment")?.children?.find(
+          (f) => f.path === "plp_assignment.entries",
+        )?.rowFields ?? []),
+        ...(T2MI_ENCAPSULATOR_FIELD_INVENTORY.find((f) => f.path === "bbframe_params")?.children ?? []),
+        ...T2MI_DEMUX_FIELD_INVENTORY,
+        ...(T2MI_DEMUX_FIELD_INVENTORY.find((f) => f.path === "plp_filter")?.children ?? []),
+      ].map((f) => f.kind),
+    );
+    expect([...phase2Kinds].sort()).toEqual(["checkbox", "group", "number", "rows", "select", "text"].sort());
   });
 
   it("pins the two select option sets to the SPEC-108 §4/§5 enums", () => {
@@ -214,5 +228,83 @@ describe("isConfigComplete (SPEC-402 §7.3, TV-402-04)", () => {
     expect(isConfigComplete("ts_generator", "corrupt")).toBe(false);
     expect(isConfigComplete("ts_generator", null)).toBe(false);
     expect(isConfigComplete("ts_generator", 42)).toBe(false);
+  });
+});
+
+// --- Phase 2 (SPEC-401 §Phase2 × SPEC-402 §7.3): G1 on the two T2-MI schemas --
+
+describe("isConfigComplete — Phase 2 node types (per-schema inventory lookup)", () => {
+  /** Fully filled minimal encapsulator config (the #121 backend shape; one
+   * assignment row, defaults nowhere — every key is wire-required). */
+  function completeEncapsulatorConfig(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+    return {
+      plp_assignment: {
+        entries: [{ plp_id: 0, source_tag: "inner" }],
+      },
+      bbframe_params: {
+        matype_value: 0,
+        upl: 1504,
+        n_ups: 1,
+        issy_mode: "simple",
+        npd_enabled: false,
+      },
+      ...overrides,
+    };
+  }
+
+  function completeDemuxConfig(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+    return {
+      plp_filter: {
+        mode: "expected",
+        expected_plp: 0,
+      },
+      strict_crc: true,
+      ...overrides,
+    };
+  }
+
+  it("empty configs are incomplete (G1 配置待填 subjects on Phase 2 types too)", () => {
+    expect(isConfigComplete("t2mi_encapsulator", {})).toBe(false);
+    expect(isConfigComplete("t2mi_demux", {})).toBe(false);
+  });
+
+  it("fully filled configs are complete", () => {
+    expect(isConfigComplete("t2mi_encapsulator", completeEncapsulatorConfig())).toBe(true);
+    expect(isConfigComplete("t2mi_demux", completeDemuxConfig())).toBe(true);
+  });
+
+  it("missing any required encapsulator key is incomplete (npd_enabled false is filled, absent is not)", () => {
+    expect(isConfigComplete("t2mi_encapsulator", completeEncapsulatorConfig({ bbframe_params: { matype_value: 0, upl: 1504, n_ups: 1, issy_mode: "simple" } }))).toBe(false);
+    const noRows = completeEncapsulatorConfig();
+    delete (noRows.plp_assignment as Record<string, unknown>).entries;
+    expect(isConfigComplete("t2mi_encapsulator", noRows)).toBe(false);
+  });
+
+  it("an empty entries array stays complete (presence only — inventing minLength is forbidden; backend owns min 1)", () => {
+    const emptyEntries = completeEncapsulatorConfig();
+    (emptyEntries.plp_assignment as Record<string, unknown>).entries = [];
+    expect(isConfigComplete("t2mi_encapsulator", emptyEntries)).toBe(true);
+  });
+
+  it("a partially filled assignment row is incomplete", () => {
+    const config = completeEncapsulatorConfig();
+    (config.plp_assignment as Record<string, unknown>).entries = [{ plp_id: 0, source_tag: "" }];
+    expect(isConfigComplete("t2mi_encapsulator", config)).toBe(false);
+  });
+
+  it("demux strict_crc (wire default true) is born complete when omitted; plp_filter keys are required", () => {
+    const { strict_crc: _omitted, ...withoutCrc } = completeDemuxConfig();
+    expect(isConfigComplete("t2mi_demux", withoutCrc)).toBe(true);
+    const withoutFilter = completeDemuxConfig();
+    delete withoutFilter.plp_filter;
+    expect(isConfigComplete("t2mi_demux", withoutFilter)).toBe(false);
+    expect(isConfigComplete("t2mi_demux", { plp_filter: { mode: "all" } })).toBe(true); // expected_plp defaulted (null)
+  });
+
+  it("fieldInventoryFor resolves by schema name; null/unlisted → undefined (never guesses)", () => {
+    expect(fieldInventoryFor("GeneratorConfigDTO")).toBe(GENERATOR_FIELD_INVENTORY);
+    expect(fieldInventoryFor("T2miEncapsulatorConfigDTO")).toBe(T2MI_ENCAPSULATOR_FIELD_INVENTORY);
+    expect(fieldInventoryFor("T2miDemuxConfigDTO")).toBe(T2MI_DEMUX_FIELD_INVENTORY);
+    expect(fieldInventoryFor(null)).toBeUndefined();
   });
 });
