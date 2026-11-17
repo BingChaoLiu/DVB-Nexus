@@ -127,8 +127,14 @@ class TestSkeletonWiring:
     def test_phase2_types_resolve_to_skeletons(
         self, fault_type, skeleton_class, target_id, layer
     ) -> None:
-        # The skeleton tier is immutable module state: resolve directly.
-        assert transform_builder_for(fault_type) is skeleton_class
+        # The skeleton tier is immutable module state: resolve against a
+        # pristine downstream table.  Downstream tickets self-register
+        # their real builders at import time (ruling §10-4), so the live
+        # process table may already carry #123/#124 overrides — the
+        # skeleton-tier pinning stays order-independent through the
+        # file's own isolation helper.
+        with _clean_override_table():
+            assert transform_builder_for(fault_type) is skeleton_class
 
     @pytest.mark.parametrize(
         ("fault_type", "target_id", "layer", "parameters", "activation"),
