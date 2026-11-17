@@ -30,6 +30,9 @@
 | `pmt-pid-mismatch` | faulted_ts | PMT_PID_MISMATCH：PAT `program_map_PID` 4096→4100 + CRC 重算（SPEC-204 §6.4），ref 同上 | L2：独立变换脚本→tsduck-analyze（tstables 见 PAT 指向 4100、PMT 孤儿在 4096） | registered |
 | `t2mi-minimal` | generated_ts | 最小合法 T2-MI 流：3 BBFRAME 包（NM UP、BBHEADER 10B、多 UP 尾包形态 [20,20,12]、PLP [0,0,1]、背靠背紧排）（SPEC-600 §11.1，#122） | L1：TS 102 773 §5.1 表推导脚本（无 src 参与）+ TSDuck 3.45-4798 HEM 交叉**NOT TRUSTED**（尾包静默丢失复现，裁定 §10-9） | registered |
 | `t2mi-crc-corrupt` | faulted_ts | T2MI CRC-32 位翻转：包 0 坏包显式标记 + 继续解析、静默丢弃为零（SPEC-600 §8），`fault_plan_ref=t2mi-minimal` | L1：独立变换脚本→self-parse（坏包标记/继续解析逐字节钉扎，TSDuck 3.45 静默丢弃教训 #104） | registered |
+| `bbframe-nups3` | generated_ts | BBFRAME 背靠背帧流（层间交接形态）：3 帧 N_UPS=3 批量 + 尾帧 [3,3,2]（尾帧 2 UP + 188B 0xFF stuffing、DFL 只计实载荷）（SPEC-601 §7/§11，#123） | L1：EN 302 755 §5.1.7 表推导脚本（无 src 参与）+ TSDuck 3.45 零 BBFrame 用户侧能力（#104）**NOT TRUSTED** 无 L2 对拍（裁定 §10-9） | registered |
+| `bbframe-b2-corrupt` | faulted_ts | BBHEADER_SYNC_FAULT corrupt（SYNCD 位翻转、CRC-8 不重算）：帧 0 `crc8_valid=false` + UP 边界扣留 → recovery_failed 证据（SPEC-601 §8），`fault_plan_ref=bbframe-nups3` | L1：独立变换脚本→self-parse（CRC-8 强制校验钉扎，TSDuck 3.45 静默传播缺陷 #104 反转为显式标记） | registered |
+| `bbframe-b2-shift` | faulted_ts | BBHEADER_SYNC_FAULT shift（SYNCD +1 位、CRC-8 重算 MODE 保持）：帧 0 `crc8_valid=true` + `syncd_misaligned`（UP 边界错位；教学点 SYNCD=位距离非同步字节），`fault_plan_ref=bbframe-nups3` | L1：独立变换脚本→self-parse（与 corrupt 对成两种可区分证据形态，逐字节钉扎） | registered |
 
 ### #14 Q3 三 TODO 落实路径（已闭环）
 
