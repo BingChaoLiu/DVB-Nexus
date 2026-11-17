@@ -26,11 +26,14 @@ def _artifact(**overrides) -> TSArtifact:
 
 
 class TestEnumClosedSets:
-    def test_artifact_kind_has_exactly_the_six_spec_kinds(self):
+    def test_artifact_kind_has_exactly_the_spec_kinds(self):
+        # SPEC-003 section 2.7 six kinds + the SPEC-603 §5 additive kind
+        # increment (inner_ts, #125 — SPEC-603 §14 additive-only).
         assert {member.value for member in ArtifactKind} == {
             "input_ts",
             "generated_ts",
             "faulted_ts",
+            "inner_ts",
             "report",
             "log",
             "evidence",

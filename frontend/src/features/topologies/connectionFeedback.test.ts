@@ -148,14 +148,14 @@ describe("connectionAttempted — the §7.6 one-line reason, mapped from the fou
     const standing = {
       connectingFrom: "source" as const,
       connecting: attempt("gen-0", "ts_out", "source"),
-      rejection: "平面不符（当前仅支持 MPEG_TS）",
+      rejection: "平面不符（当前支持 MPEG_TS / T2MI）",
       attempt: 1,
     };
     const feedback = connectionAttempted(standing, attempt("gen-0", "ts_out", "source"), null, graph);
     expect(feedback).toEqual({
       connectingFrom: null,
       connecting: null,
-      rejection: "平面不符（当前仅支持 MPEG_TS）",
+      rejection: "平面不符（当前支持 MPEG_TS / T2MI）",
       attempt: 1,
     });
   });
@@ -186,6 +186,80 @@ describe("connectionAttempted — the §7.6 one-line reason, mapped from the fou
 describe("CONNECTION_HINT_VISIBLE_MS — the §4.5 约 4 秒 auto-dismiss window", () => {
   it("is pinned at 4000 ms", () => {
     expect(CONNECTION_HINT_VISIBLE_MS).toBe(4000);
+  });
+});
+
+// SPEC-401 §Phase2: with MVP_ENABLED_PLANES = ["MPEG_TS","T2MI"] the machine
+// walks the three-level encapsulation chain (三级封装) rejection-free — the
+// T2MI link enc.t2mi_out → dmx.t2mi_in passes the plane precheck like any
+// other, with BBFrame kept a node-internal layer (never named as a plane).
+describe("Phase 2 chain feedback (T2MI links admitted by the mirrored plane set)", () => {
+  const t2miDraft = fromWire({
+    topology_id: "t",
+    revision: 1,
+    nodes: [
+      {
+        node_id: "gen-0",
+        node_type: "ts_generator",
+        config: {},
+        ports: [{ port_id: "ts_out", direction: "output", plane: "MPEG_TS", max_connections: 1 }],
+      },
+      {
+        node_id: "enc-0",
+        node_type: "t2mi_encapsulator",
+        config: {},
+        ports: [
+          { port_id: "inner_in", direction: "input", plane: "MPEG_TS", max_connections: 1 },
+          { port_id: "t2mi_out", direction: "output", plane: "T2MI", max_connections: 1 },
+        ],
+      },
+      {
+        node_id: "dmx-0",
+        node_type: "t2mi_demux",
+        config: {},
+        ports: [
+          { port_id: "t2mi_in", direction: "input", plane: "T2MI", max_connections: 1 },
+          { port_id: "inner_out", direction: "output", plane: "MPEG_TS", max_connections: 1 },
+        ],
+      },
+      {
+        node_id: "mon-0",
+        node_type: "ts_monitor",
+        config: {},
+        ports: [{ port_id: "ts_in", direction: "input", plane: "MPEG_TS", max_connections: 1 }],
+      },
+    ],
+    connections: [],
+  });
+  const graph = { nodes: t2miDraft.nodes as TopologyFlowNode[], connections: t2miDraft.connections as TopologyFlowEdge[] };
+
+  it("walks gen→enc→dmx→mon with zero rejections (planes MPEG_TS / T2MI / MPEG_TS)", () => {
+    let feedback = idleConnectionFeedback;
+    for (const [sourceId, sourcePort, targetId, targetPort] of [
+      ["gen-0", "ts_out", "enc-0", "inner_in"],
+      ["enc-0", "t2mi_out", "dmx-0", "t2mi_in"],
+      ["dmx-0", "inner_out", "mon-0", "ts_in"],
+    ] as const) {
+      feedback = connectionAttempted(
+        connectionStarted(feedback, attempt(sourceId, sourcePort, "source")),
+        attempt(sourceId, sourcePort, "source"),
+        attempt(targetId, targetPort, "target"),
+        graph,
+      );
+      expect(feedback.rejection).toBeNull();
+    }
+    expect(feedback.attempt).toBe(3);
+  });
+
+  it("the §7.6 preview keeps non-T2MI and illegal ends dim during an enc.t2mi_out drag", () => {
+    const illegal = illegalEndHandles(attempt("enc-0", "t2mi_out", "source"), graph);
+    // legal end: the demux T2MI input stays lit…
+    expect(illegal.has(illegalHandleKey("dmx-0", "t2mi_in"))).toBe(false);
+    // …while every MPEG_TS input dims (plane mismatch under the enabled set)
+    // and the origin dims (self-loop rule).
+    expect(illegal.has(illegalHandleKey("enc-0", "inner_in"))).toBe(true);
+    expect(illegal.has(illegalHandleKey("mon-0", "ts_in"))).toBe(true);
+    expect(illegal.has(illegalHandleKey("enc-0", "t2mi_out"))).toBe(true);
   });
 });
 

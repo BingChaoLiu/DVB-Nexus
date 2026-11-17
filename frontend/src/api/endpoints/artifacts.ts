@@ -50,3 +50,42 @@ export function packetRange(packetIndex: number): string {
   const start = 188 * packetIndex;
   return `bytes=${start}-${start + 187}`;
 }
+
+// --- Layered structure JSON face (SPEC-404 §Phase2 / SPEC-304 §Phase2) ------
+
+/** The `view`-discriminated structure union (#129 codegen; the json_map chain
+ * wire — consumed verbatim, 禁手写 mirror). */
+export type StructureView =
+  | components["schemas"]["T2miStructureViewDTO"]
+  | components["schemas"]["BBFrameStructureViewDTO"]
+  | components["schemas"]["InnerTsStructureViewDTO"];
+
+export type T2miStructureViewDTO = components["schemas"]["T2miStructureViewDTO"];
+export type BBFrameStructureViewDTO = components["schemas"]["BBFrameStructureViewDTO"];
+export type InnerTsStructureViewDTO = components["schemas"]["InnerTsStructureViewDTO"];
+export type T2miPacketDTO = components["schemas"]["T2miPacketDTO"];
+export type BBFrameStructureRowDTO = components["schemas"]["BBFrameStructureRowDTO"];
+export type FirstFailureRefDTO = components["schemas"]["FirstFailureRefDTO"];
+export type ReconstructionAnomalyDTO = components["schemas"]["ReconstructionAnomalyDTO"];
+
+/**
+ * One layered structure view of a T2-MI artifact (SPEC-404 §Phase2: the
+ * packet-inspector data source = artifact bytes + 结构解析 JSON, the json_map
+ * 生成链 — consumed verbatim, 禁手写 mirror). `view` is the wire vocabulary
+ * `t2mi|bbframe|ts` (backend `T2MI_STRUCTURE_VIEWS`); the backend refuses
+ * plain MPEG-TS artifacts with 400 `SIM_STRUCTURE_NOT_T2MI` — the caller
+ * renders the explicit error branch (SPEC-404 §8 discipline).
+ */
+export function getArtifactStructure(
+  artifactId: string,
+  options: { view: string; expectedPlp?: number },
+): Promise<StructureView> {
+  return unwrap<StructureView>(
+    client.GET("/api/v1/artifacts/{artifact_id}/structure", {
+      params: {
+        path: { artifact_id: artifactId },
+        query: { view: options.view, expected_plp: options.expectedPlp ?? null },
+      },
+    }),
+  );
+}

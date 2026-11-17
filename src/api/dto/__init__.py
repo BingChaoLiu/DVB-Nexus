@@ -14,6 +14,14 @@ the artifact metadata (``api.dto.artifacts``).
 """
 
 from api.dto.artifacts import ArtifactMetaDTO
+from api.dto.encapsulation import (
+    BBFrameDTO,
+    BissMode1ConfigDTO,
+    BissModeEConfigDTO,
+    InnerTsResultDTO,
+    StructureViewDTO,
+    T2miPacketDTO,
+)
 from api.dto.errors import ErrorDetail, ErrorResponse
 from api.dto.faults import FaultActivationDTO, FaultDefinitionDTO
 from api.dto.generator import ElementaryStreamDTO, GeneratorConfigDTO, ProgramDTO
@@ -56,6 +64,12 @@ from api.dto.tsduck_calls import TSDuckCallDTO
 
 __all__ = [
     "ArtifactMetaDTO",
+    "BBFrameDTO",
+    "BissMode1ConfigDTO",
+    "BissModeEConfigDTO",
+    "InnerTsResultDTO",
+    "StructureViewDTO",
+    "T2miPacketDTO",
     "ArtifactRefDTO",
     "ClockConfigDTO",
     "ConnectionDTO",

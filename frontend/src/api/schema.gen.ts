@@ -211,6 +211,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/artifacts/{artifact_id}/structure": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Artifact Structure
+         * @description The layered structure JSON face (#128, additive; SPEC-404
+         *     §Phase2 data source — the json_map chain assembly, keys = the
+         *     upstream frozen projections).  ``response_model`` = the
+         *     ``view``-discriminated structure union (ticket #129: the codegen
+         *     plane's reachability face — REQ-API-500-002, the #80 precedent);
+         *     it re-validates and serializes the assembly unchanged.  Ports
+         *     without the face keep the honest 501.
+         */
+        get: operations["get_artifact_structure_api_v1_artifacts__artifact_id__structure_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/artifacts/{artifact_id}/analyze": {
         parameters: {
             query?: never;
@@ -653,6 +679,138 @@ export interface components {
             status: string;
         };
         /**
+         * BBFrameStructureRowDTO
+         * @description One bbframe-view row: the caller-side ``frame_index`` + the
+         *     nine ``wire_detail()`` keys (inheritance ADDS a field — the wire is
+         *     the row #128 assembles).
+         */
+        BBFrameStructureRowDTO: {
+            /**
+             * Matype
+             * @description 16-bit raw MATYPE.
+             */
+            matype: number;
+            /**
+             * Upl
+             * @description User Packet Length in bits.
+             */
+            upl: number;
+            /**
+             * Dfl
+             * @description Data Field Length in bits (real payload).
+             */
+            dfl: number;
+            /**
+             * Sync
+             * @description Raw SYNC byte value.
+             */
+            sync: number;
+            /**
+             * Syncd
+             * @description Bit distance to the first UP inside the data field — NOT a sync byte (the teaching anchor, SPEC-404 §Phase2).
+             */
+            syncd: number;
+            /**
+             * Crc8 Valid
+             * @description CRC-8 over the first 9 header bytes.
+             */
+            crc8_valid: boolean;
+            /**
+             * Up Count
+             * @description User packets recovered.
+             */
+            up_count: number;
+            /**
+             * Up Indices
+             * @description UP start offsets (bytes) inside the data field.
+             */
+            up_indices?: number[];
+            /**
+             * State
+             * @description Explicit §8 state (ok / crc8_invalid / …).
+             */
+            state: string;
+            /**
+             * Frame Index
+             * @description Row locator (frame order).
+             */
+            frame_index: number;
+        };
+        /**
+         * BBFrameStructureViewDTO
+         * @description ``view=bbframe`` — the BBFrame layer structure (per-frame rows).
+         */
+        BBFrameStructureViewDTO: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            view: "bbframe";
+            /** Frame Count */
+            frame_count: number;
+            /** Frames */
+            frames?: components["schemas"]["BBFrameStructureRowDTO"][];
+        };
+        /**
+         * BissMode1ConfigDTO
+         * @description Scenario ``biss`` section, Mode 1 face (SPEC-610 §5).
+         *
+         *     ``ca_pid`` is constant-semantics (BISS carries no ECM, Tech 3292) and
+         *     defaults to 0x1FFF when the wire key is absent. The session word is
+         *     key material: it lives in the scenario document's frozen config only
+         *     and never enters journal events or artifacts (SPEC-610 §9).
+         */
+        BissMode1ConfigDTO: {
+            /**
+             * Mode
+             * @constant
+             */
+            mode: "1";
+            /** Session Word */
+            session_word: string;
+            /** Pid Scope */
+            pid_scope: number[];
+            /**
+             * Ca Pid
+             * @description 0x1FFF constant semantics.
+             * @default 8191
+             */
+            ca_pid: number;
+        };
+        /**
+         * BissModeEConfigDTO
+         * @description Scenario ``biss`` section, Mode E face (SPEC-611 §5).
+         *
+         *     The ESW travels out of band; the 128-bit Injected ID is statically
+         *     provisioned in the receiver and never transmitted in the stream.
+         *     ``ca_system_id`` defaults to 0x2602 (BISS2, Tech 3292 v3).
+         */
+        BissModeEConfigDTO: {
+            /**
+             * Mode
+             * @constant
+             */
+            mode: "E";
+            /** Encrypted Sw */
+            encrypted_sw: string;
+            /** Injected Id */
+            injected_id: string;
+            /** Pid Scope */
+            pid_scope: number[];
+            /**
+             * Ca Pid
+             * @description 0x1FFF constant semantics.
+             * @default 8191
+             */
+            ca_pid: number;
+            /**
+             * Ca System Id
+             * @description 0x2602 constant semantics (BISS2).
+             * @default 9730
+             */
+            ca_system_id: number;
+        };
+        /**
          * ClockConfigDTO
          * @description SPEC-201 §4 ``SimulationClockConfig`` (exact field set).
          */
@@ -1013,6 +1171,27 @@ export interface components {
             state: string;
         };
         /**
+         * FirstFailureRefDTO
+         * @description The dual failure locator (SPEC-603 §5; the #104 Worker duty).
+         */
+        FirstFailureRefDTO: {
+            /**
+             * Frame Index
+             * @description BBFrame ordinal in the selected stage (None = stream-level).
+             */
+            frame_index?: number | null;
+            /**
+             * Reason
+             * @description The frozen reason vocabulary (SPEC-603 §5).
+             */
+            reason: string;
+            /**
+             * Packet Position
+             * @description T2-MI packet position (the t2mi-view locator, #132).
+             */
+            packet_position?: number | null;
+        };
+        /**
          * GeneratorConfigDTO
          * @description SPEC-108 §4 ``GeneratorConfig`` (exact field set, wire shape).
          *
@@ -1109,6 +1288,47 @@ export interface components {
             scope: components["schemas"]["ObservationScopeDTO"];
             data: components["schemas"]["HealthDataDTO"];
             meta?: components["schemas"]["ObservationMetaDTO"];
+        };
+        /**
+         * InnerTsStructureViewDTO
+         * @description ``view=ts`` — the Inner TS face (default view, the demux chain).
+         *
+         *     The view = the six-key ``InnerTsResult`` projection + the ``view``
+         *     discriminator + the anomaly records — the flat shape #128 assembles
+         *     (``{"view": "ts", **wire_detail(), "anomalies": [...]}``); inheritance
+         *     ADDS fields, the wire stays flat.
+         */
+        InnerTsStructureViewDTO: {
+            /** Artifact Ref */
+            artifact_ref: string;
+            /**
+             * Packet Count
+             * @description 188-byte TS packets restored.
+             */
+            packet_count: number;
+            /**
+             * Up Assembled
+             * @description User packets assembled.
+             */
+            up_assembled: number;
+            /**
+             * Stuffing Bytes
+             * @description Tail stuffing bytes seen.
+             */
+            stuffing_bytes: number;
+            /**
+             * Reconstruction Status
+             * @enum {string}
+             */
+            reconstruction_status: "ok" | "partial" | "failed";
+            first_failure_ref?: components["schemas"]["FirstFailureRefDTO"] | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            view: "ts";
+            /** Anomalies */
+            anomalies?: components["schemas"]["ReconstructionAnomalyDTO"][];
         };
         /** MetricPointDTO */
         MetricPointDTO: {
@@ -1296,6 +1516,27 @@ export interface components {
             program_descriptors: string;
         };
         /**
+         * ReconstructionAnomalyDTO
+         * @description One reconstruction discipline record (the §7 mirror face).
+         */
+        ReconstructionAnomalyDTO: {
+            /**
+             * Kind
+             * @description The frozen anomaly reason vocabulary.
+             */
+            kind: string;
+            /**
+             * Packet Position
+             * @description T2-MI packet position (None = stream end).
+             */
+            packet_position?: number | null;
+            /**
+             * Byte Size
+             * @description Affected byte count.
+             */
+            byte_size: number;
+        };
+        /**
          * ResourceLimitsDTO
          * @description SPEC-200 §4 ``ResourceLimits`` (optional caps; ranges随 OPEN-006).
          */
@@ -1455,6 +1696,11 @@ export interface components {
             fault_plan: {
                 [key: string]: unknown;
             }[];
+            /**
+             * Biss
+             * @description The scenario's optional ``biss`` section (SPEC-610 §5 / SPEC-611 §5 wire, ticket #129; absent on non-BISS scenarios). Key material rides the document verbatim — the reveal/leak disciplines (REQ-SIM-205-003) are the loader's, unchanged.
+             */
+            biss?: components["schemas"]["BissMode1ConfigDTO"] | components["schemas"]["BissModeEConfigDTO"] | null;
             /** Objectives */
             objectives: string[];
             /** Hints */
@@ -1655,6 +1901,83 @@ export interface components {
             scope: components["schemas"]["ObservationScopeDTO"];
             data: components["schemas"]["SummaryDataDTO"];
             meta?: components["schemas"]["ObservationMetaDTO"];
+        };
+        /**
+         * T2miPacketDTO
+         * @description One T2-MI packet row (TS 102 773 §5.1 face; #122 wire keys).
+         *
+         *     ``payload_kind`` is the explicit MVP state vocabulary
+         *     (``bbframe`` / ``padding`` / ``unknown`` — the #122 三态; 0xFF is the
+         *     stuffing-byte padding identity, never silently dropped). ``frame_index``
+         *     / ``plp_id`` are ``None`` for non-BBFRAME packets — the honest
+         *     three-state payload discipline, never a fabricated default.
+         */
+        T2miPacketDTO: {
+            /**
+             * Packet Index
+             * @description Row locator (stream order).
+             */
+            packet_index: number;
+            /**
+             * Packet Type
+             * @description Header byte 0 verbatim.
+             */
+            packet_type: number;
+            /**
+             * Packet Counter
+             * @description Header byte 1 verbatim (mod-256 counter).
+             */
+            packet_counter: number;
+            /**
+             * Payload Kind
+             * @enum {string}
+             */
+            payload_kind: "bbframe" | "padding" | "unknown";
+            /**
+             * Payload Bytes Len
+             * @description Payload length in bytes.
+             */
+            payload_bytes_len: number;
+            /**
+             * Crc32 Valid
+             * @description CRC-32 remainder check over header+payload.
+             */
+            crc32_valid: boolean;
+            /**
+             * Frame Index
+             * @description BBFRAME ordinal (BBFRAME packets only, else None).
+             */
+            frame_index?: number | null;
+            /**
+             * Plp Id
+             * @description Transport-prefix PLP id (BBFRAME packets only, else None).
+             */
+            plp_id?: number | null;
+        };
+        /**
+         * T2miStructureViewDTO
+         * @description ``view=t2mi`` — the T2-MI layer structure (per-packet rows).
+         */
+        T2miStructureViewDTO: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            view: "t2mi";
+            /** Packet Count */
+            packet_count: number;
+            /**
+             * Truncated
+             * @description Stream tail cut mid-packet (honest face).
+             */
+            truncated: boolean;
+            /**
+             * Trailing Bytes
+             * @description Verbatim-kept tail byte count.
+             */
+            trailing_bytes: number;
+            /** Packets */
+            packets?: components["schemas"]["T2miPacketDTO"][];
         };
         /**
          * TSDuckCallDTO
@@ -2490,6 +2813,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_artifact_structure_api_v1_artifacts__artifact_id__structure_get: {
+        parameters: {
+            query?: {
+                view?: string;
+                expected_plp?: number | null;
+            };
+            header?: never;
+            path: {
+                artifact_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["T2miStructureViewDTO"] | components["schemas"]["BBFrameStructureViewDTO"] | components["schemas"]["InnerTsStructureViewDTO"];
                 };
             };
             /** @description Validation Error */

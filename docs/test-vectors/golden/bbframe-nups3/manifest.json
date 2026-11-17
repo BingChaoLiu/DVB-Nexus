@@ -1,0 +1,17 @@
+{
+  "vector_id": "bbframe-nups3",
+  "kind": "generated_ts",
+  "related_specs": [
+    "SPEC-601"
+  ],
+  "generator_version": "tools/make_golden_bbframe_vectors.py v1 (EN 302 755 §5.1.7 table derivation; no src/ts involvement)",
+  "config_hash": "sha256:5aeb24494adf6614076eb47b53375dbb33a2cd3485e86951290e4fde21fc6626",
+  "sha256": "sha256:fdf4b4e3d4ef813c20affad19766218d3197356372e8544575b0c2ed108fb30b",
+  "packet_count": 3,
+  "fault_plan_ref": null,
+  "verification": {
+    "path": "bit-level-review",
+    "direction": "en302755-§5.1.7-derivation→self-parse + human review (TSDuck 3.45 has zero user-side BBFrame capability, #104 — no L2 cross possible, NOT TRUSTED framing per ruling §10-9; self round-trip is L3 regression only, SPEC-506 §5)",
+    "evidence_ref": "docs/test-vectors/golden/bbframe-nups3/bbframe-nups3.verification.md"
+  }
+}

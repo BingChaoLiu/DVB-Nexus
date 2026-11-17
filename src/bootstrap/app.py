@@ -57,6 +57,7 @@ from adapters.storage.tsduck_calls import SqliteTSDuckCallStore
 from adapters.storage.artifact_store import ArtifactStore
 from application.analysis import AnalysisService
 from application.diagnosis import DiagnosisService, bind_run_completion_trigger
+from application.errors import NotFoundError
 from application.observation.alerts.rules import default_rule_set
 from application.observation.alerts.service import AlertService
 from application.observation.consumer import ConsumerConfig, JournalTailingConsumer
@@ -70,6 +71,20 @@ from application.observation.timeline.service import TimelineService
 from domain.diagnosis.rules.loader import builtin_rules_provider
 from domain.observation.registry import is_coalescable
 from faults.factory import build_semantic_filter_factory
+
+# --- Phase 2 filter activation (ticket #128, ruling §10-4) ------------------------
+#
+# The Phase 2 fault filters self-register their transform builders at
+# import time (``faults.factory.register_transform``); the composition
+# root is the activation point — importing the four modules here wires
+# every run submitted through this stack to the real builders instead of
+# the #121 placeholders ( faults/factory.py itself is never edited again).
+
+import faults.filters.bbheader_sync as _activate_bbheader_sync  # noqa: F401,E402
+import faults.filters.biss_mode_e as _activate_biss_mode_e  # noqa: F401,E402
+import faults.filters.scrambler as _activate_scrambler  # noqa: F401,E402
+import faults.filters.t2mi_plp_mismatch as _activate_t2mi_plp_mismatch  # noqa: F401,E402
+
 from simulation.runtime import SimulationRuntime
 from simulation.ts_runtime import StoreArtifactSink, TSRuntime
 from simulation.verification import VerificationService
@@ -430,6 +445,35 @@ def build_production_app(
         scenario_registry=scenario_registry,
         now_ms=_wall_ms,
     )
+    def _pipeline_for_session(session_id: str) -> Any:
+        """#128 composition seam: the session scenario's ``biss`` section
+        (construction scrambling, ADR-0011 §3) resolves to the layered
+        pipeline configuration; sessions without one run the defaults."""
+        scenario_id = sessions_backend.scenario_id_for(session_id)
+        if scenario_id is None:
+            return None
+        try:
+            biss = scenario_registry.require(scenario_id).biss
+        except NotFoundError:
+            return None
+        if biss is None:
+            return None
+        from simulation.layered_pipeline import BissFaceConfig, LayerPipelineConfig
+
+        face = BissFaceConfig(
+            mode=biss.mode,
+            pid_scope=tuple(biss.pid_scope),
+            **(
+                {"session_word": biss.session_word}
+                if biss.mode == "1"
+                else {
+                    "encrypted_sw": biss.encrypted_sw,
+                    "injected_id": biss.injected_id,
+                }
+            ),
+        )
+        return LayerPipelineConfig(biss=face)
+
     runs_backend = SimulationRunsBackend(
         ts_runtime,
         runtime,
@@ -437,6 +481,7 @@ def build_production_app(
         StoreArtifactSink(store, index=artifact_repository),
         allocator,
         now_ms=_wall_ms,
+        pipeline_resolver=_pipeline_for_session,
     )
     artifacts_backend = ArtifactStoreBackend(store, artifact_repository)
     tsduck_calls_backend = TSDuckCallsBackend(tsduck_call_store, journal)

@@ -19,10 +19,17 @@ requires-python = ">=3.10"
 # app.py docstring): `uvicorn --factory api.app:create_app` — the #24
 # acceptance evidence gap ("app 可启动") closed in review-fix #7. 0.30 is a
 # current-generation floor; <1 guards against the next major.
+# pycryptodome graduates to a runtime dependency at the #136 integration
+# close (ruling §10-11, #127 REPORT §五-1 追认): ts.biss.cissa consumes
+# AES-128-CBC (pycryptodome) on the BISS2/Mode-E runtime path (SPEC-611
+# §6) — a runtime dep, not a test dep. Floor aligned with the shared
+# .venv install (4.5.0, the version the #106 vector evidence ran on);
+# <5 guards against the next major.
 dependencies = [
     "pydantic>=2,<3",
     "fastapi>=0.110,<1",
     "uvicorn>=0.30,<1",
+    "pycryptodome>=4.5,<5",
 ]
 
 [project.optional-dependencies]
@@ -199,8 +206,17 @@ forbidden_modules = [
 # ADR-0005 D4-4: "faults -> ts（FaultDefinition 应用到包模型）+ tsduck 接口
 # （传输级路由）". Everything else is forbidden by complement; adapters.tsduck
 # stays allowed, adapters.storage does not.
+# Enumeration semantics (ADR-0005 D4-4 + Phase 2, orchestrator ruling §10-3 /
+# ADR-0011 §1): the forbidden list names `adapters.storage` literally — every
+# other `adapters.*` submodule is simply outside the forbidden set.  That is
+# the pre-existing ADR-0005 tsduck permission (传输级路由) expressed in enum
+# form, and it equally admits the BISS scrambler filter's edge to the dvbcsa
+# dlopen adapter (`adapters.dvbcsa`, #126) — there is no dvbcsa-specific
+# carve-out in the contract body.  The CSA1 core stays out of the static
+# import graph (no dlopen at import time, no static linking);
+# adapters.storage remains forbidden.
 [[tool.importlinter.contracts]]
-name = "faults depends only on ts and the tsduck adapter interface (ADR-0005 decision 4)"
+name = "faults depends only on ts and the tsduck/dvbcsa adapter interfaces (ADR-0005 decision 4 + ADR-0011 §1, ruling §10-3)"
 type = "forbidden"
 source_modules = ["faults"]
 forbidden_modules = [
@@ -210,7 +226,6 @@ forbidden_modules = [
     "knowledge",
     "domain",
     "domain.*",
-    "adapters",
     "adapters.storage",
 ]
 

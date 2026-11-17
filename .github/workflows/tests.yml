@@ -20,6 +20,9 @@ jobs:
       - name: Install project with dev dependencies
         run: |
           python -m pip install --upgrade pip
+          # pycryptodome (SPEC-611 §9 / ADR-0011 §1, ticket #127) graduated
+          # into [project] dependencies at the #136 integration close
+          # (ruling §10-11) — pulled in by the editable install below.
           python -m pip install -e ".[dev]"
       - name: Run CI 必绿组合 (SPEC-505 §5, ticket #13)
         run: pytest -m "(unit or integration or conformance or e2e) and not (tsduck or slow)" -ra

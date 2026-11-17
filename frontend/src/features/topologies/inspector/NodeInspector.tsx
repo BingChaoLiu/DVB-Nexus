@@ -1,24 +1,32 @@
 // Node inspector form (SPEC-402 §4.1, APPROVED 0.5.0): the draft-composition
 // surface for the canvas selection. Declarative only — every rendered field
-// comes from GENERATOR_FIELD_INVENTORY (the component holds ZERO field
-// literals; fieldInventory.test.ts pins the table to the generated schema).
-// It never talks to the network and never validates (SPEC-402 §2.2: no
-// real-time checking — the only gates are the completeness statement and the
-// server reports wired by the page via inspectorGate). Apply is the single
-// way edits enter the draft (editorState "configApplied", approved additive).
+// comes from the per-schema descriptor table selected by fieldInventoryFor
+// (the component holds ZERO field literals; fieldInventory.test.ts pins the
+// MVP table to the generated schema, nodeTypes.test.ts pins the Phase 2
+// tables to the #121 backend schemas). It never talks to the network and
+// never validates (SPEC-402 §2.2: no real-time checking — the only gates are
+// the completeness statement and the server reports wired by the page via
+// inspectorGate). Apply is the single way edits enter the draft (editorState
+// "configApplied", approved additive).
 import { useMemo, useState } from "react";
 
 import type { TopologyFlowNode } from "../graphMapping";
 import { nodeTypeSpec } from "../nodeTypes";
-import { GENERATOR_FIELD_INVENTORY, initialValueFor, type FieldDescriptor } from "./fieldInventory";
+import { fieldInventoryFor, initialValueFor, type FieldDescriptor } from "./fieldInventory";
 import type { FieldError } from "./locChain";
 import "./inspector.css";
 
 /** Scalar leaf kinds rendered as a single input (group/rows recurse). */
-type ScalarKind = "number" | "text" | "select" | "locked-checkbox";
+type ScalarKind = "number" | "text" | "select" | "locked-checkbox" | "checkbox";
 
 function isScalar(descriptor: FieldDescriptor): descriptor is FieldDescriptor & { kind: ScalarKind } {
-  return descriptor.kind === "number" || descriptor.kind === "text" || descriptor.kind === "select" || descriptor.kind === "locked-checkbox";
+  return (
+    descriptor.kind === "number" ||
+    descriptor.kind === "text" ||
+    descriptor.kind === "select" ||
+    descriptor.kind === "locked-checkbox" ||
+    descriptor.kind === "checkbox"
+  );
 }
 
 function isRows(descriptor: FieldDescriptor): descriptor is FieldDescriptor & { kind: "rows" } {
@@ -62,10 +70,10 @@ function projectRows(descriptor: FieldDescriptor & { kind: "rows" }, config: unk
 /** Build the local state from the stored config: filled keys verbatim,
  * missing optional keys from their wire default / pinned initial, missing
  * required keys empty (the 配置待填 subjects). */
-function projectFrom(config: unknown): FormState {
+function projectFrom(config: unknown, inventory: FieldDescriptor[]): FormState {
   const scalars: Record<string, string> = {};
   let rows: Record<string, string>[] = [];
-  for (const descriptor of GENERATOR_FIELD_INVENTORY) {
+  for (const descriptor of inventory) {
     if (descriptor.kind === "group") {
       for (const child of descriptor.children ?? []) {
         if (isScalar(child)) {
@@ -86,6 +94,7 @@ function projectFrom(config: unknown): FormState {
 function serializeScalar(descriptor: FieldDescriptor & { kind: ScalarKind }, raw: string | undefined): unknown {
   const value = (raw ?? "").trim();
   if (descriptor.kind === "locked-checkbox") return descriptor.wireDefault ?? true;
+  if (descriptor.kind === "checkbox") return value === "true"; // booleans have no unfilled state
   if (descriptor.kind === "select") return value !== "" ? value : (initialValueFor(descriptor) ?? descriptor.wireDefault);
   if (descriptor.kind === "number") {
     if (value === "") return descriptor.required ? undefined : (descriptor.wireDefault ?? undefined);
@@ -107,9 +116,9 @@ function serializeRow(row: Record<string, string>, fields: FieldDescriptor[]): R
   return out;
 }
 
-function serializeForm(state: FormState): Record<string, unknown> {
+function serializeForm(state: FormState, inventory: FieldDescriptor[]): Record<string, unknown> {
   const out: Record<string, unknown> = {};
-  for (const descriptor of GENERATOR_FIELD_INVENTORY) {
+  for (const descriptor of inventory) {
     if (descriptor.kind === "group") {
       const group: Record<string, unknown> = {};
       for (const child of descriptor.children ?? []) {
@@ -129,9 +138,16 @@ function serializeForm(state: FormState): Record<string, unknown> {
   return out;
 }
 
-/** Row group helper: the single "rows" descriptor lives under program. */
-function rowsDescriptor(): FieldDescriptor | undefined {
-  return GENERATOR_FIELD_INVENTORY.find((f) => f.path === "program")?.children?.find((f) => f.path === "program.streams");
+/** The inventory's single "rows" descriptor (generator: program.streams under
+ * the program group; Phase 2: plp_assignment.entries — exactly one per schema
+ * by construction). */
+function rowsDescriptor(inventory: FieldDescriptor[]): FieldDescriptor | undefined {
+  for (const descriptor of inventory) {
+    if (descriptor.kind === "rows") return descriptor;
+    const nested = descriptor.children?.find((child) => child.kind === "rows");
+    if (nested !== undefined) return nested;
+  }
+  return undefined;
 }
 
 function FieldRow({
@@ -176,6 +192,15 @@ function FieldRow({
         {descriptor.kind === "locked-checkbox" && (
           <input id={id} type="checkbox" checked disabled title={descriptor.hint} />
         )}
+        {descriptor.kind === "checkbox" && (
+          <input
+            id={id}
+            type="checkbox"
+            checked={value === "true"}
+            onChange={(event) => onChange(event.target.checked ? "true" : "false")}
+            disabled={disabled}
+          />
+        )}
       </label>
       {descriptor.hint !== undefined && <span className="dvb-inspector-hint">{descriptor.hint}</span>}
       {errors.map((error) => (
@@ -196,14 +221,14 @@ export function NodeInspector({
   fieldErrors: FieldError[];
   onApply: (nodeId: string, config: Record<string, unknown>) => void;
 }) {
-  const [form, setForm] = useState<FormState>(() => projectFrom(node?.data.node.config));
+  const spec = useMemo(() => (node === null ? undefined : nodeTypeSpec(node.data.node.node_type)), [node]);
+  const inventory = useMemo(() => (spec === undefined ? undefined : fieldInventoryFor(spec.config_schema)), [spec]);
+  const [form, setForm] = useState<FormState>(() => projectFrom(node?.data.node.config, inventory ?? []));
   const [edited, setEdited] = useState(false);
 
   // Selection switches reset the local form via the parent-supplied `key`
   // (remount; unapplied edits are dropped — the divergence hint stated this
   // while they existed). No effect-based reset by design.
-
-  const spec = useMemo(() => (node === null ? undefined : nodeTypeSpec(node.data.node.node_type)), [node]);
 
   if (node === null) {
     return (
@@ -219,7 +244,7 @@ export function NodeInspector({
   const nodeLevelErrors = nodeErrors.filter((error) => error.fieldPath === null);
   const errorsFor = (path: string) => nodeErrors.filter((error) => error.fieldPath === path);
 
-  if (spec === undefined || spec.config_schema === null) {
+  if (spec === undefined || spec.config_schema === null || inventory === undefined) {
     return (
       <section className="dvb-inspector" aria-label="节点属性表单">
         <h4 className="dvb-inspector-title">节点属性 — {node.id}</h4>
@@ -234,7 +259,7 @@ export function NodeInspector({
     );
   }
 
-  const rows = rowsDescriptor();
+  const rows = rowsDescriptor(inventory);
 
   const setScalar = (path: string, value: string) => {
     setForm((current) => ({ ...current, scalars: { ...current.scalars, [path]: value } }));
@@ -265,7 +290,7 @@ export function NodeInspector({
         </p>
       ))}
       {edited && <p className="dvb-inspector-note">有未应用修改</p>}
-      {GENERATOR_FIELD_INVENTORY.map((descriptor) => {
+      {inventory.map((descriptor) => {
         if (descriptor.kind === "group") {
           return (
             <fieldset key={descriptor.path} className="dvb-inspector-group" data-field={descriptor.path}>
@@ -345,7 +370,7 @@ export function NodeInspector({
         type="button"
         className="dvb-inspector-apply"
         onClick={() => {
-          onApply(node.id, serializeForm(form));
+          onApply(node.id, serializeForm(form, inventory));
           setEdited(false);
         }}
       >

@@ -1,0 +1,248 @@
+{
+  "schema_version": 1,
+  "scenario_id": "5c010000-0000-4000-8000-000000000007",
+  "version": "1.0.0",
+  "title": "封装错位：BBHEADER 同步（SYNCD 位距错配）",
+  "difficulty": "intermediate",
+  "required_engine_versions": {
+    "fault_registry": ">=0.6.0",
+    "t2mi_nodes": ">=0.6.0"
+  },
+  "initial_topology": {
+    "topology_id": "topo-sc-07",
+    "revision": 1,
+    "nodes": [
+      {
+        "nodeId": "gen-0",
+        "nodeType": "ts_generator",
+        "config": {},
+        "ports": [
+          {
+            "portId": "ts_out",
+            "direction": "output",
+            "plane": "MPEG_TS",
+            "maxConnections": 1
+          }
+        ]
+      },
+      {
+        "nodeId": "enc-0",
+        "nodeType": "t2mi_encapsulator",
+        "config": {
+          "bbframe_params": {
+            "matype_value": "NM",
+            "upl": 188,
+            "n_ups": 3
+          },
+          "plp_assignment": [
+            {
+              "plp_id": 0,
+              "source_tag": "main"
+            }
+          ]
+        },
+        "ports": [
+          {
+            "portId": "inner_in",
+            "direction": "input",
+            "plane": "MPEG_TS",
+            "maxConnections": 1
+          },
+          {
+            "portId": "t2mi_out",
+            "direction": "output",
+            "plane": "T2MI",
+            "maxConnections": 1
+          }
+        ]
+      },
+      {
+        "nodeId": "mux-0",
+        "nodeType": "ts_mux",
+        "config": {},
+        "ports": [
+          {
+            "portId": "ts_in_1",
+            "direction": "input",
+            "plane": "MPEG_TS",
+            "maxConnections": 1
+          },
+          {
+            "portId": "ts_in_2",
+            "direction": "input",
+            "plane": "MPEG_TS",
+            "maxConnections": 1
+          },
+          {
+            "portId": "ts_out",
+            "direction": "output",
+            "plane": "MPEG_TS",
+            "maxConnections": 1
+          }
+        ]
+      },
+      {
+        "nodeId": "demux-0",
+        "nodeType": "t2mi_demux",
+        "config": {
+          "plp_filter": {
+            "mode": "expected",
+            "expected_plp": 0
+          }
+        },
+        "ports": [
+          {
+            "portId": "t2mi_in",
+            "direction": "input",
+            "plane": "T2MI",
+            "maxConnections": 1
+          },
+          {
+            "portId": "inner_out",
+            "direction": "output",
+            "plane": "MPEG_TS",
+            "maxConnections": 1
+          }
+        ]
+      },
+      {
+        "nodeId": "mon-0",
+        "nodeType": "ts_monitor",
+        "config": {},
+        "ports": [
+          {
+            "portId": "ts_in",
+            "direction": "input",
+            "plane": "MPEG_TS",
+            "maxConnections": 1
+          }
+        ]
+      }
+    ],
+    "connections": [
+      {
+        "connectionId": "conn-1",
+        "plane": "MPEG_TS",
+        "from": {
+          "nodeId": "gen-0",
+          "portId": "ts_out"
+        },
+        "to": {
+          "nodeId": "mux-0",
+          "portId": "ts_in_1"
+        }
+      },
+      {
+        "connectionId": "conn-2",
+        "plane": "MPEG_TS",
+        "from": {
+          "nodeId": "mux-0",
+          "portId": "ts_out"
+        },
+        "to": {
+          "nodeId": "enc-0",
+          "portId": "inner_in"
+        }
+      },
+      {
+        "connectionId": "conn-3",
+        "plane": "T2MI",
+        "from": {
+          "nodeId": "enc-0",
+          "portId": "t2mi_out"
+        },
+        "to": {
+          "nodeId": "demux-0",
+          "portId": "t2mi_in"
+        }
+      },
+      {
+        "connectionId": "conn-4",
+        "plane": "MPEG_TS",
+        "from": {
+          "nodeId": "demux-0",
+          "portId": "inner_out"
+        },
+        "to": {
+          "nodeId": "mon-0",
+          "portId": "ts_in"
+        }
+      }
+    ]
+  },
+  "simulation_config": {
+    "seed": 1234567,
+    "mode": "deterministic",
+    "clock": {
+      "mode": "deterministic",
+      "start_time_ns": 0,
+      "speed_num": 1,
+      "speed_den": 1,
+      "tick_quantum_ns": 1000000
+    }
+  },
+  "fault_plan": [
+    {
+      "fault_id": "fd000000-0000-4000-8000-00000000f100",
+      "fault_type": "BBHEADER_SYNC_FAULT",
+      "target_id": "enc-0",
+      "parameters": {
+        "field": "SYNCD",
+        "mode": "corrupt"
+      },
+      "activation": {
+        "kind": "packet_index",
+        "packet_index": 300
+      },
+      "expected_observations": [
+        "bbframe.recovery_failed"
+      ]
+    }
+  ],
+  "objectives": [
+    "理解 BBHEADER 十字节结构（MATYPE/UPL/DFL/SYNC/SYNCD/CRC-8，EN 302 755 §5.1.7）",
+    "注入 SYNCD 错配并观察 Inner TS 重建失败证据（bbframe.recovery_failed）",
+    "恢复（空 fault_plan 重跑新 Run）并提交通关判定"
+  ],
+  "hints": [
+    {
+      "hint_id": "sc07-hint-1",
+      "trigger": "experiment opened",
+      "level": "nudge",
+      "content": "SYNCD 是数据字段内首个 UP 的位距离——不是同步字节。包检查器（view=bbframe）逐字段展示 BBHEADER。",
+      "requirement_ids": [
+        "REQ-SIM-204-P2"
+      ],
+      "standard_ref": null
+    },
+    {
+      "hint_id": "sc07-hint-2",
+      "trigger": "after Inject",
+      "level": "direction",
+      "content": "T2-MI 包本身可解析（CRC-32 通过），但 Inner TS 重建错位——问题在 BBFrame 层。看 bbframe.recovery_failed 的首失败帧定位。",
+      "requirement_ids": [
+        "REQ-SIM-204-P2"
+      ],
+      "standard_ref": null
+    },
+    {
+      "hint_id": "sc07-hint-3",
+      "trigger": "before Diagnose",
+      "level": "solution",
+      "content": "SYNCD 位距被破坏 → UP 边界不可定 → 重建 partial/failed。注意出处：BBHEADER 定义在 EN 302 755 §5.1.7，TS 102 773 全文不含 BBHEADER（它只规定 T2-MI 包封装：包头 6 字节 + CRC-32）。恢复路径同 SC-06。",
+      "requirement_ids": [
+        "REQ-SIM-204-P2"
+      ],
+      "standard_ref": null
+    }
+  ],
+  "pass_criteria": [
+    {
+      "criterion_id": "fault-cleared",
+      "kind": "fault_inactive",
+      "mandatory": true,
+      "fault_id": "fd000000-0000-4000-8000-00000000f100"
+    }
+  ],
+  "hidden_reference_solution": "恢复路径：空 fault_plan 重跑新 Run。fault_inactive 判据三段核对同 SC-06。教学锚点（roadmap §4 B2 订正）：BBHEADER/SYNCD 定义在 EN 302 755 §5.1.7（MATYPE/UPL/DFL/SYNC/SYNCD/CRC-8 共 10 字节）；SYNCD（2 字节）是数据字段内首个 UP 的位距离，不是同步字节；TS 102 773 只规定 T2-MI 包封装。"
+}

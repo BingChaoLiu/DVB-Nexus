@@ -163,7 +163,9 @@ export function canConnect({ source, target, sourceHandle, targetHandle, connect
 
 const DIRECTION_REASON = "方向不符（需 输出/双向 → 输入/双向）";
 const SELF_LOOP_REASON = "不能连回同一端口";
-const PLANE_REASON = "平面不符（当前仅支持 MPEG_TS）";
+// SPEC-401 §Phase2: the enabled-plane line mirrors MVP_ENABLED_PLANES
+// (readonly ["MPEG_TS","T2MI"] — the #121 domain frozenset, §10-10 同源纪律).
+const PLANE_REASON = "平面不符（当前支持 MPEG_TS / T2MI）";
 
 /** The one-line reason for the first failed precheck (§7.6 verbatim), or null
  * when the connection passes all four. Cardinality names the FULL port and

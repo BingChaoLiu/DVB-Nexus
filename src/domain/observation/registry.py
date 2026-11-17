@@ -93,6 +93,47 @@ DIAGNOSIS_EVENT_TYPES = frozenset(
     {"diagnosis.raised", "diagnosis.updated", "diagnosis.cleared"}
 )
 
+# --- Phase 2 encapsulation namespaces (SPEC-303 §Phase2, ticket #129) ----------
+#
+# The four construction/evidence namespaces of the layered pipeline
+# (ADR-0010 §3 / ADR-0011 §2). They are NOT observation faces: no
+# source/confidence axes (SPEC-003 §2.4) — the ``ts.*`` branch stays the
+# only observation-axes carrier. All discrete event faces (no continuous
+# metric stream added); journal_seq per-session ordering, run_id
+# correlation and the envelope shape are unchanged (ADR-0006 untouched).
+# Delivery policy: none of them is coalescable or delivery-protected —
+# the MVP COALESCABLE/DELIVERY_PROTECTED faces stay exactly as they were.
+
+#: ``t2mi.*`` (SPEC-600 §6 / SPEC-602 §6): the per-stage transport summary
+#: and the B1 candidate (缺失 ≠ 零).
+T2MI_EVENT_TYPES = frozenset(
+    {"t2mi.stage_summary", "t2mi.plp_mismatch"}
+)
+
+#: ``bbframe.*`` (SPEC-601 §5): the per-stage frame summary and the B2
+#: recovery evidence (the SPEC-307 BBHEADER_SYNC_FAULT rule's symbol).
+BBFRAME_EVENT_TYPES = frozenset(
+    {"bbframe.stage_summary", "bbframe.recovery_failed"}
+)
+
+#: ``biss.*`` (SPEC-610/611 §5): the scramble confirmation and the
+#: descramble-failure candidate (解扰失败 ≠ 码流损坏). Payloads carry key
+#: FINGERPRINTS only — key material never enters a payload (SPEC-610 §9).
+BISS_EVENT_TYPES = frozenset(
+    {"biss.scramble_applied", "biss.descramble_failed"}
+)
+
+#: ``gen.*`` (SPEC-303 §Phase2): the three construction-event types.
+#: Stage-level + sampled-packet-level only — the full per-packet stream
+#: is closed (#112); magnitude stays O(layers) + O(sampling).
+GEN_EVENT_TYPES = frozenset(
+    {
+        "gen.stage_started",
+        "gen.stage_completed",
+        "gen.packet_sampled",
+    }
+)
+
 #: The unique legal ``event_type`` set (SPEC-301 section 4, REQ-OBS-301-006).
 REGISTERED_EVENT_TYPES = (
     SIMULATION_SESSION_EVENT_TYPES
@@ -104,6 +145,10 @@ REGISTERED_EVENT_TYPES = (
     | SCENARIO_EVENT_TYPES
     | RECOVERY_EVENT_TYPES
     | DIAGNOSIS_EVENT_TYPES
+    | T2MI_EVENT_TYPES
+    | BBFRAME_EVENT_TYPES
+    | BISS_EVENT_TYPES
+    | GEN_EVENT_TYPES
 )
 
 # --- withdrawn / abolished (must never be re-registered) --------------------
@@ -225,6 +270,28 @@ DIAGNOSIS_CONFIDENCES = frozenset({"low", "medium", "high"})
 #: Correlation pid cap (13-bit DVB PID space, SPEC-301 §3 correlation.pid).
 _DIAGNOSIS_PID_MAX = 8191
 
+# --- Phase 2 payload vocabularies (ticket #129) ---------------------------------
+
+#: The generation ``layer`` axis (CONTEXT.md 作用层; ADR-0010 §3 stage order).
+#: One vocabulary for all three ``gen.*`` types (layer 字段贯穿).
+GENERATION_LAYERS = frozenset({"TS", "BBFRAME", "T2MI", "BISS"})
+
+#: The ``biss.*`` mode vocabulary — owner is ``ts.biss.cissa``
+#: (BISS_MODE_1/"1", BISS_MODE_E/"E", BISS_MODE_2/"2").
+BISS_MODES = frozenset({"1", "E", "2"})
+
+#: The T2-MI packet payload-kind vocabulary (SPEC-600 §5/§8, #122 三态).
+_T2MI_PAYLOAD_KINDS = frozenset({"bbframe", "padding", "unknown"})
+
+#: PLP id cap (TS 102 773 transport prefix: 8-bit PLP id, #122 builder).
+_T2MI_PLP_ID_MAX = 255
+
+#: ``failed_indices_sample`` bound (#126: the evidence payload stays bounded).
+_BISS_SAMPLE_LIMIT = 16
+
+_SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
+_DIGITS_PATTERN = re.compile(r"^[0-9]+$")
+
 
 def validate_payload(event_type: str, payload: Mapping[str, Any]) -> None:
     """Validate a payload against the event type's registered schema.
@@ -246,6 +313,429 @@ def validate_payload(event_type: str, payload: Mapping[str, Any]) -> None:
         _validate_fault_payload(event_type, payload)
     if event_type in RECOVERY_EVENT_TYPES:
         _validate_recovery_payload(event_type, payload)
+    if event_type in GEN_EVENT_TYPES:
+        _validate_generation_payload(event_type, payload)
+    if event_type in T2MI_EVENT_TYPES:
+        _validate_t2mi_payload(event_type, payload)
+    if event_type in BBFRAME_EVENT_TYPES:
+        _validate_bbframe_payload(event_type, payload)
+    if event_type in BISS_EVENT_TYPES:
+        _validate_biss_payload(event_type, payload)
+
+
+# --- Phase 2 payload rules (SPEC-303 §Phase2, ticket #129) ----------------------
+#
+# Structural construction/evidence faces, NOT observation (brief §8 #129
+# card): no source/confidence axes. Unlike the still-schemaless families,
+# the Phase 2 payloads are STRICT: the upstream REPORT key sets are the
+# contract (ruling §10-7 froze them), so missing keys AND extra keys are
+# both refused — the emission seams already self-check their exact key
+# sets, the registry side mirrors that discipline.
+#
+# ``*_KEYS`` constants name the frozen key sets so the mirrors (api/dto
+# event payload DTOs, #132/134 consumers) can cite them by symbol.
+
+
+_GEN_STAGE_STARTED_KEYS = frozenset({"layer"})
+_GEN_STAGE_COMPLETED_KEYS = frozenset({"layer", "item_count"})
+_GEN_PACKET_SAMPLED_KEYS = frozenset(
+    {"layer", "packet_index", "byte_size", "sha256"}
+)
+
+_T2MI_STAGE_SUMMARY_KEYS = frozenset(
+    {
+        "packet_count",
+        "padding_count",
+        "packet_type_distribution",
+        "plp_distribution",
+    }
+)
+_T2MI_PLP_MISMATCH_KEYS = frozenset(
+    {"expected_plp", "actual_plp", "business_absent_evidence"}
+)
+_T2MI_BUSINESS_ABSENT_KEYS = frozenset(
+    {
+        "plps_seen",
+        "bbframe_packet_count",
+        "filtered_packet_count",
+        "total_packet_count",
+    }
+)
+
+_BBFRAME_STAGE_SUMMARY_KEYS = frozenset(
+    {"frame_count", "n_ups_distribution", "stuffing_ratio"}
+)
+_BBFRAME_RECOVERY_FAILED_KEYS = frozenset(
+    {"failure_count", "first_failed_frame_index"}
+)
+
+#: The shared scrambler face (#126) — Mode 1 emits exactly these.
+_BISS_SCRAMBLE_BASE_KEYS = frozenset(
+    {
+        "pid_scope",
+        "packet_count",
+        "key_fingerprint",
+        "mutation_log_ref",
+        "mode",
+    }
+)
+#: The Mode E derivation face (#127) — additive over the base.
+_BISS_SCRAMBLE_DERIVATION_KEYS = frozenset(
+    {"derivation_ref", "mismatch_variants"}
+)
+_BISS_DESCRAMBLE_FAILED_KEYS = frozenset(
+    {
+        "pid_scope",
+        "failed_indices_sample",
+        "self_check_kind",
+        "key_fingerprint_ref",
+        "mode",
+    }
+)
+
+
+def _validate_generation_payload(
+    event_type: str, payload: Mapping[str, Any]
+) -> None:
+    """``gen.*`` shapes (SPEC-303 §Phase2; #128 emission contract)."""
+    if event_type == "gen.stage_started":
+        keys, extra = _GEN_STAGE_STARTED_KEYS, ()
+    elif event_type == "gen.stage_completed":
+        keys, extra = _GEN_STAGE_COMPLETED_KEYS, (("item_count", _require_natural),)
+    else:
+        keys, extra = _GEN_PACKET_SAMPLED_KEYS, (
+            ("packet_index", _require_natural),
+            ("byte_size", _require_natural),
+        )
+    _require_exact_keys(event_type, payload, keys)
+    _require_vocabulary(event_type, payload, "layer", GENERATION_LAYERS)
+    for field, check in extra:
+        check(event_type, payload, field)
+    if event_type == "gen.packet_sampled":
+        digest = payload.get("sha256")
+        if not isinstance(digest, str) or not _SHA256_PATTERN.match(digest):
+            raise EnvelopeError(
+                EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+                f"payload 'sha256' for {event_type!r} must be a lowercase "
+                f"64-hex digest, got {digest!r}",
+            )
+
+
+def _validate_t2mi_payload(
+    event_type: str, payload: Mapping[str, Any]
+) -> None:
+    """``t2mi.*`` shapes (SPEC-600 §6 / SPEC-602 §6; #122/#124 contract)."""
+    if event_type == "t2mi.stage_summary":
+        _require_exact_keys(event_type, payload, _T2MI_STAGE_SUMMARY_KEYS)
+        for field in ("packet_count", "padding_count"):
+            _require_natural(event_type, payload, field)
+        distribution = payload.get("packet_type_distribution")
+        if not isinstance(distribution, Mapping):
+            raise EnvelopeError(
+                EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+                f"payload 'packet_type_distribution' for {event_type!r} "
+                f"must be an object, got {distribution!r}",
+            )
+        for kind, count in distribution.items():
+            if kind not in _T2MI_PAYLOAD_KINDS:
+                raise EnvelopeError(
+                    EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+                    f"packet_type_distribution keys for {event_type!r} must "
+                    f"be one of {sorted(_T2MI_PAYLOAD_KINDS)}, got {kind!r}",
+                )
+            _require_count_value(event_type, kind, count)
+        _require_plp_distribution(event_type, payload)
+        return
+    # t2mi.plp_mismatch — the B1 candidate (缺失 ≠ 零).
+    _require_exact_keys(event_type, payload, _T2MI_PLP_MISMATCH_KEYS)
+    _require_plp_id(event_type, payload, "expected_plp")
+    actual = payload.get("actual_plp")
+    if actual is not None:
+        # Honest ambiguity: ≠1 observed PLP → None (never a guess).
+        _require_plp_id(event_type, payload, "actual_plp")
+    evidence = payload.get("business_absent_evidence")
+    if not isinstance(evidence, Mapping):
+        raise EnvelopeError(
+            EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+            f"payload 'business_absent_evidence' for {event_type!r} must "
+            f"be an object, got {evidence!r}",
+        )
+    _require_exact_keys(
+        event_type, evidence, _T2MI_BUSINESS_ABSENT_KEYS, label="evidence"
+    )
+    plps_seen = evidence.get("plps_seen")
+    if not isinstance(plps_seen, list):
+        raise EnvelopeError(
+            EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+            f"evidence 'plps_seen' for {event_type!r} must be a list of "
+            f"PLP ids, got {plps_seen!r}",
+        )
+    for plp_id in plps_seen:
+        if (
+            not isinstance(plp_id, int)
+            or isinstance(plp_id, bool)
+            or not 0 <= plp_id <= _T2MI_PLP_ID_MAX
+        ):
+            raise EnvelopeError(
+                EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+                f"evidence 'plps_seen' entries for {event_type!r} must be "
+                f"integers in 0..{_T2MI_PLP_ID_MAX}, got {plp_id!r}",
+            )
+    for field in (
+        "bbframe_packet_count",
+        "filtered_packet_count",
+        "total_packet_count",
+    ):
+        _require_natural(event_type, evidence, field)
+
+
+def _validate_bbframe_payload(
+    event_type: str, payload: Mapping[str, Any]
+) -> None:
+    """``bbframe.*`` shapes (SPEC-601 §5; #123 contract)."""
+    if event_type == "bbframe.stage_summary":
+        _require_exact_keys(event_type, payload, _BBFRAME_STAGE_SUMMARY_KEYS)
+        _require_natural(event_type, payload, "frame_count")
+        _require_distribution(event_type, payload, "n_ups_distribution")
+        ratio = payload.get("stuffing_ratio")
+        if (
+            isinstance(ratio, bool)
+            or not isinstance(ratio, (int, float))
+            or not 0 <= ratio <= 1
+        ):
+            raise EnvelopeError(
+                EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+                f"payload 'stuffing_ratio' for {event_type!r} must be a "
+                f"number in 0..1 (stuffing bytes / data-field bytes), "
+                f"got {ratio!r}",
+            )
+        return
+    # bbframe.recovery_failed — the B2 recovery evidence.
+    _require_exact_keys(event_type, payload, _BBFRAME_RECOVERY_FAILED_KEYS)
+    _require_natural(event_type, payload, "failure_count")
+    index = payload.get("first_failed_frame_index")
+    if index is not None:
+        _require_natural(event_type, payload, "first_failed_frame_index")
+
+
+def _validate_biss_payload(
+    event_type: str, payload: Mapping[str, Any]
+) -> None:
+    """``biss.*`` shapes (SPEC-610 §5 / SPEC-611 §5; #126/#127 contract).
+
+    Key-fingerprint discipline: ``key_fingerprint`` /
+    ``key_fingerprint_ref`` are fingerprint REFERENCES, never key
+    material (SPEC-610 §9) — the shape check demands non-empty strings;
+    the envelope-level secret scan is the second guard.
+    """
+    if event_type == "biss.scramble_applied":
+        keys = set(payload)
+        mode = payload.get("mode")
+        if mode not in BISS_MODES:
+            raise EnvelopeError(
+                EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+                f"payload 'mode' for {event_type!r} must be one of "
+                f"{sorted(BISS_MODES)}, got {mode!r}",
+            )
+        base = set(_BISS_SCRAMBLE_BASE_KEYS)
+        derivation = set(_BISS_SCRAMBLE_DERIVATION_KEYS)
+        if mode == "1":
+            legal = (base,)
+        else:
+            # The derived-key faces carry EITHER the bare base keys (the
+            # construction path — ``cissa_scramble`` has no mismatch to
+            # declare) OR base + the derivation face (the fault transform
+            # declares the redacted chain reference + variants, #127).
+            # A HALF derivation face is a shape violation either way.
+            legal = (base, base | derivation)
+        if keys not in legal:
+            raise EnvelopeError(
+                EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+                f"payload keys for {event_type!r} (mode={mode!r}) must be "
+                f"one of {[sorted(option) for option in legal]}, got "
+                f"{sorted(keys)}",
+            )
+        _require_pid_scope(event_type, payload)
+        _require_natural(event_type, payload, "packet_count")
+        _require_non_empty_str(event_type, payload, "key_fingerprint")
+        ref = payload.get("mutation_log_ref")
+        if ref is not None:
+            _require_non_empty_str(event_type, payload, "mutation_log_ref")
+        if "derivation_ref" in payload:
+            _require_derivation_ref(event_type, payload)
+            variants = payload.get("mismatch_variants")
+            if not isinstance(variants, list) or not all(
+                isinstance(item, str) and item for item in variants
+            ):
+                raise EnvelopeError(
+                    EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+                    f"payload 'mismatch_variants' for {event_type!r} must "
+                    "be a list of non-empty variant names, got "
+                    f"{variants!r}",
+                )
+        return
+    # biss.descramble_failed — 解扰失败 ≠ 码流损坏 (ADR-0011 §4).
+    _require_exact_keys(event_type, payload, _BISS_DESCRAMBLE_FAILED_KEYS)
+    _require_pid_scope(event_type, payload)
+    sample = payload.get("failed_indices_sample")
+    if (
+        not isinstance(sample, list)
+        or len(sample) > _BISS_SAMPLE_LIMIT
+        or not all(
+            isinstance(index, int)
+            and not isinstance(index, bool)
+            and index >= 0
+            for index in sample
+        )
+    ):
+        raise EnvelopeError(
+            EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+            f"payload 'failed_indices_sample' for {event_type!r} must be "
+            f"a list of at most {_BISS_SAMPLE_LIMIT} non-negative shared-"
+            f"frame indexes, got {sample!r}",
+        )
+    _require_non_empty_str(event_type, payload, "self_check_kind")
+    _require_non_empty_str(event_type, payload, "key_fingerprint_ref")
+    _require_vocabulary(event_type, payload, "mode", BISS_MODES)
+
+
+def _require_exact_keys(
+    event_type: str,
+    payload: Mapping[str, Any],
+    keys: frozenset[str],
+    *,
+    label: str = "payload",
+) -> None:
+    present = set(payload)
+    if present != set(keys):
+        missing = sorted(set(keys) - present)
+        unexpected = sorted(present - set(keys))
+        raise EnvelopeError(
+            EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+            f"{label} keys for {event_type!r} must be exactly "
+            f"{sorted(keys)}; missing {missing}, unexpected {unexpected}",
+        )
+
+
+def _require_count_value(
+    event_type: str, field: str, value: Any
+) -> None:
+    if (
+        not isinstance(value, int)
+        or isinstance(value, bool)
+        or value < 0
+    ):
+        raise EnvelopeError(
+            EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+            f"distribution {field!r} for {event_type!r} must be a "
+            f"non-negative integer count, got {value!r}",
+        )
+
+
+def _require_distribution(
+    event_type: str, payload: Mapping[str, Any], field: str
+) -> None:
+    distribution = payload.get(field)
+    if not isinstance(distribution, Mapping):
+        raise EnvelopeError(
+            EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+            f"payload {field!r} for {event_type!r} must be an object, "
+            f"got {distribution!r}",
+        )
+    for key, count in distribution.items():
+        if not isinstance(key, str) or not _DIGITS_PATTERN.match(key):
+            raise EnvelopeError(
+                EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+                f"{field} keys for {event_type!r} must be decimal strings, "
+                f"got {key!r}",
+            )
+        _require_count_value(event_type, key, count)
+
+
+def _require_plp_distribution(
+    event_type: str, payload: Mapping[str, Any]
+) -> None:
+    """``plp_distribution``: decimal PLP id → count (SPEC-602 §6)."""
+    distribution = payload.get("plp_distribution")
+    if not isinstance(distribution, Mapping):
+        raise EnvelopeError(
+            EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+            f"payload 'plp_distribution' for {event_type!r} must be an "
+            f"object, got {distribution!r}",
+        )
+    for key, count in distribution.items():
+        if not isinstance(key, str) or not _DIGITS_PATTERN.match(key):
+            raise EnvelopeError(
+                EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+                f"plp_distribution keys for {event_type!r} must be decimal "
+                f"PLP id strings, got {key!r}",
+            )
+        _require_count_value(event_type, key, count)
+
+
+def _require_plp_id(
+    event_type: str, payload: Mapping[str, Any], field: str
+) -> None:
+    value = payload.get(field)
+    if (
+        not isinstance(value, int)
+        or isinstance(value, bool)
+        or not 0 <= value <= _T2MI_PLP_ID_MAX
+    ):
+        raise EnvelopeError(
+            EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+            f"payload {field!r} for {event_type!r} must be an integer in "
+            f"0..{_T2MI_PLP_ID_MAX} (TS 102 773 transport-prefix PLP id), "
+            f"got {value!r}",
+        )
+
+
+def _require_pid_scope(
+    event_type: str, payload: Mapping[str, Any]
+) -> None:
+    scope = payload.get("pid_scope")
+    if (
+        not isinstance(scope, list)
+        or not scope
+        or not all(
+            isinstance(pid, int)
+            and not isinstance(pid, bool)
+            and 0 <= pid <= _DIAGNOSIS_PID_MAX
+            for pid in scope
+        )
+    ):
+        raise EnvelopeError(
+            EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+            f"payload 'pid_scope' for {event_type!r} must be a non-empty "
+            f"list of PIDs in 0..{_DIAGNOSIS_PID_MAX} (13-bit DVB PID), "
+            f"got {scope!r}",
+        )
+
+
+def _require_derivation_ref(
+    event_type: str, payload: Mapping[str, Any]
+) -> None:
+    derivation = payload.get("derivation_ref")
+    if not isinstance(derivation, Mapping) or not derivation:
+        raise EnvelopeError(
+            EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+            f"payload 'derivation_ref' for {event_type!r} must be a "
+            "non-empty object of fingerprint references (SPEC-611 §5), "
+            f"got {derivation!r}",
+        )
+    for key, value in derivation.items():
+        if not isinstance(key, str) or not key:
+            raise EnvelopeError(
+                EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+                f"derivation_ref keys for {event_type!r} must be "
+                f"non-empty strings, got {key!r}",
+            )
+        if not isinstance(value, str) or not value:
+            raise EnvelopeError(
+                EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+                f"derivation_ref {key!r} for {event_type!r} must be a "
+                f"non-empty fingerprint string, got {value!r}",
+            )
 
 
 def _validate_observation_axes(
@@ -572,6 +1062,9 @@ def _require_evidence(event_type: str, payload: Mapping[str, Any]) -> None:
 
 
 __all__ = [
+    "BISS_EVENT_TYPES",
+    "BISS_MODES",
+    "BBFRAME_EVENT_TYPES",
     "COALESCABLE_EVENT_TYPES",
     "CRITERION_RESULTS",
     "DELIVERY_PROTECTED_EVENT_TYPES",
@@ -579,12 +1072,15 @@ __all__ = [
     "DIAGNOSIS_EVENT_TYPES",
     "DIAGNOSIS_SEVERITIES",
     "FAULT_EVENT_TYPES",
+    "GEN_EVENT_TYPES",
+    "GENERATION_LAYERS",
     "RECOVERY_EVENT_TYPES",
     "REGISTERED_EVENT_TYPES",
     "SCENARIO_EVENT_TYPES",
     "SIMULATION_CLOCK_EVENT_TYPES",
     "SIMULATION_RUN_EVENT_TYPES",
     "SIMULATION_SESSION_EVENT_TYPES",
+    "T2MI_EVENT_TYPES",
     "TOPOLOGY_EVENT_TYPES",
     "TS_EVENT_TYPES",
     "VERIFICATION_VERDICTS",

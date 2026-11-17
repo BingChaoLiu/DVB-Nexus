@@ -1,0 +1,247 @@
+{
+  "schema_version": 1,
+  "scenario_id": "5c010000-0000-4000-8000-000000000006",
+  "version": "1.0.0",
+  "title": "封装错位：T2MI PLP 映射（业务漂移到非期望 PLP）",
+  "difficulty": "intermediate",
+  "required_engine_versions": {
+    "fault_registry": ">=0.6.0",
+    "t2mi_nodes": ">=0.6.0"
+  },
+  "initial_topology": {
+    "topology_id": "topo-sc-06",
+    "revision": 1,
+    "nodes": [
+      {
+        "nodeId": "gen-0",
+        "nodeType": "ts_generator",
+        "config": {},
+        "ports": [
+          {
+            "portId": "ts_out",
+            "direction": "output",
+            "plane": "MPEG_TS",
+            "maxConnections": 1
+          }
+        ]
+      },
+      {
+        "nodeId": "enc-0",
+        "nodeType": "t2mi_encapsulator",
+        "config": {
+          "bbframe_params": {
+            "matype_value": "NM",
+            "upl": 188,
+            "n_ups": 3
+          },
+          "plp_assignment": [
+            {
+              "plp_id": 0,
+              "source_tag": "main"
+            }
+          ]
+        },
+        "ports": [
+          {
+            "portId": "inner_in",
+            "direction": "input",
+            "plane": "MPEG_TS",
+            "maxConnections": 1
+          },
+          {
+            "portId": "t2mi_out",
+            "direction": "output",
+            "plane": "T2MI",
+            "maxConnections": 1
+          }
+        ]
+      },
+      {
+        "nodeId": "mux-0",
+        "nodeType": "ts_mux",
+        "config": {},
+        "ports": [
+          {
+            "portId": "ts_in_1",
+            "direction": "input",
+            "plane": "MPEG_TS",
+            "maxConnections": 1
+          },
+          {
+            "portId": "ts_in_2",
+            "direction": "input",
+            "plane": "MPEG_TS",
+            "maxConnections": 1
+          },
+          {
+            "portId": "ts_out",
+            "direction": "output",
+            "plane": "MPEG_TS",
+            "maxConnections": 1
+          }
+        ]
+      },
+      {
+        "nodeId": "demux-0",
+        "nodeType": "t2mi_demux",
+        "config": {
+          "plp_filter": {
+            "mode": "expected",
+            "expected_plp": 0
+          }
+        },
+        "ports": [
+          {
+            "portId": "t2mi_in",
+            "direction": "input",
+            "plane": "T2MI",
+            "maxConnections": 1
+          },
+          {
+            "portId": "inner_out",
+            "direction": "output",
+            "plane": "MPEG_TS",
+            "maxConnections": 1
+          }
+        ]
+      },
+      {
+        "nodeId": "mon-0",
+        "nodeType": "ts_monitor",
+        "config": {},
+        "ports": [
+          {
+            "portId": "ts_in",
+            "direction": "input",
+            "plane": "MPEG_TS",
+            "maxConnections": 1
+          }
+        ]
+      }
+    ],
+    "connections": [
+      {
+        "connectionId": "conn-1",
+        "plane": "MPEG_TS",
+        "from": {
+          "nodeId": "gen-0",
+          "portId": "ts_out"
+        },
+        "to": {
+          "nodeId": "mux-0",
+          "portId": "ts_in_1"
+        }
+      },
+      {
+        "connectionId": "conn-2",
+        "plane": "MPEG_TS",
+        "from": {
+          "nodeId": "mux-0",
+          "portId": "ts_out"
+        },
+        "to": {
+          "nodeId": "enc-0",
+          "portId": "inner_in"
+        }
+      },
+      {
+        "connectionId": "conn-3",
+        "plane": "T2MI",
+        "from": {
+          "nodeId": "enc-0",
+          "portId": "t2mi_out"
+        },
+        "to": {
+          "nodeId": "demux-0",
+          "portId": "t2mi_in"
+        }
+      },
+      {
+        "connectionId": "conn-4",
+        "plane": "MPEG_TS",
+        "from": {
+          "nodeId": "demux-0",
+          "portId": "inner_out"
+        },
+        "to": {
+          "nodeId": "mon-0",
+          "portId": "ts_in"
+        }
+      }
+    ]
+  },
+  "simulation_config": {
+    "seed": 1234567,
+    "mode": "deterministic",
+    "clock": {
+      "mode": "deterministic",
+      "start_time_ns": 0,
+      "speed_num": 1,
+      "speed_den": 1,
+      "tick_quantum_ns": 1000000
+    }
+  },
+  "fault_plan": [
+    {
+      "fault_id": "fd000000-0000-4000-8000-00000000f100",
+      "fault_type": "T2MI_PLP_MISMATCH",
+      "target_id": "enc-0",
+      "parameters": {
+        "expected_plp": 0,
+        "actual_plp": 1
+      },
+      "activation": {
+        "kind": "session_start"
+      },
+      "expected_observations": [
+        "t2mi.plp_mismatch"
+      ]
+    }
+  ],
+  "objectives": [
+    "确认外层锁定与 T2-MI 包流正常（T2-MI 节点绿灯）但 Inner TS 无业务——「外层正常 ≠ 内层有业务」",
+    "用包检查器 T2-MI 视图核对 PLP 分布：业务在 PLP 1，demux 期望 PLP 0",
+    "恢复（空 fault_plan 重跑新 Run）并提交通关判定"
+  ],
+  "hints": [
+    {
+      "hint_id": "sc06-hint-1",
+      "trigger": "experiment opened",
+      "level": "nudge",
+      "content": "三级封装链是 外层 TS → BBFrame → Inner TS。先在基线 Run 确认 Inner TS 业务正常，再注入后对照 PLP 分布摘要（t2mi.stage_summary）。",
+      "requirement_ids": [
+        "REQ-SIM-204-P2"
+      ],
+      "standard_ref": null
+    },
+    {
+      "hint_id": "sc06-hint-2",
+      "trigger": "after Inject",
+      "level": "direction",
+      "content": "T2-MI 节点绿灯只说明外层在动。进入包检查器（view=t2mi）看 PLP 分布：业务是否漂移到了 demux 期望之外的 PLP？缺失 ≠ 零。",
+      "requirement_ids": [
+        "REQ-SIM-204-P2"
+      ],
+      "standard_ref": null
+    },
+    {
+      "hint_id": "sc06-hint-3",
+      "trigger": "before Diagnose",
+      "level": "solution",
+      "content": "T2MI_PLP_MISMATCH 把业务分配到 PLP 1，而 t2mi_demux 按 expected_plp=0 过滤——过滤结果为空且 t2mi.plp_mismatch 事件已发。恢复路径 = 空 fault_plan 重跑新 Run，verify 以 fault_inactive 判据提交。",
+      "requirement_ids": [
+        "REQ-SIM-204-P2"
+      ],
+      "standard_ref": null
+    }
+  ],
+  "pass_criteria": [
+    {
+      "criterion_id": "fault-cleared",
+      "kind": "fault_inactive",
+      "mandatory": true,
+      "fault_id": "fd000000-0000-4000-8000-00000000f100"
+    }
+  ],
+  "hidden_reference_solution": "恢复路径：空 fault_plan 重跑新 Run（同几何同 seed，字节级可复现）。verify 以 Inject Run 为 baseline_run_id、恢复 Run 为 recovery_run_id，fault_inactive 判据核对：① Inject Run 上 fault.* 生命周期闭合；② 恢复 Run prepared plan 不含该 fault_id；③ 恢复 Run journal 无该 fault 复发。教学锚点（roadmap §4 B1）：外层锁定正常、T2-MI 节点绿灯、内层无业务——demux 锁了数据 PLP 0 而业务在 PLP 1；PLP 选择与内层解析分层解耦（TS 102 773 §5.1）。"
+}

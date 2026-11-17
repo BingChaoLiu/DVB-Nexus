@@ -1,0 +1,76 @@
+{
+  "expectations": [
+    {
+      "event_type": "ts.packet_batch_observed",
+      "locator": {
+        "packet_index": 0
+      },
+      "detail": {
+        "pid": 0,
+        "continuity_counter": 0,
+        "payload_unit_start_indicator": true,
+        "transport_scrambling_control": 0
+      }
+    },
+    {
+      "event_type": "ts.packet_batch_observed",
+      "locator": {
+        "packet_index": 1
+      },
+      "detail": {
+        "pid": 256,
+        "continuity_counter": 0,
+        "payload_unit_start_indicator": true,
+        "transport_scrambling_control": 0
+      }
+    },
+    {
+      "event_type": "ts.packet_batch_observed",
+      "locator": {
+        "packet_index": 2
+      },
+      "detail": {
+        "pid": 8191,
+        "continuity_counter": 0,
+        "payload_unit_start_indicator": false,
+        "transport_scrambling_control": 0
+      }
+    },
+    {
+      "event_type": "ts.packet_batch_observed",
+      "locator": {
+        "packet_index": 3
+      },
+      "detail": {
+        "pid": 0,
+        "continuity_counter": 0,
+        "payload_unit_start_indicator": true,
+        "transport_scrambling_control": 0
+      }
+    },
+    {
+      "event_type": "ts.packet_batch_observed",
+      "locator": {
+        "packet_index": 4
+      },
+      "detail": {
+        "pid": 256,
+        "continuity_counter": 0,
+        "payload_unit_start_indicator": true,
+        "transport_scrambling_control": 0
+      }
+    },
+    {
+      "event_type": "ts.packet_batch_observed",
+      "locator": {
+        "packet_index": 5
+      },
+      "detail": {
+        "pid": 8191,
+        "continuity_counter": 0,
+        "payload_unit_start_indicator": false,
+        "transport_scrambling_control": 0
+      }
+    }
+  ]
+}

@@ -123,8 +123,8 @@ describe("ConnectionHint — §4.5 item 4 display (一行原因, 约 4 秒消失
     act(() => {
       vi.advanceTimersByTime(CONNECTION_HINT_VISIBLE_MS - 500);
     });
-    rerender(<ConnectionHint key="2" rejection="平面不符（当前仅支持 MPEG_TS）" />);
-    expect(screen.getByRole("status")).toHaveTextContent("平面不符（当前仅支持 MPEG_TS）");
+    rerender(<ConnectionHint key="2" rejection="平面不符（当前支持 MPEG_TS / T2MI）" />);
+    expect(screen.getByRole("status")).toHaveTextContent("平面不符（当前支持 MPEG_TS / T2MI）");
     act(() => {
       vi.advanceTimersByTime(CONNECTION_HINT_VISIBLE_MS - 100);
     });

@@ -50,13 +50,14 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import re
 import uuid
 from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any, Mapping
 
 from faults.definition import FaultActivation, FaultDefinition
-from faults.registry import MVP_FAULT_TYPES
+from faults.registry import KNOWN_FAULT_TYPES, LAYER_BY_FAULT_TYPE
 from simulation.clock import SimulationClockConfig
 from simulation.errors import SimulationError
 from simulation.state.graph import (
@@ -133,6 +134,13 @@ SCENARIO_CRITERION_KINDS = frozenset(
 
 _ACTIVATION_KINDS = frozenset({"packet_index", "session_start"})
 _SIMULATION_MODES = frozenset({"deterministic", "realtime"})
+
+#: BISS Mode 1 session word wire shape (SPEC-610 §5: 12 hex = 48 bit).
+_BISS_SW_WIRE_PATTERN = re.compile(r"^[0-9A-Fa-f]{12}$")
+#: BISS Mode E key wire shapes (SPEC-611 §5): ESW = 16 hex (64-bit DES
+#: block), Injected ID = 32 hex (128-bit, statically provisioned).
+_BISS_ESW_WIRE_PATTERN = re.compile(r"^[0-9A-Fa-f]{16}$")
+_BISS_INJECTED_ID_WIRE_PATTERN = re.compile(r"^[0-9A-Fa-f]{32}$")
 
 # Static executable-content markers (SPEC-205 §4: 导入/导出内容不得含可执行
 # 体——脚本、宏、动态表达式). Conservative denylist over string keys/values,
@@ -219,6 +227,64 @@ class ScenarioSolutionLeakError(ScenarioError):
 
 
 @dataclass(frozen=True)
+class BissMode1Config:
+    """The scenario document's optional ``biss`` section (SPEC-610 §5).
+
+    Construction-side BISS Mode 1 key declaration (camelCase wire
+    document; the biss keys themselves follow the SPEC-610 §5 names):
+    ``mode: "1" / session_word: string(12 hex) / pid_scope: [int] /
+    ca_pid: 0x1FFF``.  ``ca_pid`` is constant-semantics (BISS carries no
+    ECM, Tech 3292) and defaults to 8191 when the wire key is absent.
+
+    Mode E sections (``mode: "E"`` — encrypted_sw / injected_id) parse
+    into :class:`BissModeEConfig` (SPEC-611 wire face, #127).
+
+    Key discipline: the session word lives in the frozen config only —
+    error details are value-free (REQ-SIM-205-003) and the wire mapping
+    round-trips verbatim through ``raw``.
+    """
+
+    mode: str
+    # Key body is repr-suppressed (SPEC-610 §9 key discipline; mirrors
+    # ScenarioDocument.raw's repr=False precedent).
+    session_word: str = field(repr=False)
+    pid_scope: tuple[int, ...]
+    ca_pid: int = 8191  # 0x1FFF, Tech 3292 constant semantics
+
+
+@dataclass(frozen=True)
+class BissModeEConfig:
+    """The scenario document's ``biss`` section, Mode E face (SPEC-611 §5).
+
+    Construction-side BISS Mode E key declaration (camelCase wire
+    document):: ``mode: "E" / encrypted_sw: string(16 hex) /
+    injected_id: string(32 hex) / pid_scope: [int] / ca_pid: 0x1FFF /
+    ca_system_id: 0x2602``.  The ESW travels out of band; the 128-bit
+    Injected ID is statically provisioned in the receiver and **never
+    transmitted in the stream** (C1 teaching point — not dynamic data).
+
+    ``ca_pid`` and ``ca_system_id`` are constant-semantics fields (BISS
+    carries no ECM; 0x2602 is the BISS2 CA_system_ID, Tech 3292) and
+    default to 8191 / 9730 when the wire keys are absent.
+
+    Parse face owned by #127 (SPEC-611; the schema.py biss section is the
+    §10-6 ruling face, Mode E branch additive over #126's Mode 1 parse).
+    Key discipline: the key material lives in the frozen config only —
+    error details are value-free (REQ-SIM-205-003) and the wire mapping
+    round-trips verbatim through ``raw``.
+    """
+
+    mode: str
+    # Key bodies are repr-suppressed (SPEC-611 §5 key discipline; mirrors
+    # ScenarioDocument.raw's repr=False precedent).
+    encrypted_sw: str = field(repr=False)
+    injected_id: str = field(repr=False)
+    pid_scope: tuple[int, ...]
+    ca_pid: int = 8191  # 0x1FFF, Tech 3292 constant semantics
+    ca_system_id: int = 9730  # 0x2602, BISS2 (Tech 3292 v3) constant semantics
+
+
+@dataclass(frozen=True)
 class ScenarioHint:
     """One hint (SPEC-205 §6): ID / trigger / level / content / linked
     requirement ids / optional standard-clause reference.
@@ -283,6 +349,7 @@ class ScenarioDocument:
     pass_criteria: tuple[ScenarioCriterion, ...]
     hidden_reference_solution: str | None
     raw: Mapping[str, Any] = field(repr=False, compare=False)
+    biss: "BissMode1Config | BissModeEConfig | None" = None
     content_hash: str = ""
 
     def fault_ids(self) -> tuple[str, ...]:
@@ -632,19 +699,36 @@ def _parse_fault_plan(
             )
             if parsed is not None:
                 expected = parsed
+        # Phase 2 additive (SPEC-204 §Phase2, ticket #131 orchestrator
+        # ruling): a fault's ``layer`` is semantics, not wire state — the
+        # same convention as the run-wire face (#128, which derives it from
+        # ``LAYER_BY_FAULT_TYPE``).  The parse accepts an optional explicit
+        # ``layer`` key (pass-through; the layer-vs-fault-type constraint is
+        # owned by the faults.registry VALIDATING gate) and defaults to the
+        # registry's declared layer, so scenario documents never need to
+        # carry the key and the MVP four still resolve to "TS" exactly as
+        # before the dataclass default did.
+        layer: str | None = None
+        if "layer" in raw_fault:
+            layer = _require_non_empty_str(raw_fault, "layer", path, errors)
         if fault_id is not None:
             if fault_id in seen_ids:
                 errors.append(
                     f"{path}.fault_id: duplicate fault_id within the plan"
                 )
             seen_ids.add(fault_id)
-        if fault_type is not None and fault_type not in MVP_FAULT_TYPES:
+        if fault_type is not None and fault_type not in KNOWN_FAULT_TYPES:
             errors.append(
                 f"{path}.fault_type: {fault_type!r}-shaped value is not in "
-                "the MVP fault-type registry (SPEC-204 §6)"
+                "the fault-type registry (SPEC-204 §6 + §Phase2)"
             )
         if errors and any(detail.startswith(path) for detail in errors):
             continue
+        resolved_layer = (
+            layer
+            if layer is not None
+            else LAYER_BY_FAULT_TYPE.get(fault_type or "", "TS")
+        )
         faults.append(
             FaultDefinition(
                 fault_id=fault_id or "",
@@ -653,6 +737,7 @@ def _parse_fault_plan(
                 parameters=dict(parameters),
                 activation=activation,
                 expected_observations=expected,
+                layer=resolved_layer,
             )
         )
     return tuple(faults)
@@ -983,6 +1068,8 @@ def parse_scenario_document(data: Mapping[str, Any]) -> ScenarioDocument:
             criterion_integrity_errors,
         )
 
+    biss_config = _parse_biss(data.get("biss"), schema_errors)
+
     hidden = data.get("hidden_reference_solution")
     if hidden is not None and (not _is_str(hidden) or not hidden):
         schema_errors.append(
@@ -1030,8 +1117,184 @@ def parse_scenario_document(data: Mapping[str, Any]) -> ScenarioDocument:
         hints=hints,
         pass_criteria=pass_criteria,
         hidden_reference_solution=hidden,
+        biss=biss_config,
         raw=MappingProxyType(normalized),
         content_hash=scenario_content_hash(normalized),
+    )
+
+
+def _parse_biss(
+    raw_biss: Any, errors: list[str]
+) -> "BissMode1Config | BissModeEConfig | None":
+    """Parse the optional scenario ``biss`` section (SPEC-610 §5, #126;
+    Mode E branch SPEC-611 §5, #127).
+
+    The ``mode`` key dispatches the wire face: ``"1"`` → Mode 1 keys
+    (``session_word``, SPEC-610 §5), ``"E"`` → Mode E keys
+    (``encrypted_sw`` / ``injected_id``, SPEC-611 §5); anything else is
+    an explicit rejection (never a silent pass).
+
+    Value-free path-addressed errors (REQ-SIM-205-003): key material
+    never appears in the rejection details — key discipline extends to
+    the error face (SPEC-610 §9, SPEC-611 inherited).
+    """
+    base = "$.biss"
+    if raw_biss is None:
+        return None
+    if not isinstance(raw_biss, Mapping):
+        errors.append(f"{base}: must be a JSON object, got type "
+                      f"{type(raw_biss).__name__}")
+        return None
+    mode = _require_non_empty_str(raw_biss, "mode", base, errors)
+    if mode is not None and mode not in ("1", "E"):
+        errors.append(
+            f"{base}.mode: unsupported biss mode — this schema carries "
+            'Mode 1 ("1", SPEC-610 §5) and Mode E ("E", SPEC-611 §5)'
+        )
+        mode = None
+    if mode == "E":
+        return _parse_biss_mode_e(raw_biss, errors)
+    return _parse_biss_mode_1(raw_biss, errors)
+
+
+def _parse_pid_scope(raw_biss: Mapping[str, Any], base: str,
+                     errors: list[str]) -> tuple[int, ...] | None:
+    """The shared ``pid_scope`` wire rule (non-empty 13-bit int list)."""
+    raw_pid_scope = raw_biss.get("pid_scope")
+    pid_scope: tuple[int, ...] | None = None
+    if not isinstance(raw_pid_scope, list) or not raw_pid_scope:
+        errors.append(
+            f"{base}.pid_scope: must be a non-empty list of 13-bit PIDs"
+        )
+        return None
+    scope_errors: list[str] = []
+    parsed_pids: list[int] = []
+    for position, pid in enumerate(raw_pid_scope):
+        if not _is_int(pid) or not 0 <= pid <= 0x1FFF:
+            scope_errors.append(
+                f"{base}.pid_scope[{position}]: must be a 13-bit int "
+                "(0..0x1FFF)"
+            )
+        else:
+            parsed_pids.append(pid)
+    if scope_errors:
+        errors.extend(scope_errors)
+    else:
+        pid_scope = tuple(parsed_pids)
+    return pid_scope
+
+
+def _parse_biss_mode_1(
+    raw_biss: Mapping[str, Any], errors: list[str]
+) -> BissMode1Config | None:
+    """Mode 1 face: ``session_word`` keys (SPEC-610 §5, #126 parse)."""
+    base = "$.biss"
+    allowed_keys = {"mode", "session_word", "pid_scope", "ca_pid"}
+    unknown = sorted(set(raw_biss) - allowed_keys)
+    if unknown:
+        errors.append(
+            f"{base}: unknown key(s) {unknown} — the Mode 1 face declares "
+            "mode/session_word/pid_scope/ca_pid (SPEC-610 §5); the "
+            'encrypted_sw/injected_id keys are the Mode E ("E") face'
+        )
+    mode = raw_biss.get("mode")
+    session_word = raw_biss.get("session_word")
+    if not _is_str(session_word) or not _BISS_SW_WIRE_PATTERN.match(
+        session_word
+    ):
+        errors.append(
+            f"{base}.session_word: must be a 12-hex-character string "
+            "(48-bit session word, SPEC-610 §5)"
+        )
+        session_word = None
+    pid_scope = _parse_pid_scope(raw_biss, base, errors)
+    ca_pid = 8191
+    if "ca_pid" in raw_biss:
+        parsed_ca_pid = _require_int_value(raw_biss, "ca_pid", base, errors)
+        if parsed_ca_pid is not None and parsed_ca_pid != 8191:
+            errors.append(
+                f"{base}.ca_pid: constant-semantics field — BISS carries "
+                "no ECM and the CA_PID is fixed at 0x1FFF (Tech 3292)"
+            )
+    if errors:
+        return None
+    return BissMode1Config(
+        mode=str(mode),
+        session_word=str(session_word),
+        pid_scope=pid_scope,  # type: ignore[arg-type]
+        ca_pid=ca_pid,
+    )
+
+
+def _parse_biss_mode_e(
+    raw_biss: Mapping[str, Any], errors: list[str]
+) -> BissModeEConfig | None:
+    """Mode E face: ``encrypted_sw`` / ``injected_id`` keys (SPEC-611 §5,
+    #127 parse — the schema.py biss section is the §10-6 ruling face,
+    Mode E branch additive over #126's Mode 1 parse)."""
+    base = "$.biss"
+    allowed_keys = {
+        "mode",
+        "encrypted_sw",
+        "injected_id",
+        "pid_scope",
+        "ca_pid",
+        "ca_system_id",
+    }
+    unknown = sorted(set(raw_biss) - allowed_keys)
+    if unknown:
+        errors.append(
+            f"{base}: unknown key(s) {unknown} — the Mode E face declares "
+            "mode/encrypted_sw/injected_id/pid_scope/ca_pid/ca_system_id "
+            "(SPEC-611 §5); the session_word key is the Mode 1 face"
+        )
+    encrypted_sw = raw_biss.get("encrypted_sw")
+    if not _is_str(encrypted_sw) or not _BISS_ESW_WIRE_PATTERN.match(
+        encrypted_sw
+    ):
+        errors.append(
+            f"{base}.encrypted_sw: must be a 16-hex-character string "
+            "(64-bit encrypted session word, SPEC-611 §5)"
+        )
+        encrypted_sw = None
+    injected_id = raw_biss.get("injected_id")
+    if not _is_str(injected_id) or not _BISS_INJECTED_ID_WIRE_PATTERN.match(
+        injected_id
+    ):
+        errors.append(
+            f"{base}.injected_id: must be a 32-hex-character string "
+            "(128-bit statically provisioned Injected ID, SPEC-611 §5)"
+        )
+        injected_id = None
+    pid_scope = _parse_pid_scope(raw_biss, base, errors)
+    ca_pid = 8191
+    if "ca_pid" in raw_biss:
+        parsed_ca_pid = _require_int_value(raw_biss, "ca_pid", base, errors)
+        if parsed_ca_pid is not None and parsed_ca_pid != 8191:
+            errors.append(
+                f"{base}.ca_pid: constant-semantics field — BISS carries "
+                "no ECM and the CA_PID is fixed at 0x1FFF (Tech 3292)"
+            )
+    ca_system_id = 9730  # 0x2602, BISS2 (Tech 3292 v3)
+    if "ca_system_id" in raw_biss:
+        parsed_id = _require_int_value(
+            raw_biss, "ca_system_id", base, errors
+        )
+        if parsed_id is not None and parsed_id != 9730:
+            errors.append(
+                f"{base}.ca_system_id: constant-semantics field — the "
+                "Mode E/BISS2 face is fixed at 0x2602 (Tech 3292 v3, "
+                "SPEC-611 §2.1)"
+            )
+    if errors:
+        return None
+    return BissModeEConfig(
+        mode="E",
+        encrypted_sw=str(encrypted_sw),
+        injected_id=str(injected_id),
+        pid_scope=pid_scope,  # type: ignore[arg-type]
+        ca_pid=ca_pid,
+        ca_system_id=ca_system_id,
     )
 
 

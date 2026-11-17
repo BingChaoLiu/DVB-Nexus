@@ -294,10 +294,16 @@ class TestLooseEnvelopeTightPayload:
         # WITH a registered payload schema carry a minimal VALID payload
         # here (ts.* observation axes, #13 Q3-i; diagnosis.* SPEC-306 §7
         # shared shape, ticket #54; fault.* SPEC-204 §9 + recovery.* verdict
-        # shape, ticket #56) — every still-schemaless family keeps the
-        # bare-{} posture.
+        # shape, ticket #56; the Phase 2 encapsulation namespaces, ticket
+        # #129) — every still-schemaless family keeps the bare-{} posture.
+        from tests.unit.domain.observation.test_phase2_payload_registry import (
+            VALID_PAYLOADS,
+        )
+
         for event_type in sorted(REGISTERED_EVENT_TYPES):
-            if event_type.startswith("ts."):
+            if event_type in VALID_PAYLOADS:
+                payload = VALID_PAYLOADS[event_type]
+            elif event_type.startswith("ts."):
                 payload = {"source": "internal_parser", "confidence": "parsed"}
             elif event_type == "diagnosis.cleared":
                 payload = {

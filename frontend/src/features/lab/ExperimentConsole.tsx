@@ -52,6 +52,8 @@ import { currentActionGuide, deriveCurrentAction, type CurrentActionKey } from "
 import { deriveStepState, type LabFacts, type LabRunFact } from "./stepperState";
 import { Stepper } from "./Stepper";
 import { SolutionPanel, type SolutionErrorState, type SolutionFetchState } from "./SolutionPanel";
+import { GenerationFold } from "./GenerationFold";
+import type { GenJumpTarget, GenRunFace } from "./genEvents";
 
 const POLL_INTERVAL_MS = 200;
 const POLL_WINDOW_MS = 30_000;
@@ -502,6 +504,36 @@ export function ExperimentConsole({
     [navigate, sessionId],
   );
 
+  // 生成过程折叠区 jump wiring (SPEC-406 §Phase2): the #132 string contract —
+  // the Lab side builds the deep-link parameter string, appending the mapped
+  // `view` value (layer→view mapping lives in genEvents.ts; the inspector
+  // only reads the parameter, no inspector import beyond the read-only view
+  // vocabulary). pid carries the neutral 0 (layered packets have no TS PID;
+  // the layered structure views never consume it — see GenJumpTarget).
+  const jumpToGenerationPacket = useCallback(
+    (target: GenJumpTarget) => {
+      navigate(
+        `/monitor?session=${encodeURIComponent(sessionId)}&inspect_artifact=${encodeURIComponent(target.artifactId)}&inspect_pid=${target.pid}&inspect_packet=${target.packetIndex}&view=${target.view}`,
+      );
+    },
+    [navigate, sessionId],
+  );
+
+  // The fold's run registry face + activity flag (artifact resolution for
+  // the packet-card jumps, poll gating while a run executes).
+  const genRuns: ReadonlyArray<GenRunFace> = useMemo(
+    () =>
+      rowEntries.map((entry) => ({
+        runId: entry.view.run_id,
+        artifacts: (entry.view.artifacts ?? []).map((artifact) => ({
+          artifact_id: artifact.artifact_id,
+          kind: artifact.kind,
+        })),
+      })),
+    [rowEntries],
+  );
+  const genActive = useMemo(() => rowEntries.some((entry) => entry.view.status === "running"), [rowEntries]);
+
   const lifecycle = snapshotQuery.data?.lifecycle ?? null;
   const sectionClass = (key: SectionKey): string | undefined =>
     flashSection === key ? "dvb-lab-section-flash" : undefined;
@@ -666,6 +698,12 @@ export function ExperimentConsole({
 
         <section data-testid="lab-section-inspect" ref={(el) => { sectionRefs.current.inspect = el; }} className={sectionClass("inspect")}>
           <h3 className="dvb-lab-h3">证据 / 事件（Inspect）</h3>
+          {/* 生成过程 只读折叠区（SPEC-406 §Phase2）: stage progress rows +
+              sampled packet cards over the gen.* journal face — static
+              wayfinding (无动画/无时间线/无独立页面), sits inside the Inspect
+              anchor so Stepper locating is untouched; gen.* 仅分层 run 发射,
+              v1 runs answer the honest empty face. */}
+          <GenerationFold sessionId={sessionId} runs={genRuns} active={genActive} onJump={jumpToGenerationPacket} />
           {eventsQuery.isPending ? (
             <EmptyState title="加载中" note="读取 journal 事件…" />
           ) : eventsQuery.isError ? (

@@ -36,9 +36,10 @@ ConnectionId = Annotated[str, StringConstraints(min_length=1)]
 class SignalPlane(str, Enum):
     """The five signal planes (SPEC-003 section 2.1, ADR-0005 decision 5).
 
-    Extension slots stay in the enum; MVP actually enables ``MPEG_TS`` only
-    (see ``MVP_ENABLED_PLANES``). Whether two ports may be linked is a
-    validator concern, not a model invariant.
+    Extension slots stay in the enum; the enabled set is Phase-scoped
+    (see ``MVP_ENABLED_PLANES``: MPEG_TS since MVP, T2MI since Phase 2).
+    Whether two ports may be linked is a validator concern, not a model
+    invariant.
     """
 
     RF = "RF"
@@ -56,10 +57,15 @@ class PortDirection(str, Enum):
     BIDIRECTIONAL = "bidirectional"
 
 
-#: Planes actually enabled for MVP links (ADR-0002, ADR-0005 decision 5:
-#: "MVP only enables MPEG_TS, links on non-enabled planes are forbidden").
-#: Data constant for the validator to consume; not enforced here.
-MVP_ENABLED_PLANES = frozenset({SignalPlane.MPEG_TS})
+#: Planes actually enabled for links (SPEC-003 §Phase2, ticket #121:
+#: the enabled set expands from {MPEG_TS} to {MPEG_TS, T2MI} for the
+#: Phase 2 encapsulation layer — ADR-0010 §3; ``RF``/``SEC_CONTROL``/
+#: ``IP`` stay disabled for Phase 3/4, per ADR-0002 / ADR-0005 decision 5
+#: "links on non-enabled planes are forbidden").  Data constant for the
+#: validator to consume; not enforced here.  The frontend mirror
+#: (``frontend/src/features/topologies/nodeTypes.ts``) is updated by
+#: ticket #135.
+MVP_ENABLED_PLANES = frozenset({SignalPlane.MPEG_TS, SignalPlane.T2MI})
 
 
 class TopologyPort(DomainModel):

@@ -17,9 +17,9 @@ row).
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Annotated, Any, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 # --- §6 envelope -----------------------------------------------------------------
@@ -242,6 +242,175 @@ class ExportResponseDTO(BaseModel):
     meta: ObservationMetaDTO = Field(default_factory=ObservationMetaDTO)
 
 
+# --- Phase 2 event payload faces (ticket #129) -------------------------------------
+#
+# The four encapsulation namespaces' payload shapes (SPEC-303 §Phase2)
+# as Pydantic models — the same frozen key sets the registry validators
+# enforce (``domain.observation.registry``; the payload schemas travel
+# the WS journal frames, which are outside OpenAPI). Mirror discipline:
+# the round-trip unit test validates each model against the registry
+# test fixtures AND re-checks the dumps through ``validate_payload`` —
+# the two faces cannot drift apart silently. The api layer cannot import
+# ``domain`` (import-linter C6), so the vocabularies are restated here
+# and pinned identical by tests (the ticket #54 precedent).
+#
+# These payloads are NOT observation faces: no source/confidence axes.
+
+
+class _StrictDTO(BaseModel):
+    """snake_case wire contract: extra keys are a schema violation."""
+
+    model_config = ConfigDict(extra="forbid")
+
+
+#: The generation ``layer`` axis (CONTEXT.md 作用层; ADR-0010 §3).
+GenerationLayer = Literal["TS", "BBFRAME", "T2MI", "BISS"]
+
+#: The ``biss.*`` mode vocabulary — owner is ``ts.biss.cissa``.
+BissMode = Literal["1", "E", "2"]
+
+#: The T2-MI packet payload-kind vocabulary (#122 三态).
+T2miPayloadKind = Literal["bbframe", "padding", "unknown"]
+
+#: 13-bit DVB PID (SPEC-301 §3 correlation.pid).
+Pid = Annotated[int, Field(ge=0, le=8191)]
+
+#: 8-bit transport-prefix PLP id (TS 102 773).
+PlpId = Annotated[int, Field(ge=0, le=255)]
+
+#: Lowercase 64-hex digest (the sampled slot's sha256).
+Sha256 = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+
+
+class T2miStageSummaryPayloadDTO(_StrictDTO):
+    """``t2mi.stage_summary`` — the per-stage transport summary (#122).
+
+    Distributions map decimal id / kind strings to packet counts; the
+    PLP distribution covers BBFRAME packets only (SPEC-602 §6). 摘要面 —
+    NOT an observation stream (禁把 PLP 分布当观测流).
+    """
+
+    packet_count: int = Field(ge=0)
+    padding_count: int = Field(ge=0)
+    packet_type_distribution: dict[T2miPayloadKind, int]
+    plp_distribution: dict[str, int]
+
+
+class BusinessAbsentEvidenceDTO(_StrictDTO):
+    """``t2mi.plp_mismatch`` evidence object (#124; 缺失 ≠ 零)."""
+
+    plps_seen: list[PlpId]
+    bbframe_packet_count: int = Field(ge=0)
+    filtered_packet_count: int = Field(ge=0)
+    total_packet_count: int = Field(ge=0)
+
+
+class T2miPlpMismatchPayloadDTO(_StrictDTO):
+    """``t2mi.plp_mismatch`` — the B1 candidate (#124).
+
+    ``actual_plp`` is honest about ambiguity: the single observed PLP
+    when the stream carries exactly one, ``None`` otherwise — the full
+    observation travels in ``business_absent_evidence``.
+    """
+
+    expected_plp: PlpId
+    actual_plp: PlpId | None
+    business_absent_evidence: BusinessAbsentEvidenceDTO
+
+
+class BbframeStageSummaryPayloadDTO(_StrictDTO):
+    """``bbframe.stage_summary`` — the per-stage frame summary (#123).
+
+    ``n_ups_distribution`` maps decimal UP counts to frame counts;
+    ``stuffing_ratio`` is tail stuffing bytes / data-field bytes.
+    """
+
+    frame_count: int = Field(ge=0)
+    n_ups_distribution: dict[str, int]
+    stuffing_ratio: Annotated[float, Field(ge=0, le=1)]
+
+
+class BbframeRecoveryFailedPayloadDTO(_StrictDTO):
+    """``bbframe.recovery_failed`` — the B2 recovery evidence (#123).
+
+    The SPEC-307 BBHEADER_SYNC_FAULT rule's expected evidence symbol;
+    the count covers CRC-8 failures (+malformed_short) per #123 REPORT.
+    """
+
+    failure_count: int = Field(ge=0)
+    first_failed_frame_index: Annotated[int, Field(ge=0)] | None
+
+
+class BissScrambleAppliedPayloadDTO(_StrictDTO):
+    """``biss.scramble_applied`` — the shared scrambler face (#126/#127).
+
+    ``key_fingerprint`` is a fingerprint reference, never key material
+    (SPEC-610 §9). ``mutation_log_ref`` is ``None`` on the emission seam
+    (the runtime binds the log artifact at delivery) — the KEY stays
+    present (honest None, never an absent face). The mode-coupled key-set
+    rule (Mode 1 = exactly the five shared keys; the derived modes carry
+    EITHER the bare five on the construction path or + the derivation
+    face on the fault path) is the REGISTRY validator's authority
+    (``domain.observation.registry``); the optional ``derivation_ref`` /
+    ``mismatch_variants`` fields mirror the #127 derivation face here —
+    the redacted chain fingerprints (esw/injected_id/session_word/
+    ciss_key) plus the declared wrong-key variants, making the two 错配
+    evidence faces distinguishable (SPEC-611 §8).
+    """
+
+    pid_scope: list[Pid] = Field(min_length=1)
+    packet_count: int = Field(ge=0)
+    key_fingerprint: str = Field(min_length=1)
+    mutation_log_ref: str | None
+    mode: BissMode
+    derivation_ref: dict[str, str] | None = None
+    mismatch_variants: list[str] | None = None
+
+
+class BissDescrambleFailedPayloadDTO(_StrictDTO):
+    """``biss.descramble_failed`` — 解扰失败 ≠ 码流损坏 (ADR-0011 §4).
+
+    ``failed_indices_sample`` is bounded (≤16) so the evidence stays
+    bounded; ``key_fingerprint_ref`` links the candidate to the key
+    fingerprint (互链 with the mutation log, never the key itself).
+    """
+
+    pid_scope: list[Pid] = Field(min_length=1)
+    failed_indices_sample: list[Annotated[int, Field(ge=0)]] = Field(
+        max_length=16
+    )
+    self_check_kind: str = Field(min_length=1)
+    key_fingerprint_ref: str = Field(min_length=1)
+    mode: BissMode
+
+
+class GenStageStartedPayloadDTO(_StrictDTO):
+    """``gen.stage_started`` — one pipeline stage begins (#128)."""
+
+    layer: GenerationLayer
+
+
+class GenStageCompletedPayloadDTO(_StrictDTO):
+    """``gen.stage_completed`` — one pipeline stage ends (#128)."""
+
+    layer: GenerationLayer
+    item_count: int = Field(ge=0, description="The stage's slot count.")
+
+
+class GenPacketSampledPayloadDTO(_StrictDTO):
+    """``gen.packet_sampled`` — one sampled slot (#128; window policy).
+
+    Stage-level + sampled-packet-level only: the full per-packet stream
+    is closed (#112). ``byte_size`` is the slot's byte length; ``sha256``
+    is the slot bytes' digest (the packet inspector's jump target).
+    """
+
+    layer: GenerationLayer
+    packet_index: int = Field(ge=0)
+    byte_size: int = Field(ge=0)
+    sha256: Sha256
+
+
 # --- record → DTO mappers (duck-typed; C6: no domain imports) ----------------------
 
 
@@ -328,11 +497,21 @@ __all__ = [
     "AlertRecordDTO",
     "AlertsDataDTO",
     "AlertsResponseDTO",
+    "BbframeRecoveryFailedPayloadDTO",
+    "BbframeStageSummaryPayloadDTO",
+    "BissDescrambleFailedPayloadDTO",
+    "BissMode",
+    "BissScrambleAppliedPayloadDTO",
+    "BusinessAbsentEvidenceDTO",
     "EventsDataDTO",
     "EventsResponseDTO",
     "ExportCreateBody",
     "ExportDataDTO",
     "ExportResponseDTO",
+    "GenPacketSampledPayloadDTO",
+    "GenStageCompletedPayloadDTO",
+    "GenStageStartedPayloadDTO",
+    "GenerationLayer",
     "HealthDataDTO",
     "HealthDimensionDTO",
     "HealthResponseDTO",
@@ -346,6 +525,9 @@ __all__ = [
     "ObservationScopeDTO",
     "SummaryDataDTO",
     "SummaryResponseDTO",
+    "T2miPayloadKind",
+    "T2miPlpMismatchPayloadDTO",
+    "T2miStageSummaryPayloadDTO",
     "TimelineDataDTO",
     "TimelineLaneDTO",
     "TimelineResponseDTO",

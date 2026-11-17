@@ -3,12 +3,26 @@
 // any diagnosis/verdict semantics — CONTEXT.md 诊断/通关 bans apply). All
 // non-ready branches render explicit states; no branch may masquerade as
 // success (SPEC-404 §8).
+//
+// SPEC-404 §Phase2 (#132): the `view` param is additive — `ts` (default)
+// keeps the EXACT MVP face below (zero regression); `t2mi`/`bbframe` render
+// the layered structure JSON views. `bissEvidence` (optional prop, #134/#136
+// wiring) adds the BISS 加扰态标注 face; the payload-layer scrambled/clear
+// annotation in the ts face is wire-derived (TS header scrambling bits).
 import "./packet-inspector.css";
 import type { DiagnosisEvidenceDTO } from "../types";
 import { MONITOR_EMPTY_STATE_COPY } from "../copy";
 import { ThreeQuestionState } from "../ThreeQuestionState";
+import { BissAnnotation } from "./BissAnnotation";
+import { BBFrameStructureView } from "./BBFrameStructureView";
 import { type HexRow, TS_SYNC_BYTE } from "./decode";
+import { T2miStructureView } from "./T2miStructureView";
 import { usePacketDrillDown } from "./usePacketDrillDown";
+import {
+  DEFAULT_PACKET_INSPECTOR_VIEW,
+  type BissEvidenceAnnotation,
+  type PacketInspectorView,
+} from "./viewTypes";
 
 const AFC_LABEL: Record<number, string> = {
   0b00: "reserved/invalid（SPEC-100 §3）",
@@ -61,11 +75,19 @@ function HexDump({ rows }: { rows: HexRow[] }) {
 export function PacketInspectorSection({
   locator,
   onClose,
+  view = DEFAULT_PACKET_INSPECTOR_VIEW,
+  bissEvidence = null,
 }: {
   locator: DiagnosisEvidenceDTO | null;
   onClose: () => void;
+  /** SPEC-404 §Phase2 view param (deep-link `view=t2mi|bbframe|ts`; default
+   * `ts` = the MVP face below, zero regression). */
+  view?: PacketInspectorView;
+  /** Optional BISS evidence references (#134 journal face / #136 wiring;
+   * key material never crosses — fingerprint reference only). */
+  bissEvidence?: BissEvidenceAnnotation | null;
 }) {
-  const state = usePacketDrillDown(locator);
+  const state = usePacketDrillDown(locator, view);
 
   if (locator === null || state.phase === "idle") {
     // §4.6 Monitor 组行 7(文案逐字):未进入下钻时的显式指路面;不渲染
@@ -79,7 +101,8 @@ export function PacketInspectorSection({
         <span className="dvb-pi-title">包证据下钻</span>
         <span className="dvb-pi-locator">
           artifact {locator.artifact_id} / <span data-testid="inspect-locator-pid">pid {locator.pid}</span> /{" "}
-          <span data-testid="inspect-packet-index">packet {locator.packet_index}</span>
+          <span data-testid="inspect-packet-index">packet {locator.packet_index}</span> /{" "}
+          <span data-testid="inspect-view">view {view}</span>
         </span>
         <button type="button" className="dvb-pi-close" onClick={onClose}>
           关闭
@@ -88,6 +111,29 @@ export function PacketInspectorSection({
 
       {state.phase === "loading-meta" && <p className="dvb-pi-line" data-testid="inspect-loading">读取 artifact 元数据…</p>}
       {state.phase === "loading-content" && <p className="dvb-pi-line" data-testid="inspect-loading">按 Range 取单包…</p>}
+
+      {state.phase === "structure-loading" && (
+        <p className="dvb-pi-line" data-testid="inspect-structure-loading">
+          读取结构解析 JSON（view={state.view}，json_map 生成链）…
+        </p>
+      )}
+      {state.phase === "structure-error" && (
+        <p className="dvb-pi-error" data-testid="inspect-structure-error">
+          结构视图读取失败（view={state.view}）：HTTP {state.status} · {state.errorCode} · {state.message}
+        </p>
+      )}
+      {state.phase === "structure-ready" && state.view === "t2mi" && (
+        <>
+          <T2miStructureView structure={state.structure} locator={locator} />
+          {bissEvidence !== null && <BissAnnotation evidence={bissEvidence} />}
+        </>
+      )}
+      {state.phase === "structure-ready" && state.view === "bbframe" && (
+        <>
+          <BBFrameStructureView structure={state.structure} />
+          {bissEvidence !== null && <BissAnnotation evidence={bissEvidence} />}
+        </>
+      )}
 
       {state.phase === "meta-invalid" && (
         <p className="dvb-pi-error" data-testid="inspect-meta-invalid">
@@ -136,6 +182,12 @@ export function PacketInspectorSection({
               note={state.view.header.pid_is_null ? "0x1FFF = null 包" : undefined}
             />
             <FieldRow name="transport_scrambling_control" testid="inspect-field-scrambling" value={bits2(state.view.header.transport_scrambling_control)} note={SCRAMBLING_LABEL[state.view.header.transport_scrambling_control]} />
+            <FieldRow
+              name="payload 加扰态"
+              testid="inspect-biss-state"
+              value={state.view.header.transport_scrambling_control === 0b00 ? "clear" : "scrambled"}
+              note="BISS 加扰态标注（payload 层，scrambling bits wire 事实，SPEC-404 §Phase2）"
+            />
             <FieldRow name="adaptation_field_control" testid="inspect-field-afc" value={bits2(state.view.header.adaptation_field_control)} note={AFC_LABEL[state.view.header.adaptation_field_control]} />
             <FieldRow name="continuity_counter" testid="inspect-field-cc" value={String(state.view.header.continuity_counter)} note="per-PID 连续" />
 
@@ -172,6 +224,7 @@ export function PacketInspectorSection({
               )
             )}
           </div>
+          {bissEvidence !== null && <BissAnnotation evidence={bissEvidence} />}
         </>
       )}
     </section>

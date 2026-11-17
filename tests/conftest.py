@@ -148,6 +148,30 @@ def tsduck() -> "TSDuckProbe":
 
 
 @pytest.fixture
+def dvbcsa_dll() -> "DvbcsaDllProbe":
+    """libdvbcsa_bs.dll availability probe (SPEC-610 §8 / ADR-0011 §5).
+
+    The DLL is a local build artifact (tools/build_dvbcsa_dll.sh; ruling
+    §10-2: 产物不入库、CI 不构建).  Missing DLL → explicit ``pytest.skip``
+    with a summary-visible reason (tests/README §6 / brief §5-11: 缺失不冒
+    绿 — on CI these tests are honestly NOT RUN, mirroring the SPEC-506
+    TSDuck precedent).  Available → the frozen probe (path resolved via
+    ``DVB_NEXUS_DVBCSA_DLL`` or the OS library search paths).
+    """
+    from tests._support.dvbcsa_probe import DvbcsaDllProbe, probe_dvbcsa_dll
+
+    probe = probe_dvbcsa_dll()
+    if not probe.available:
+        pytest.skip(
+            f"dvbcsa: libdvbcsa_bs.dll unavailable — {probe.detail} "
+            "(explicit skip per SPEC-610 §8; CI NOT RUN semantics, "
+            "ADR-0011 §5)"
+        )
+    assert isinstance(probe, DvbcsaDllProbe)
+    return probe
+
+
+@pytest.fixture
 def session_run() -> SessionRunFactory:
     """SPEC-505 §4 `session_run`: deterministic session/run factory
     (SPEC-200/203).

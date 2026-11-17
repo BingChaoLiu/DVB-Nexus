@@ -1,0 +1,27 @@
+{
+  "vector_id": "t2mi-unknown-type",
+  "kind": "faulted_ts",
+  "related_specs": [
+    "SPEC-600"
+  ],
+  "generator_version": "tools/golden_t2mi_fault_transform.py v2 (independent packet_type-override transform with CRC recompute; no src/ts involvement)",
+  "config_hash": null,
+  "sha256": "sha256:ff146d1504734e60023f3c64135854bc35c812498143a4467591dfab39a8937f",
+  "packet_count": 3,
+  "fault_plan_ref": "t2mi-minimal",
+  "fault_parameters": {
+    "layer": "T2MI",
+    "transform": "packet_type_override",
+    "target_packet_index": 0,
+    "type_byte_offset": 0,
+    "new_packet_type": 85,
+    "undefined_value_note": "0x55 is outside the TS 102 773 §5.1 packet_type table and is not the 0xFF stuffing identity",
+    "crc_recomputed": true,
+    "expected_state": "payload_kind=unknown on packet 0 with crc32_valid=True, parse continues"
+  },
+  "verification": {
+    "path": "bit-level-review",
+    "direction": "independent-packet-type-override-transform→self-parse (packet 0 payload_kind=unknown with the CRC face green — type face isolated, no packet dropped, continuation proof)",
+    "evidence_ref": "docs/test-vectors/golden/t2mi-unknown-type/t2mi-unknown-type.verification.md"
+  }
+}

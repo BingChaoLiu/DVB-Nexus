@@ -50,6 +50,14 @@ class FaultDefinition:
     in neither validation nor the plan fingerprint (identity is not
     semantics; the same plan re-issued with regenerated ids keeps the
     fingerprint stable).
+
+    ``layer`` is the Phase 2 pipeline attribute (SPEC-204 §Phase2 /
+    ADR-0010 §3): ∈ {``TS``, ``BBFRAME``, ``T2MI``, ``BISS``}, default
+    ``"TS"`` so every MVP plan constructs and fingerprints exactly as
+    before (additive; the default also matches the MVP rule that the four
+    MVP fault types are TS-layer faults).  The runtime routes the fault to
+    the matching pipeline layer's filter instance; ``faults.registry``
+    validates the value against the fault type's declared layer.
     """
 
     fault_id: str
@@ -62,3 +70,4 @@ class FaultDefinition:
         )
     )
     expected_observations: tuple[str, ...] = ()
+    layer: str = "TS"

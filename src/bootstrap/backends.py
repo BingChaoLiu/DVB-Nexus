@@ -419,6 +419,16 @@ class SimulationSessionsBackend:
             raise _translate_simulation_error(exc) from exc
         return _snapshot_to_dto(snapshot)
 
+    def scenario_id_for(self, session_id: str) -> "str | None":
+        """The session's scenario binding (SPEC-408 §6 provenance read).
+
+        #128 composition face: the runs backend resolves the layered
+        pipeline construction face (the scenario ``biss`` section) through
+        this binding. ``None`` = plain (non-scenario) session.
+        """
+        record = self._session_meta.get(session_id)
+        return record.scenario_id if record is not None else None
+
     async def list_sessions(self, *, limit: int) -> list[SessionListItemDTO]:
         """The SPEC-408 §6.1 read face (ticket #94): newest-first, capped
         by ``limit``, no pagination.
@@ -620,7 +630,13 @@ def _fault_from_dto(dto: FaultDefinitionDTO) -> Any:
 
     Absent ``fault_id`` is server-generated uuid4 — identity, not
     semantics; it never enters the prepare fingerprint.
+
+    ``layer`` (Phase 2, SPEC-204 §Phase2) is derived from the registry's
+    declared layer map (#128 composition face — the wire DTO carries no
+    layer field; a fault's layer is semantics, not wire state).  The MVP
+    four derive to "TS" exactly as before.
     """
+    from faults.registry import LAYER_BY_FAULT_TYPE
     from simulation.fault_plan import FaultActivation, FaultDefinition
 
     return FaultDefinition(
@@ -632,6 +648,7 @@ def _fault_from_dto(dto: FaultDefinitionDTO) -> Any:
             kind=dto.activation.kind, packet_index=dto.activation.packet_index
         ),
         expected_observations=tuple(dto.expected_observations),
+        layer=LAYER_BY_FAULT_TYPE.get(dto.fault_type, "TS"),
     )
 
 
@@ -689,6 +706,7 @@ class SimulationRunsBackend:
         sink: StoreArtifactSink,
         allocator: RunIdAllocator,
         now_ms: Optional[Callable[[], int]] = None,
+        pipeline_resolver: Optional[Callable[[str], Any]] = None,
     ) -> None:
         self._ts_runtime = ts_runtime
         self._runtime = runtime
@@ -698,6 +716,10 @@ class SimulationRunsBackend:
         # SPEC-408 §6 metadata clock (ticket #94): injectable for
         # deterministic ordering tests; default is wall clock in ms.
         self._now_ms = now_ms or _default_now_ms
+        # #128 layered-pipeline construction face: the composition root
+        # resolves the session's scenario ``biss`` section (construction
+        # scrambling, ADR-0011 §3) into a LayerPipelineConfig.
+        self._pipeline_resolver = pipeline_resolver
         self._jobs: dict[str, _JobRecord] = {}
 
     async def submit(
@@ -725,10 +747,15 @@ class SimulationRunsBackend:
             )
         config = _config_from_dto(request.config)
         plan = tuple(_fault_from_dto(fault) for fault in request.fault_plan)
+        pipeline = (
+            self._pipeline_resolver(session_id)
+            if self._pipeline_resolver is not None
+            else None
+        )
         try:
             # Prepare binds the plan into the fingerprint and validates
             # BEFORE any scheduling (ADR-0007 item 2, AC-204-01).
-            prepared = self._ts_runtime.prepare(spec, config, plan)
+            prepared = self._ts_runtime.prepare(spec, config, plan, pipeline=pipeline)
         except TSPlanInvalidError as exc:
             raise SemanticValidationError(
                 "SIM_TS_PLAN_INVALID",
@@ -888,6 +915,26 @@ class ArtifactStoreBackend:
                 )
                 raise ServiceUnavailableError(corrupt.code, str(corrupt)) from corrupt
         return data
+
+    def structure_view(
+        self,
+        artifact_id: str,
+        *,
+        view: str = "ts",
+        expected_plp: int | None = None,
+    ) -> dict:
+        """The layered structure JSON face (#128 composition binding).
+
+        The json_map chain assembly lives in the application layer (the
+        frozen upstream projections, 禁手写 mirror); the backend binds it
+        to the artifact read boundary (content via the verified read).
+        """
+        from application.analysis.structure import (
+            structure_view as assemble_structure_view,
+        )
+
+        data = self.read_content(artifact_id)
+        return assemble_structure_view(data, view, expected_plp=expected_plp)
 
 
 

@@ -25,6 +25,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from api.dto.encapsulation import BissMode1ConfigDTO, BissModeEConfigDTO
+
 __all__ = [
     "ScenarioDetailDTO",
     "ScenarioSolutionDTO",
@@ -68,6 +70,15 @@ class ScenarioDetailDTO(_StrictDTO):
     initial_topology: dict[str, Any]
     simulation_config: dict[str, Any]
     fault_plan: list[dict[str, Any]]
+    biss: BissMode1ConfigDTO | BissModeEConfigDTO | None = Field(
+        default=None,
+        description=(
+            "The scenario's optional ``biss`` section (SPEC-610 §5 / "
+            "SPEC-611 §5 wire, ticket #129; absent on non-BISS scenarios). "
+            "Key material rides the document verbatim — the reveal/leak "
+            "disciplines (REQ-SIM-205-003) are the loader's, unchanged."
+        ),
+    )
     objectives: list[str]
     hints: list[dict[str, Any]]
     pass_criteria: list[dict[str, Any]]

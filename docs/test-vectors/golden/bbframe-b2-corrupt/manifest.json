@@ -1,0 +1,28 @@
+{
+  "vector_id": "bbframe-b2-corrupt",
+  "kind": "faulted_ts",
+  "related_specs": [
+    "SPEC-601"
+  ],
+  "generator_version": "tools/golden_bbframe_fault_transform.py v1 (independent EN 302 755 §5.1.7 field transform; no src/ts involvement)",
+  "config_hash": null,
+  "sha256": "sha256:205a3c2f41d2cdd80088a215d190de0321f1e3ad56b914beda42b916de2464d8",
+  "packet_count": 3,
+  "fault_plan_ref": "bbframe-nups3",
+  "fault_parameters": {
+    "layer": "BBFRAME",
+    "fault_type": "BBHEADER_SYNC_FAULT",
+    "field": "SYNCD",
+    "mode": "corrupt",
+    "target_frame_index": 0,
+    "target_byte_offset": 7,
+    "corrupt_mask": 2,
+    "crc8_recomputed": false,
+    "expected_state": "crc8_valid=false on frame 0, UP boundaries withheld → bbframe.recovery_failed evidence (TSDuck 3.45 propagates this silently, #104)"
+  },
+  "verification": {
+    "path": "bit-level-review",
+    "direction": "independent-corrupt-transform→self-parse (frame 0 SYNCD corrupt face pinned byte-exactly; TSDuck 3.45 has zero user-side BBFrame capability, #104 — no L2 cross possible, NOT TRUSTED framing per ruling §10-9)",
+    "evidence_ref": "docs/test-vectors/golden/bbframe-b2-corrupt/bbframe-b2-corrupt.verification.md"
+  }
+}
