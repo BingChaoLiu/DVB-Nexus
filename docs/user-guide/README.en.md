@@ -3,7 +3,9 @@
 English | [简体中文](README.zh-CN.md)
 
 > **Status**: this guide grows with the software. It currently covers every
-> user-visible feature of the MVP (TS-first eight-step closed loop).
+> user-visible feature of the MVP (TS-first eight-step closed loop) and of
+> Phase 2, the advanced encapsulation layer (T2-MI three-level
+> encapsulation, BISS scrambling/descrambling).
 > Domain vocabulary is authoritative in [`CONTEXT.md`](../../CONTEXT.md);
 > this guide is about *how to use it*, not a re-statement of definitions.
 
@@ -36,11 +38,13 @@ DVB-Nexus (DVB Sandbox) is a single-machine engineering platform combining
   produces link state on its own. The MVP focuses on the MPEG-TS transport
   layer: 188-byte packets and the `analysis_only` generation profile
   (structurally compliant, parseable, analyzable; payload is deterministic
-  synthetic data — playback is explicitly not promised).
+  synthetic data — playback is explicitly not promised). Phase 2 adds the
+  advanced encapsulation layer: T2-MI → BBFrame → Inner TS three-level
+  encapsulation and BISS Mode 1 / Mode E scrambling/descrambling.
 - **Eight-step closed loop**: Create → Generate → Inject → Analyze →
   Diagnose → Inspect → Recover → Verify, with real data and traceable
   evidence at every step.
-- **Training range (Lab)**: preset fault scenarios (SC-01 ~ SC-05). After a
+- **Training range (Lab)**: preset fault scenarios (SC-01 ~ SC-09). After a
   fault is injected, the learner repairs it and the experiment is judged on
   the evidence of the new post-repair run (PASS / FAIL / INCONCLUSIVE).
 
@@ -126,18 +130,21 @@ Three pages in the top navigation: **Topologies** → **Monitor** → **Lab**.
 
 A React Flow canvas for link topology editing:
 
-- **Node palette**: four MVP node types —
+- **Node palette**: node types —
   | Node type | Description |
   |---|---|
   | `ts_generator` | produces an MPEG-TS stream per its GeneratorConfig; the Generate anchor of the closed loop |
   | `ts_mux` | muxes multiple TS inputs into one output |
   | `ts_demux` | splits one TS input into two outputs (receive-side split) |
   | `ts_monitor` | passive observation endpoint where Analyze/Inspect evidence lands |
+  | `t2mi_encapsulator` (T2-MI encapsulator) | packs Inner TS into a T2-MI packet stream via BBFrame framing (Phase 2) |
+  | `t2mi_demux` (T2-MI demux) | T2-MI packet stream → BBFrame parsing → Inner TS reconstruction (Phase 2) |
 
 - **Wiring**: ports have direction (input/output) and max-connection
-  constraints; illegal connections are rejected up front. Only the
-  `MPEG_TS` plane is enabled for MVP (RF / SEC_CONTROL / T2MI / IP planes
-  are reserved extension slots).
+  constraints; illegal connections are rejected up front. Enabled signal
+  planes: `MPEG_TS` and `T2MI` (since Phase 2; RF / SEC_CONTROL / IP planes
+  are reserved extension slots). A three-level encapsulation subgraph =
+  generator → encapsulator → demux → monitor.
 - **Validation**: the submitted topology is validated by the backend; the
   violation panel lists every issue (missing monitor, port mismatch, …) —
   fix and resubmit.
@@ -161,9 +168,15 @@ tabs:
   confidence: high / medium / low), each optionally carrying evidence links.
 - **Packet inspector**: one-click drill-down from an observation/diagnosis to
   the raw stream — located by the PID + packet index + Artifact triple, with
-  188-byte packet and table decode details.
+  188-byte packet and table decode details. A `view=t2mi|bbframe|ts`
+  parameter switches between three views (6-byte T2-MI header field by field
+  + CRC-32, 10-byte BBHEADER field by field + UP boundaries, Inner TS
+  structure); the default is `ts`.
 - **Journal tail**: the event journal (journal-seq stamped), throttled
-  real-time refresh.
+  real-time refresh; since Phase 2, `gen.*` (construction stages and sampled
+  packets) and `t2mi.*` / `bbframe.*` / `biss.*` (encapsulation and
+  scrambling events) render registry-driven — keys appear only as
+  fingerprints.
 - **Verify form & result card**: submit the repair claim; the verdict
   (PASS / FAIL / INCONCLUSIVE) is decided on the new run's evidence.
 
@@ -174,12 +187,15 @@ state, output) for auditing cross validation and transport-level injection.
 
 The interactive training area for preset scenarios:
 
-- **Scenario library**: five built-in scenarios (see
+- **Scenario library**: nine built-in scenarios (see
   [Section 6](#6-training-scenarios)) with difficulty tiers, objectives and
   initial topologies.
 - **Experiment console**: enter an experiment in two hops from the scenario
   library; session and fault plan are assembled automatically.
 - **Eight-step stepper**: the closed loop mapped onto a trackable step bar.
+- **Generation fold-out**: a read-only panel showing per-stage progress of
+  the layered pipeline (Inner TS / BBFrame / T2-MI) plus sampled-packet
+  cards; clicking one jumps to the packet inspector with a `view` parameter.
 - **Hints ladder**: stuck? Reveal hints one rung at a time — try diagnosing
   yourself first.
 - **Solution panel**: unlocked only when verification returns **PASS** — a
@@ -212,7 +228,9 @@ Two disciplines apply throughout (see `CONTEXT.md`):
 
 ## 6. Training Scenarios
 
-Built-in Lab Pack v1 (`scenarios/` directory):
+Built-in scenarios come in two packs (`scenarios/` directory):
+
+**Lab Pack v1 (TS-layer basics)**:
 
 | Scenario | Title | Difficulty | Focus |
 |---|---|---|---|
@@ -222,8 +240,18 @@ Built-in Lab Pack v1 (`scenarios/` directory):
 | SC-04 | 连续性破坏：CC 相对偏移 (Continuity broken: CC offset) | intermediate | continuity-counter anomalies and loss symptoms |
 | SC-05 | 双故障靶场：组合症状 (Double fault: combined symptoms) | advanced | diagnosing two stacked faults |
 
-Practice in order SC-01 → SC-05: loop first, then single faults, then
-combined faults.
+**Lab Pack v2 (Phase 2 advanced encapsulation)**:
+
+| Scenario | Title | Difficulty | Focus |
+|---|---|---|---|
+| SC-06 | 封装错位：T2MI PLP 映射 (Encapsulation misaligned: T2-MI PLP mapping) | intermediate | expected-vs-actual PLP drift — outer layer green but Inner TS carries no business ("missing ≠ zero") |
+| SC-07 | 封装错位：BBHEADER 同步 (Encapsulation misaligned: BBHEADER sync) | intermediate | locating a SYNCD bit-distance mismatch ("SYNCD is a bit distance, not a sync byte") |
+| SC-08 | 加扰错位：BISS 密钥 (Scrambling misaligned: BISS key) | intermediate | the descramble-evidence chain for a wrong session word ("descramble failure ≠ corrupted stream"; keys show only as fingerprints) |
+| SC-09 | 时序错位：PMT 版本更新后 PID 漂移 (Timing misaligned: PID drift after a PMT version bump) | advanced | locating drift when a PMT version changes but the demux filter table lags |
+
+Practice SC-01 → SC-05 for TS-layer basics (loop first, then single faults,
+then combined faults), then move on to SC-06 → SC-09 for the advanced
+encapsulation layer.
 
 ## 7. REST API & WebSocket
 
@@ -233,8 +261,10 @@ combined faults.
 - Version probe: `GET /api/v1/version`.
 - Resource groups: `sessions` (lifecycle), `topologies` (CRUD + validation),
   `runs` (generation), `scenarios` (range scenarios), `artifacts` (artifact
-  metadata & content), the observation group (metrics / alerts / snapshot /
-  diagnoses / verification), `tsduck_calls` (CLI call records).
+  metadata & content, plus
+  `GET /artifacts/{id}/structure?view=t2mi|bbframe|ts` structural views),
+  the observation group (metrics / alerts / snapshot / diagnoses /
+  verification), `tsduck_calls` (CLI call records).
 - WebSocket: `/ws/v1/sessions/{session_id}` — per-session event push
   (journal / hints). Note `/ws/v1` sits outside the `/api/v1` prefix.
 
@@ -285,8 +315,8 @@ alerts is not evidence.
 
 ## 10. Documentation Roadmap
 
-This guide evolves with the software; this is the first edition (covering
-all user-visible MVP features). Planned follow-up sections:
+This guide evolves with the software; it covers all user-visible MVP and
+Phase 2 features. Planned follow-up sections:
 
 - Example configuration walkthrough (field-by-field for
   `examples/ts-generator-minimal.json`)

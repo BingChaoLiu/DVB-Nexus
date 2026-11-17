@@ -2,7 +2,7 @@
 
 [English](README.en.md) | 简体中文
 
-> **文档状态**：随软件功能迭代逐步完善。当前覆盖 MVP（TS-first 八步闭环）的全部用户可见功能。
+> **文档状态**：随软件功能迭代逐步完善。当前覆盖 MVP（TS-first 八步闭环）与 Phase 2 高级封装层（T2-MI 三级封装、BISS 加解扰）的全部用户可见功能。
 > 术语以根目录 [`CONTEXT.md`](../../CONTEXT.md) 为权威；本文只讲"怎么用"，不重复"是什么"的定义。
 
 ## 目录
@@ -29,9 +29,9 @@
 
 DVB-Nexus（DVB Sandbox）是集**实时码流排查**与**交互式协议演练**于一体的单机工程平台：
 
-- **沙盘模式**：脱离真实硬件与直播源，由仿真引擎自主产生链路状态。MVP 聚焦 MPEG-TS 传输层：188-byte 包长、`analysis_only` 生成档（结构合规、可解析可分析；负载为确定性合成数据，不承诺可播放）。
+- **沙盘模式**：脱离真实硬件与直播源，由仿真引擎自主产生链路状态。MVP 聚焦 MPEG-TS 传输层：188-byte 包长、`analysis_only` 生成档（结构合规、可解析可分析；负载为确定性合成数据，不承诺可播放）。Phase 2 扩展高级封装层：T2-MI → BBFrame → Inner TS 三级封装与 BISS Mode 1 / Mode E 加解扰。
 - **八步闭环**：Create → Generate → Inject → Analyze → Diagnose → Inspect → Recover → Verify，全程有真实数据和可追溯证据。
-- **训练靶场**：预置故障场景（SC-01 ~ SC-05），注入故障后由学员修复，以修复后的新 Run 证据判定通关（PASS / FAIL / INCONCLUSIVE）。
+- **训练靶场**：预置故障场景（SC-01 ~ SC-09），注入故障后由学员修复，以修复后的新 Run 证据判定通关（PASS / FAIL / INCONCLUSIVE）。
 
 单机单用户、无认证（本机 `127.0.0.1` 部署姿态），不面向多用户或公网部署。
 
@@ -106,15 +106,17 @@ DVBNEXUS_BACKEND_ORIGIN="http://127.0.0.1:9000" npm run dev
 
 基于 React Flow 画布的链路拓扑编辑器：
 
-- **节点面板**：从左侧面板添加四种 MVP 节点类型——
+- **节点面板**：从左侧面板添加节点类型——
   | 节点类型 | 说明 |
   |---|---|
   | `ts_generator`（TS 生成器） | 按 GeneratorConfig 产出 MPEG-TS 码流，八步闭环 Generate 的锚点 |
   | `ts_mux`（TS 复用器） | 多路 TS 输入复用为单路输出 |
   | `ts_demux`（TS 解复用器） | 单路 TS 拆分为两路输出（接收侧拆流） |
   | `ts_monitor`（TS 监测器） | 被动观测端点，Analyze/Inspect 证据沉淀端 |
+  | `t2mi_encapsulator`（T2-MI 封装器） | Inner TS 经 BBFrame 封装段包化为 T2-MI 包流（Phase 2） |
+  | `t2mi_demux`（T2-MI 解封装器） | T2-MI 包流 → BBFrame 解析 → Inner TS 重建（Phase 2） |
 
-- **连线**：端口有方向（input/output）与最大连接数约束，非法连线会被前置拦截。MVP 只启用 `MPEG_TS` 平面（RF / SEC_CONTROL / T2MI / IP 平面模型保留扩展位）。
+- **连线**：端口有方向（input/output）与最大连接数约束，非法连线会被前置拦截。启用的信号平面：`MPEG_TS` 与 `T2MI`（Phase 2 起；RF / SEC_CONTROL / IP 平面模型保留扩展位）。三级封装子图 = 生成器 → 封装器 → 解封装器 → 监测器。
 - **校验**：拓扑提交后端校验，违规以面板列出（缺失监测端、端口失配等），按提示修正后重提交。
 - 拓扑保存后进入会话（Session），在 Monitor 页驱动生命周期。
 
@@ -129,8 +131,8 @@ DVBNEXUS_BACKEND_ORIGIN="http://127.0.0.1:9000" npm run dev
 - **指标面板**：PID 级观测指标。
 - **告警面板**：规则引擎产生的告警。
 - **诊断列表**：根因候选（按规则静态置信度 high / medium / low 排序），每条候选可携带证据链接。
-- **包检查器（Packet Inspector）**：从观测/诊断一键下钻到原始码流——PID + packet index + Artifact 三元组定位，查看 188-byte 包与表解码详情。
-- **Journal 尾流**：事件流水（含流水号盖章），实时节流刷新。
+- **包检查器（Packet Inspector）**：从观测/诊断一键下钻到原始码流——PID + packet index + Artifact 三元组定位，查看 188-byte 包与表解码详情；`view=t2mi|bbframe|ts` 参数切换三视图（T2-MI 包头 6 字节逐字段 + CRC-32、BBHEADER 10 字节逐字段 + UP 边界、Inner TS 结构），默认 `ts`。
+- **Journal 尾流**：事件流水（含流水号盖章），实时节流刷新；Phase 2 起 `gen.*`（构造阶段与抽样包）、`t2mi.*` / `bbframe.*` / `biss.*`（封装与加解扰事件）注册表驱动呈现，密钥只以指纹形式出现。
 - **Verify 表单与结果卡**：提交修复声明，以新 Run 证据判定 PASS / FAIL / INCONCLUSIVE。
 
 **CLI Console 页签**：TSDuck 子进程调用记录（命令行、状态、输出），用于核对双解析器对照与传输级注入的实际执行。
@@ -139,9 +141,10 @@ DVBNEXUS_BACKEND_ORIGIN="http://127.0.0.1:9000" npm run dev
 
 预置场景的交互式训练区：
 
-- **场景库**：五套内置场景（见 [第 6 节](#6-训练场景一览)），含难度分级、目标描述与初始拓扑。
+- **场景库**：九套内置场景（见 [第 6 节](#6-训练场景一览)），含难度分级、目标描述与初始拓扑。
 - **实验控制台**：从场景开局两跳进入实验，自动装配会话与故障计划。
 - **八步 Stepper**：把八步闭环映射为可跟踪的步骤条，逐步推进。
+- **生成过程折叠区**：只读展示分层流水线各阶段进度（Inner TS / BBFrame / T2-MI）与抽样包卡片，点击可携带 `view` 参数跳包检查器。
 - **提示阶梯（Hints Ladder）**：卡住时逐级揭示提示，鼓励先自诊再求助。
 - **答案揭示（Solution Panel）**：仅当验证结果为 **PASS** 时解锁——修复动作本身、UI 变绿都不算通关证据。
 
@@ -167,7 +170,9 @@ DVBNEXUS_BACKEND_ORIGIN="http://127.0.0.1:9000" npm run dev
 
 ## 6. 训练场景一览
 
-内置 Lab Pack v1（`scenarios/` 目录）：
+内置场景分两包（`scenarios/` 目录）：
+
+**Lab Pack v1（TS 层基础）**：
 
 | 场景 | 标题 | 难度 | 考察点 |
 |---|---|---|---|
@@ -177,14 +182,23 @@ DVBNEXUS_BACKEND_ORIGIN="http://127.0.0.1:9000" npm run dev
 | SC-04 | 连续性破坏：CC 相对偏移 | 中级 | 连续性计数器（CC）异常与丢包症状排查 |
 | SC-05 | 双故障靶场：组合症状 | 高级 | 两类故障叠加的组合症状诊断 |
 
-建议按 SC-01 → SC-05 顺序练习：先闭环、后单故障、再组合故障。
+**Lab Pack v2（Phase 2 高级封装层）**：
+
+| 场景 | 标题 | 难度 | 考察点 |
+|---|---|---|---|
+| SC-06 | 封装错位：T2MI PLP 映射 | 中级 | 期望 PLP 与实际 PLP 漂移——外层绿灯但 Inner TS 无业务（"缺失 ≠ 零"） |
+| SC-07 | 封装错位：BBHEADER 同步 | 中级 | SYNCD 位距错配的定位（"SYNCD 是位距离，不是同步字节"） |
+| SC-08 | 加扰错位：BISS 密钥 | 中级 | session word 错配的解扰证据链（"解扰失败 ≠ 码流损坏"，密钥只看指纹） |
+| SC-09 | 时序错位：PMT 版本更新后 PID 漂移 | 高级 | PMT 版本更新而 Demux 过滤表未同步的漂移定位 |
+
+建议按 SC-01 → SC-05 顺序练习 TS 层基础（先闭环、后单故障、再组合故障），再进入 SC-06 → SC-09 高级封装层。
 
 ## 7. REST API 与 WebSocket
 
 - 基础前缀：`/api/v1`（additive-only 版本策略）。
 - 交互式文档：`http://127.0.0.1:8765/docs`（Swagger UI，由 OpenAPI 生成；前端类型即从 `/openapi.json` 同步）。
 - 版本探针：`GET /api/v1/version`。
-- 资源组：`sessions`（生命周期）、`topologies`（拓扑 CRUD + 校验）、`runs`（生成）、`scenarios`（靶场场景）、`artifacts`（产物元数据与内容）、observation 组（指标 / 告警 / 快照 / 诊断 / 验证）、`tsduck_calls`（CLI 调用记录）。
+- 资源组：`sessions`（生命周期）、`topologies`（拓扑 CRUD + 校验）、`runs`（生成）、`scenarios`（靶场场景）、`artifacts`（产物元数据与内容 + `GET /artifacts/{id}/structure?view=t2mi|bbframe|ts` 结构视图）、observation 组（指标 / 告警 / 快照 / 诊断 / 验证）、`tsduck_calls`（CLI 调用记录）。
 - WebSocket：`/ws/v1/sessions/{session_id}`，会话级事件推送（journal / 提示）。注意 `/ws/v1` 不在 `/api/v1` 前缀下。
 
 单机单用户姿态：无认证、固定本机租户身份，请勿直接暴露公网。
@@ -223,7 +237,7 @@ uvicorn 缺少 WebSocket 服务库时会拒绝所有 WS 握手（404）。安装
 
 ## 10. 文档完善计划
 
-本手册与软件功能同步迭代，当前为第一版（覆盖 MVP 全部用户可见功能）。规划中的后续章节：
+本手册与软件功能同步迭代，当前覆盖 MVP 与 Phase 2 全部用户可见功能。规划中的后续章节：
 
 - 示例配置说明（`examples/ts-generator-minimal.json` 字段逐项解释）
 - 场景编写指南（`scenarios/*.json` schema 与故障计划语法）

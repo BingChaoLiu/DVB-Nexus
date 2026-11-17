@@ -27,7 +27,7 @@ _Avoid_: L0/L1 作为架构层编号使用（L1 同时是架构层级名，代�
 ### 生成与验证
 
 **TS Core**:
-项目自研的 MPEG-TS 语义层核心（Packet、Section、PSI、PCR、Packetizer、Mux、Generator），是平台的核心技术资产。自研范围已复核冻结为语义层：PES 打包、多节目 MPTS 复杂调度、T2MI 推迟（ADR-0005）。
+项目自研的 MPEG-TS 语义层核心（Packet、Section、PSI、PCR、Packetizer、Mux、Generator），是平台的核心技术资产。自研范围已复核冻结为语义层：PES 打包、多节目 MPTS 复杂调度推迟（ADR-0005）；T2-MI/BBFrame/PLP 封装解封装与 BISS 加解扰已随 Phase 2 落地（ADR-0010/0011，见「Phase 2 封装层」词条组）。
 _Avoid_: TS Generator（仅指 TS Core 中的端到端装配模块）
 
 **TSDuck**:

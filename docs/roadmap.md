@@ -2,15 +2,15 @@
 
 > **定位**：本文件是 MVP 之外全部远期工作的**唯一权威索引**（ADR-0002）。MVP = TS-first 传输层八步闭环；这里承载其余一切——保证 MVP 完成后，v0.3 愿景中的射频沙盘、高级封装、实况接入等 idea 有直接的继续条件。
 >
-> **推进方式**：每个 Phase 启动时另开一张 wayfinder map（对照 map [#1](https://github.com/BingChaoLiu/DVB-Nexus/issues/1) 的模式），先验证层后决策层，不直接开工。
+> **推进方式**：每个 Phase 启动时另开一张 wayfinder map（对照 map [#1](https://github.com/BingChaoLiu/DVB-Nexus/issues/1) 的模式），先验证层后决策层，不直接开工。**Phase 2 已按此模式走完**：决策与规格就绪见 map [#103](https://github.com/BingChaoLiu/DVB-Nexus/issues/103)，实现见 milestone「M6 · Phase 2 高级封装层」（[#121](https://github.com/BingChaoLiu/DVB-Nexus/issues/121) ~ [#136](https://github.com/BingChaoLiu/DVB-Nexus/issues/136)，2026-11-17 合入）。
 
 ## 1. 与 MVP 的边界
 
 | 属于 MVP | 属于本路线图 |
 |---|---|
-| MPEG-TS 传输层八步闭环（Create → Generate → Inject → Analyze → Diagnose → Inspect → Recover → Verify） | RF/LNB/DiSEqC/Unicable、T2MI/BBFrame/PLP、BISS/CA、Live Mode、Time Machine |
+| MPEG-TS 传输层八步闭环（Create → Generate → Inject → Analyze → Diagnose → Inspect → Recover → Verify） | RF/LNB/DiSEqC/Unicable、~~T2MI/BBFrame/PLP~~（✅ Phase 2 已完成）、BISS/CA（BISS ✅ Phase 2；DVB-CA 留 Phase 3+）、Live Mode、Time Machine |
 | 188-byte 包长、`analysis_only` profile、最小前端 UI | RS204/M2TS、`playback_ready`、完整物理层、真实音视频编码 |
-| `SignalPlane` 只启用 `MPEG_TS`（模型保留五平面扩展位） | `RF` / `SEC_CONTROL` / `T2MI` / `IP` 平面的实际启用 |
+| `SignalPlane` 启用 `MPEG_TS`（模型保留五平面扩展位）；Phase 2 起 `T2MI` 平面已启用 | `RF` / `SEC_CONTROL` / `IP` 平面的实际启用 |
 
 **已预留的扩展点**（MVP 实现时不得砍掉）：拓扑模型 `SignalPlane` 五平面枚举、节点类型注册表机制、仿真保真级 `SIM_STATE`/`SIM_TS`/`LIVE` 三档、SPEC-600+ 编号空间、Observation 的 `hardware`/`measured` 来源与置信枚举。
 
@@ -20,24 +20,26 @@
 
 | Phase | 主题 | 核心内容 | 前置条件 |
 |---|---|---|---|
-| **Phase 2** | 高级封装层 | T2-MI 解封装三级子图、BBFrame/PLP 提取、BISS Mode 1 加解扰、教学靶场 B/C 系列案例 | MVP TS 闭环验收通过；语义级故障注入能力（构造期注入）可用 |
+| **Phase 2** ✅ 已完成（2026-11-17） | 高级封装层 | T2-MI 解封装三级子图、BBFrame/PLP 提取、BISS Mode 1 加解扰、教学靶场 B/C 系列案例 | MVP TS 闭环验收通过；语义级故障注入能力（构造期注入）可用 |
 | **Phase 3** | RF/SEC 沙盘 | LNB/DiSEqC/Tuner/Unicable 的 L0 状态模型与物理视图、DiSEqC 命令模型、A 系列靶场 | L0 求值引擎成熟（架构评审裁决其 MVP 形态）；端口模型扩展 |
 | **Phase 4** | Live Engineering | Linux DVB Frontend 接入、实况流监测与告警、D2 系列实战案例 | Linux/WSL2 运行环境（见 §5 Windows 限制）；Observation 告警链路成熟 |
 | **Later** | 工程增强 | Time Machine（Ring Buffer/事件冻结/回放）、TS Differential Analyzer（双流差异）、`playback_ready` 档、MPTS 多节目调度 | 按需另启 effort |
 
+> Phase 2 实际交付比原表多出：BISS Mode E（SPEC-611，CISSA 纯 Python 全测）、分层流水线 runtime 与 gen.* 构造事件、观测注册表四命名空间、包检查器三视图 / Lab 折叠区 / Monitor 新事件呈现 / 编辑器 T2-MI 节点、Lab Pack v2 四场景（SC-06~09）。实现明细见 milestone「M6 · Phase 2 高级封装层」各票 REPORT；遗留缺口（诊断证据锚定、PMT_PID_DRIFT TS 层原语实现等）见 [#136](https://github.com/BingChaoLiu/DVB-Nexus/issues/136) 补丁票评估。
+
 ## 3. SPEC-600+ 未来模块目录
 
-源自规格包 `REGISTRY.md` §F（编号原样保留，规格文本未编写；实现前需按 map 流程编写并批准）：
+源自规格包 `REGISTRY.md` §F（编号原样保留；规格文本未编写者实现前需按 map 流程编写并批准）：
 
-| Spec ID | 名称 | 范围 | 优先级 |
+| Spec ID | 名称 | 范围 | 状态 |
 |---|---|---|---|
-| SPEC-600 | T2MI Parser | T2-MI Packet 基础解析 | P2 |
-| SPEC-601 | BBFrame Parser | BBHEADER、BBFrame 边界和 CRC | P2 |
-| SPEC-602 | PLP Extractor | T2-MI PLP ID 过滤与提取 | P2 |
-| SPEC-603 | Inner TS Reconstruction | BBFrame 解封装和 Inner TS 输出 | P2 |
-| SPEC-610 | BISS Mode 1 | BISS-1 参数、解扰接口和证据 | P2 |
-| SPEC-611 | BISS Mode E | ESW/Injected ID 计算和验证 | P2 |
-| SPEC-612 | DVB-CA | PMT CA Descriptor、ECM/EMM 关系 | P3 |
+| SPEC-600 | T2MI Parser | T2-MI Packet 基础解析 | ✅ 已实现（0.5.1 APPROVED，2026-11-17） |
+| SPEC-601 | BBFrame Parser | BBHEADER、BBFrame 边界和 CRC | ✅ 已实现（0.5.1 APPROVED，2026-11-17） |
+| SPEC-602 | PLP Extractor | T2-MI PLP ID 过滤与提取 | ✅ 已实现（0.5.1 APPROVED，2026-11-17） |
+| SPEC-603 | Inner TS Reconstruction | BBFrame 解封装和 Inner TS 输出 | ✅ 已实现（0.5.1 APPROVED，2026-11-17） |
+| SPEC-610 | BISS Mode 1 | BISS-1 参数、解扰接口和证据 | ✅ 已实现（0.5.1 APPROVED，2026-11-17） |
+| SPEC-611 | BISS Mode E | ESW/Injected ID 计算和验证 | ✅ 已实现（0.5.1 APPROVED，2026-11-17） |
+| SPEC-612 | DVB-CA | PMT CA Descriptor、ECM/EMM 关系 | P3（规格未编写） |
 | SPEC-620 | RF Simulation | RF 参数和质量状态模型 | P2 |
 | SPEC-621 | LNB Model | 本振、极化、电压和频段状态 | P2 |
 | SPEC-622 | DiSEqC Controller | 命令模型、端口和控制状态 | P2 |
@@ -65,13 +67,13 @@
 
 ### 领域 B：多流与嵌套封装（Phase 2）
 
-- **B1 T2MI PLP ID 映射错位**：外层锁定正常、T2MI 节点绿灯，但内层 TS 无业务——Demux 锁了数据 PLP 0 而业务在 PLP 1。三级子图（外层 TS Packet → BBFrame → Inner TS）✅ 已核实与 TS 102 773 §5.1 一致；PLP 选择与内层解析分层解耦。
-- **B2 BBHEADER 帧同步错位**：⚠️ 订正出处——**BBHEADER/SYNCD 定义在 EN 302 755 §5.1.7**（MATYPE/UPL/DFL/SYNC/SYNCD/CRC-8 共 10 字节），**TS 102 773 全文不含 BBHEADER**（它只规定 T2-MI 包封装：包头 6 字节 + CRC-32）。SYNCD（2 字节）是"数据字段内首个 UP 的位距离"，**不是同步字节**。教学引用改为：EN 302 755 §5.1.7（BBHEADER）+ TS 102 773 §5.1（T2-MI 包）。
+- **B1 T2MI PLP ID 映射错位**：外层锁定正常、T2MI 节点绿灯，但内层 TS 无业务——Demux 锁了数据 PLP 0 而业务在 PLP 1。三级子图（外层 TS Packet → BBFrame → Inner TS）✅ 已核实与 TS 102 773 §5.1 一致；PLP 选择与内层解析分层解耦。✅ **已落地为靶场 [SC-06](../scenarios/SC-06-t2mi_plp_mismatch.json)**（Lab Pack v2，2026-11-17）。
+- **B2 BBHEADER 帧同步错位**：⚠️ 订正出处——**BBHEADER/SYNCD 定义在 EN 302 755 §5.1.7**（MATYPE/UPL/DFL/SYNC/SYNCD/CRC-8 共 10 字节），**TS 102 773 全文不含 BBHEADER**（它只规定 T2-MI 包封装：包头 6 字节 + CRC-32）。SYNCD（2 字节）是"数据字段内首个 UP 的位距离"，**不是同步字节**。教学引用改为：EN 302 755 §5.1.7（BBHEADER）+ TS 102 773 §5.1（T2-MI 包）。✅ **已落地为靶场 [SC-07](../scenarios/SC-07-bbheader_sync_fault.json)**（Lab Pack v2，2026-11-17）。
 
 ### 领域 C：加扰与条件接收（Phase 2）
 
-- **C1 BISS 密钥错位**：⚠️ 订正——BISS **Mode 1** 密钥为 **12 位十六进制（48-bit）session word**（"16 字节密钥"的说法错误）；**Mode E** = 固定 Session Key 加密 SW 成 16 位十六进制 **ESW** 带外下发 + **静态 128-bit Injected/Buried ID 预置于接收端**（不在流中传输、不是动态数据）。BISS **无 ECM**（CA_PID 固定 0x1FFF，Tech 3292）；BISS2 的 CA_system_ID = 0x2602。底层算法：BISS1 = DVB-CSA1 + DES；BISS2 = DVB-CISSA（TS 103 127）+ AES-128。
-- **C2 PID 映射混淆（CA 字错配）**：PMT 中加扰 PID 动态变更而 Demux 过滤表未同步，ECM 与加密 PES 错位。⚠️ 该案例属 DVB-CA 语境（SPEC-612），混入 BISS 案例时注意区分（BISS 无 ECM）。**MVP 交叉引用**（#17）：其"PID 树时间轴上定位声明与实际漂移"教学点由 MVP 靶场 PMT_PID_MISMATCH 场景（SC-04）部分覆盖，不阻塞 MVP。
+- **C1 BISS 密钥错位**：⚠️ 订正——BISS **Mode 1** 密钥为 **12 位十六进制（48-bit）session word**（"16 字节密钥"的说法错误）；**Mode E** = 固定 Session Key 加密 SW 成 16 位十六进制 **ESW** 带外下发 + **静态 128-bit Injected/Buried ID 预置于接收端**（不在流中传输、不是动态数据）。BISS **无 ECM**（CA_PID 固定 0x1FFF，Tech 3292）；BISS2 的 CA_system_ID = 0x2602。底层算法：BISS1 = DVB-CSA1 + DES；BISS2 = DVB-CISSA（TS 103 127）+ AES-128。✅ **已落地为靶场 [SC-08](../scenarios/SC-08-biss_key_mismatch.json)**（Lab Pack v2，2026-11-17；Mode 1 链，Mode E 派生与 CISSA 已实现）。
+- **C2 PID 映射混淆（CA 字错配）**：PMT 中加扰 PID 动态变更而 Demux 过滤表未同步，ECM 与加密 PES 错位。⚠️ 该案例属 DVB-CA 语境（SPEC-612），混入 BISS 案例时注意区分（BISS 无 ECM）。**MVP 交叉引用**（#17）：其"PID 树时间轴上定位声明与实际漂移"教学点由 MVP 靶场 PMT_PID_MISMATCH 场景（SC-04）部分覆盖，不阻塞 MVP。Phase 2 起其 TS 层等价教学点由 [SC-09](../scenarios/SC-09-pmt_pid_drift.json)（PMT 版本更新后 Demux 过滤未同步）承载；CA 全貌仍留 SPEC-612（Phase 3+）。
 
 ### 领域 D：SI/PSI 与时序（Phase 2~4）
 
@@ -83,12 +85,14 @@
 源自研究调研（`docs/research/`），实现对应 Phase 时先复核：
 
 ### T2-MI（Phase 2）
+> ✅ **已实现（2026-11-17，ADR-0010 / SPEC-600~603 0.5.1 APPROVED，milestone M6）**——解封装与封装均自研 Python 落地；TSDuck 对拍为第二意见验证器（NOT TRUSTED，前置 = 含 master 147deab3 修复的发布版）。
 > **2026-11-17 实测订正**（[#104](https://github.com/BingChaoLiu/DVB-Nexus/issues/104)/[#105](https://github.com/BingChaoLiu/DVB-Nexus/issues/105)/[#107](https://github.com/BingChaoLiu/DVB-Nexus/issues/107)；裁决 [ADR-0010](adr/0010-phase2-t2mi-integration-path.md)，规格 SPEC-600~603 DRAFT）：
 - **解封装与封装均自研 Python 为主路径**——TSDuck 无封装能力（选项面仅 extract/identify/log）；**FFmpeg 从不存在 t2mi demuxer**（libavformat/t2mi.c 零 commit 历史，原「FFmpeg 7.1 t2mi demuxer」条目失实删除）；DVBInspector 仅离线工具非管线组件
 - TSDuck `tsp -P t2mi --extract` 解封装 HEM 布局逐字节确定，但 3.45-4798 有两个实测缺陷（不解析 BBHEADER CRC-8/MODE/UPL、多 UP BBFrame 尾包丢失；修复在未发布 master 147deab3）且失败路径全静默——降为第二意见验证器，前置 = 升级发布版并复测
 - Rust crate `dvb-t2mi`（现 v15.0.0，单人维护极活跃但家族锁步 breaking）不进运行时/CI，仅开发期 golden diff oracle
 
 ### BISS（Phase 2）
+> ✅ **已实现（2026-11-17，ADR-0011 / SPEC-610/611 0.5.1 APPROVED，milestone M6）**——libdvbcsa dlopen 适配器（SSE2 batch，DLL 缺失显式降级，CI 诚实 NOT RUN）+ pycryptodome DES/CISSA 纯 Python（CI 全测）。
 - ⚠️ **TSDuck descrambler 不支持 BISS**（实测仅 DVB-CSA2/AES-CBC/CTR/ATIS-IDSA/DVB-CISSA）——v0.3"实况复用 TSDuck 解 BISS"的设想不成立
 > **2026-11-17 实测结论**（[#106](https://github.com/BingChaoLiu/DVB-Nexus/issues/106)；裁决 [ADR-0011](adr/0011-biss-scramble-path.md)，规格 SPEC-610/611 DRAFT）：libdvbcsa 本机编译成功（MSYS2，SSE2 batch 497 Mbps 余量 7.5 倍）+ pycryptodome DES；CISSA 纯 Python 134 Mbps 达标（TS 103 127 完全公开）；纯 Python CSA1 仅 0.305 Mbps 只作测试夹具
 - BISS1 → libdvbcsa（CSA1 实现）+ DES（session word 加密）；BISS2 → CISSA（ETSI TS 103 127）+ AES-128 自研或第三方实现

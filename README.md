@@ -2,7 +2,7 @@
 
 简体中文 | [English](docs/user-guide/README.en.md)
 
-DVB 数字沙盘与码流可视化分析平台：集**实时码流排查**与**交互式协议演练**于一体的单机工程平台。MVP 聚焦 TS-first 八步闭环：Create → Generate → Inject → Analyze → Diagnose → Inspect → Recover → Verify。
+DVB 数字沙盘与码流可视化分析平台：集**实时码流排查**与**交互式协议演练**于一体的单机工程平台。MVP 聚焦 TS-first 八步闭环：Create → Generate → Inject → Analyze → Diagnose → Inspect → Recover → Verify；Phase 2 高级封装层已落地——T2-MI 三级封装（T2-MI → BBFrame → Inner TS）与 BISS 加解扰（Mode 1 / Mode E）。
 
 ## 📖 使用文档 / Documentation
 
@@ -16,9 +16,11 @@ DVB 数字沙盘与码流可视化分析平台：集**实时码流排查**与**�
 
 ## 功能一览 / Highlights
 
-- **拓扑编辑（Topologies）**：React Flow 画布编排 TS 生成器 / 复用器 / 解复用器 / 监测器，后端校验违规。
-- **码流监控（Monitor）**：会话生命周期控制、PID 级指标与告警、根因候选诊断、包检查器下钻原始码流、Journal 事件尾流、TSDuck CLI 调用台。
-- **训练靶场（Lab）**：五套预置故障场景（SC-01 ~ SC-05）、八步 Stepper、提示阶梯、PASS 门控的答案揭示。
+- **拓扑编辑（Topologies）**：React Flow 画布编排 TS 生成器 / 复用器 / 解复用器 / 监测器，及 Phase 2 的 T2-MI 封装器 / 解封装器（三级封装子图），后端校验违规。
+- **码流监控（Monitor）**：会话生命周期控制、PID 级指标与告警、根因候选诊断、包检查器下钻原始码流（`view=t2mi|bbframe|ts` 三视图）、Journal 事件尾流（含 gen.*/t2mi.*/bbframe.*/biss.* 构造与封装事件）、TSDuck CLI 调用台。
+- **训练靶场（Lab）**：九套预置故障场景（SC-01 ~ SC-09，Lab Pack v1 + v2）、八步 Stepper、提示阶梯、PASS 门控的答案揭示、生成过程只读折叠区。
+- **分层流水线**：每层「生成 → 本层故障过滤 → 封装/传递」；T2-MI/BBFRAME/BISS 作用层故障原语与等位替换逐层不变式。
+- **BISS 加解扰**：Mode 1（libdvbcsa SSE2 批处理，DLL 缺失显式降级）与 Mode E（ESW + Injected ID 派生 + CISSA 纯 Python）；密钥本体只以指纹痕迹出现在证据面。
 - **八步闭环**：全程真实数据与可追溯证据，通关以修复后的新 Run 证据判定。
 
 ## 快速开始 / Quick Start
@@ -61,7 +63,7 @@ python -m pip install --upgrade pip
 python -m pip install -e ".[dev]"
 ```
 
-- 运行时依赖：`pydantic>=2,<3`、`fastapi>=0.110,<1`、`uvicorn>=0.30,<1`
+- 运行时依赖：`pydantic>=2,<3`、`fastapi>=0.110,<1`、`uvicorn>=0.30,<1`、`pycryptodome>=4.5,<5`（BISS Mode E/CISSA）
 - dev 依赖组：`pytest`、`import-linter`、`httpx2`、`pyyaml` 等（测试与契约检查工具链）
 - WS 推送（前端实时事件）另需：`python -m pip install "websockets>=14,<16"`
 
@@ -135,13 +137,13 @@ src/
   application/  应用层（唯一可依赖全部包的组合层，禁 import api）
   adapters/     外部适配（TSDuck CLI 子进程、存储）
   domain/       领域模型（observation / diagnosis / topology 等）
-  ts/           TS Core：自研 MPEG-TS 语义层核心（Packet/Section/PSI/PCR/Mux/Generator）
-  faults/       故障定义与双路由（语义级过滤器 / 传输级 TSDuck inject）
-  simulation/   仿真运行时（L0 State Runtime / L1 TS Runtime）
+  ts/           TS Core：自研 MPEG-TS 语义层核心（Packet/Section/PSI/PCR/Mux/Generator；Phase 2 增 T2-MI/BBFrame/PLP/Inner TS 封装解封装链与 BISS 加解扰 biss/）
+  faults/       故障定义与双路由（语义级过滤器 / 传输级 TSDuck inject；Phase 2 四原语按作用层路由）
+  simulation/   仿真运行时（L0 State Runtime / L1 TS Runtime / 分层流水线）
   knowledge/    静态参考数据（供诊断解释消费）
   bootstrap/    生产组装根（只向下依赖，无人可反向 import）
 frontend/       React 19 + Vite 前端（Topologies / Monitor / Lab 三页）
-scenarios/      训练靶场预置场景（SC-01 ~ SC-05）
+scenarios/      训练靶场预置场景（SC-01 ~ SC-09：Lab Pack v1 + v2）
 tests/          四层测试树（unit / integration / conformance / e2e）+ _support
 tools/          golden 向量生成与规格一致性检查脚本
 docs/           ADR、规格、测试向量、路线图、使用文档
@@ -171,4 +173,4 @@ examples/       示例
 
 ## 项目状态 / Status
 
-MVP（TS-first 八步闭环）已实现，当前处于功能完善阶段；沙盘模式为单机单用户、无认证，生成档为 `analysis_only`（结构合规可分析，不承诺可播放）。远期规划（RF 沙盘、T2MI、Live Mode 等）见 [roadmap](docs/roadmap.md)。
+MVP（TS-first 八步闭环）与 Phase 2 高级封装层（T2-MI 三级封装、BBFrame/PLP、BISS Mode 1 / Mode E、分层流水线、Lab Pack v2）均已实现（2026-11-17）；沙盘模式为单机单用户、无认证，生成档为 `analysis_only`（结构合规可分析，不承诺可播放）。远期规划（RF/SEC 沙盘、Live Mode、Time Machine 等）见 [roadmap](docs/roadmap.md)。
