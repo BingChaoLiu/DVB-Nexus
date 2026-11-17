@@ -1,0 +1,17 @@
+{
+  "vector_id": "t2mi-minimal",
+  "kind": "generated_ts",
+  "related_specs": [
+    "SPEC-600"
+  ],
+  "generator_version": "tools/make_golden_t2mi_vectors.py v1 (TS 102 773 §5.1 / EN 302 755 §5.1.7 table derivation; no src/ts involvement)",
+  "config_hash": "sha256:23b2407fdcfec43591960ea1e55f8c9cac07abf9cc0f7874fca7a4eccdf89d1a",
+  "sha256": "sha256:ab726f79bb692debf78225a948c26e98f878a4fdd791d81653e5c28d695a5e44",
+  "packet_count": 3,
+  "fault_plan_ref": null,
+  "verification": {
+    "path": "bit-level-review",
+    "direction": "ts102773-derivation→self-parse + TSDuck-3.45-HEM-cross (NOT TRUSTED, see verification note)",
+    "evidence_ref": "docs/test-vectors/golden/t2mi-minimal/t2mi-minimal.verification.md"
+  }
+}

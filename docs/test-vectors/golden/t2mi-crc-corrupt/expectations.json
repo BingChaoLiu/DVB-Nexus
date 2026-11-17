@@ -1,0 +1,49 @@
+{
+  "expectations": [
+    {
+      "event_type": "ts.packet_batch_observed",
+      "locator": {
+        "packet_index": 0
+      },
+      "detail": {
+        "packet_type": 0,
+        "packet_counter": 0,
+        "payload_kind": "bbframe",
+        "payload_bytes_len": 3773,
+        "crc32_valid": false,
+        "frame_index": 0,
+        "plp_id": 0
+      }
+    },
+    {
+      "event_type": "ts.packet_batch_observed",
+      "locator": {
+        "packet_index": 1
+      },
+      "detail": {
+        "packet_type": 0,
+        "packet_counter": 1,
+        "payload_kind": "bbframe",
+        "payload_bytes_len": 3773,
+        "crc32_valid": true,
+        "frame_index": 1,
+        "plp_id": 0
+      }
+    },
+    {
+      "event_type": "ts.packet_batch_observed",
+      "locator": {
+        "packet_index": 2
+      },
+      "detail": {
+        "packet_type": 0,
+        "packet_counter": 2,
+        "payload_kind": "bbframe",
+        "payload_bytes_len": 2269,
+        "crc32_valid": true,
+        "frame_index": 2,
+        "plp_id": 1
+      }
+    }
+  ]
+}

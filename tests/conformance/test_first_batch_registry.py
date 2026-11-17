@@ -86,7 +86,15 @@ EXPECTED_KINDS: dict[str, str] = {
 def test_first_batch_registered_set_is_exact(golden_loader):
     # registered_ids() enumerates in directory order (sorted); the batch is
     # compared as a sorted set.
-    assert tuple(golden_loader.registered_ids()) == tuple(sorted(FIRST_BATCH_IDS))
+    # M6 additive registration (ticket #122 under brief §3.6-5 票面裁):
+    # per-ticket golden vectors register alongside the frozen #14 batch,
+    # so the batch asserts *presence* as an exact subset instead of a
+    # tree-global set equality. The frozen byte identities stay pinned in
+    # test_first_batch_registry_manifests_consistent_with_frozen_table,
+    # and each new vector carries its own conformance file
+    # (e.g. test_t2mi_golden_vectors.py) plus the §8 validator gate.
+    registered = set(golden_loader.registered_ids())
+    assert set(FIRST_BATCH_IDS) <= registered
 
 
 def test_first_batch_registry_manifests_consistent_with_frozen_table():
@@ -131,7 +139,9 @@ def test_spec506_registration_validator_passes(tmp_path):
         result.stdout.decode("utf-8", "replace")
         + result.stderr.decode("utf-8", "replace")
     )
-    assert "14 registered vector(s) validated" in result.stdout.decode("utf-8", "replace")
+    # M6 additive registration (#122): the count grows per ticket — pin
+    # the validator's success shape, not the exact vector count.
+    assert "registered vector(s) validated" in result.stdout.decode("utf-8", "replace")
 
 
 def test_index_lists_every_first_batch_id_as_registered():
