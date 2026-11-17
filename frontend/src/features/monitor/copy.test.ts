@@ -2,7 +2,7 @@
 // :150-162)逐字一致——期望值是规格表的程序化提取物(独立事实源,含全角
 // 标点),不是实现常量的回抄。 markdown 强调符号(**)按渲染语义剥除。
 import { describe, expect, it } from "vitest";
-import { MONITOR_EMPTY_STATE_COPY } from "./copy";
+import { EVENT_HONESTY_COPY, HONESTY_DISCIPLINE_PHRASES, MONITOR_EMPTY_STATE_COPY } from "./copy";
 
 const SPEC_TABLE = {
   "unknownSession": {
@@ -75,5 +75,31 @@ describe("MONITOR_EMPTY_STATE_COPY — SPEC-408 §4.6 Monitor 组逐字钉扎", 
     // 行 5:无观测 ≠ 干净纪律的 Monitor 组承载句(无告警记录 ≠ 干净:…（无观测）)。
     expect(flat).toContain("无告警记录 ≠ 干净");
     expect(flat).toContain("（无观测）");
+  });
+});
+
+// SPEC-403 §Phase2(L320)诚实纪律句逐字提取物(独立事实源 = 规格原文,
+// 引号内两句,空格为半角):「解扰失败 ≠ 码流损坏」「缺失 ≠ 零」。
+// 键 = 事件类型 wire 名(#129 注册表条目);map 的期望值不是实现回抄。
+const SPEC_PHASE2_DISCIPLINE = {
+  "biss.descramble_failed": "解扰失败 ≠ 码流损坏",
+  "t2mi.plp_mismatch": "缺失 ≠ 零",
+} as const;
+
+describe("EVENT_HONESTY_COPY — SPEC-403 §Phase2 诚实纪律句随事件文案落位(逐字)", () => {
+  it("attaches each spec sentence to its carrier event type verbatim", () => {
+    expect(EVENT_HONESTY_COPY["biss.descramble_failed"]).toBe(SPEC_PHASE2_DISCIPLINE["biss.descramble_failed"]);
+    expect(EVENT_HONESTY_COPY["t2mi.plp_mismatch"]).toBe(SPEC_PHASE2_DISCIPLINE["t2mi.plp_mismatch"]);
+  });
+
+  it("carries exactly the two spec-anchored sentences (no invented copy)", () => {
+    expect(Object.keys(EVENT_HONESTY_COPY).sort()).toEqual(
+      Object.keys(SPEC_PHASE2_DISCIPLINE).sort(),
+    );
+  });
+
+  it("shares the 缺失 ≠ 零 phrase with the existing AC-408-09 phrase set", () => {
+    expect(HONESTY_DISCIPLINE_PHRASES).toContain("缺失 ≠ 零");
+    expect(Object.values(EVENT_HONESTY_COPY)).toContain("缺失 ≠ 零");
   });
 });

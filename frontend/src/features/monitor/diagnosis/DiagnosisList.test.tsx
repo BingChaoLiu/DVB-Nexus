@@ -6,7 +6,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { DiagnosisCandidateDTO, DiagnosisDTO, DiagnosisEvidenceDTO } from "../types";
 import { DiagnosisCandidateList, DiagnosisList } from "./DiagnosisList";
-import { MONITOR_EMPTY_STATE_COPY } from "../copy";
+import { EVENT_HONESTY_COPY, MONITOR_EMPTY_STATE_COPY } from "../copy";
 
 const diag = (overrides: Partial<DiagnosisDTO>): DiagnosisDTO => ({
   diagnosis_id: "d-1",
@@ -70,6 +70,35 @@ describe("DiagnosisList — exported presentation (wire strings verbatim)", () =
   it("renders observation_refs as static reference chips (journal_seq + event_type)", () => {
     render(<DiagnosisList diagnoses={[diag({})]} />);
     expect(screen.getByText("seq 12 · ts.continuity_error")).toBeInTheDocument();
+  });
+
+  it("attaches the registry-driven discipline sentence to Phase 2 ref chips (#134)", () => {
+    render(
+      <DiagnosisList
+        diagnoses={[
+          diag({
+            diagnosis_id: "d-biss",
+            observation_refs: [{ journal_seq: 21, event_type: "biss.descramble_failed" }],
+          }),
+          diag({
+            diagnosis_id: "d-plp",
+            observation_refs: [{ journal_seq: 22, event_type: "t2mi.plp_mismatch" }],
+          }),
+        ]}
+      />,
+    );
+    const bissChip = screen.getByText("seq 21 · biss.descramble_failed").closest(".dvb-mon-ref-chip");
+    expect(bissChip).toHaveTextContent("解扰失败 ≠ 码流损坏");
+    expect(bissChip).toHaveTextContent(EVENT_HONESTY_COPY["biss.descramble_failed"]!);
+    const plpChip = screen.getByText("seq 22 · t2mi.plp_mismatch").closest(".dvb-mon-ref-chip");
+    expect(plpChip).toHaveTextContent("缺失 ≠ 零");
+  });
+
+  it("keeps ts.* ref chips free of discipline sentences (zero invention outside the spec anchors)", () => {
+    render(<DiagnosisList diagnoses={[diag({})]} />);
+    const chip = screen.getByText("seq 12 · ts.continuity_error").closest(".dvb-mon-ref-chip");
+    expect(chip).toBeInTheDocument();
+    expect(chip).not.toHaveTextContent("≠");
   });
 
   it("renders NO locator button on table rows (the wire DiagnosisDTO carries no evidence field)", () => {

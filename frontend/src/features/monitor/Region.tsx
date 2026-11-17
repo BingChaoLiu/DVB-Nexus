@@ -24,7 +24,9 @@
 import { useCallback, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router";
+import type { JournalEnvelope } from "../../ws/SessionStream";
 import type { DiagnosisEvidenceDTO, DiagnosisReportDTO, RunStatusDTO, VerificationResultDTO } from "./types";
+import { deriveBissEvidence } from "./journal/bissEvidence";
 import {
   getRun,
   getSnapshot,
@@ -338,6 +340,21 @@ function MonitorPage({ sessionId, onUntrack }: { sessionId: string; onUntrack: (
   const [drillDownView] = useState<PacketInspectorView>(() =>
     parsePacketInspectorView(searchParams.get("view")),
   );
+  // SPEC-404 §Phase2 BISS annotation seam (#132 prop, #134 wiring): the
+  // journal face derives the annotation from biss.* WS facts (same identity
+  // refetch posture as JournalTail — the journal cache is the fact source);
+  // no biss.* fact → null → the annotation block stays absent (honest
+  // absence, never a fabricated 加扰态).
+  const journalKey = useMemo(() => [...qk.events(sessionId, "journal")], [sessionId]);
+  const journalQuery = useQuery({
+    queryKey: journalKey,
+    queryFn: () => queryClient.getQueryData<JournalEnvelope[]>(journalKey) ?? [],
+    staleTime: Number.POSITIVE_INFINITY,
+  });
+  const bissEvidence = useMemo(
+    () => deriveBissEvidence(journalQuery.data ?? []),
+    [journalQuery.data],
+  );
   const [drillDown, setDrillDown] = useState<DiagnosisEvidenceDTO | null>(() => {
     const artifact = searchParams.get("inspect_artifact");
     const pidRaw = searchParams.get("inspect_pid");
@@ -543,7 +560,12 @@ function MonitorPage({ sessionId, onUntrack }: { sessionId: string; onUntrack: (
             <DiagnosisCandidateList candidates={report.candidates} onEvidenceSelect={setDrillDown} />
           </section>
         )}
-        <PacketInspectorSection locator={drillDown} view={drillDownView} onClose={() => setDrillDown(null)} />
+        <PacketInspectorSection
+          locator={drillDown}
+          view={drillDownView}
+          bissEvidence={bissEvidence}
+          onClose={() => setDrillDown(null)}
+        />
         <DiagnosisList diagnoses={diagnosesQuery.data ?? []} />
       </Panel>
 
