@@ -104,3 +104,43 @@
 .dvb-pi-field-note {
   color: var(--dvb-fg-muted, #55606e);
 }
+
+/* SPEC-404 §Phase2 (#132) — layered structure view rows + BISS annotation. */
+.dvb-pi-structure {
+  margin-top: 6px;
+}
+
+.dvb-pi-rows {
+  font-family: monospace;
+  font-size: 0.78rem;
+  line-height: 1.6;
+  overflow-x: auto;
+  padding: 4px 0;
+  border-block: 1px dashed var(--dvb-border, #d0d4dc);
+}
+
+.dvb-pi-row {
+  display: flex;
+  gap: 12px;
+  white-space: pre;
+}
+
+.dvb-pi-row-key {
+  color: var(--dvb-fg-muted, #55606e);
+}
+
+.dvb-pi-row-selected {
+  font-weight: 700;
+  background: var(--dvb-bg-selected, #eef2f8);
+}
+
+.dvb-pi-row-bad {
+  color: var(--dvb-fg-error, #a12727);
+  font-weight: 700;
+}
+
+.dvb-pi-biss {
+  margin-top: 8px;
+  border-top: 1px dashed var(--dvb-border, #d0d4dc);
+  padding-top: 4px;
+}
