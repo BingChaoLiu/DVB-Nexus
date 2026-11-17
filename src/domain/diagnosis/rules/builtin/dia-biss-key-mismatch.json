@@ -1,0 +1,58 @@
+{
+  "rule_id": "DIA-BISS-KEY-MISMATCH",
+  "rule_version": "1.0.0",
+  "code": "DIAG_BISS_KEY_MISMATCH",
+  "priority": 70,
+  "severity": "error",
+  "confidence": "medium",
+  "title": "BISS descramble structural self-check failed",
+  "summary_template": "Descramble self-check {self_check_kind} failed on the scoped PIDs (key fingerprint ref {key_fingerprint_ref}); a key-mismatch candidate, not by itself a corrupted stream",
+  "match": {
+    "event_type": "biss.descramble_failed",
+    "predicates": [
+      {
+        "field": "payload.pid_scope",
+        "op": "exists",
+        "value": null
+      },
+      {
+        "field": "payload.failed_indices_sample",
+        "op": "exists",
+        "value": null
+      },
+      {
+        "field": "payload.self_check_kind",
+        "op": "exists",
+        "value": null
+      },
+      {
+        "field": "payload.key_fingerprint_ref",
+        "op": "exists",
+        "value": null
+      },
+      {
+        "field": "payload.mode",
+        "op": "exists",
+        "value": null
+      }
+    ],
+    "group_by": [
+      "node_id"
+    ],
+    "window": null
+  },
+  "suppression": {
+    "key": [
+      "code",
+      "node_id"
+    ],
+    "window": "per_run"
+  },
+  "suggested_actions": [
+    "Verify the session word derivation chain against the declared key fingerprint reference"
+  ],
+  "expected_evidence": [
+    "biss.descramble_failed"
+  ],
+  "enabled": true
+}
