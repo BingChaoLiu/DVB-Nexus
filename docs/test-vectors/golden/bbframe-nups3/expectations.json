@@ -1,0 +1,66 @@
+{
+  "expectations": [
+    {
+      "event_type": "ts.packet_batch_observed",
+      "locator": {
+        "frame_index": 0
+      },
+      "detail": {
+        "matype": 53248,
+        "upl": 1504,
+        "dfl": 4512,
+        "sync": 71,
+        "syncd": 0,
+        "crc8_valid": true,
+        "up_count": 3,
+        "up_indices": [
+          0,
+          188,
+          376
+        ],
+        "state": "ok"
+      }
+    },
+    {
+      "event_type": "ts.packet_batch_observed",
+      "locator": {
+        "frame_index": 1
+      },
+      "detail": {
+        "matype": 53248,
+        "upl": 1504,
+        "dfl": 4512,
+        "sync": 71,
+        "syncd": 0,
+        "crc8_valid": true,
+        "up_count": 3,
+        "up_indices": [
+          0,
+          188,
+          376
+        ],
+        "state": "ok"
+      }
+    },
+    {
+      "event_type": "ts.packet_batch_observed",
+      "locator": {
+        "frame_index": 2
+      },
+      "detail": {
+        "matype": 53248,
+        "upl": 1504,
+        "dfl": 3008,
+        "sync": 71,
+        "syncd": 0,
+        "crc8_valid": true,
+        "up_count": 2,
+        "up_indices": [
+          0,
+          188
+        ],
+        "state": "ok"
+      }
+    }
+  ]
+}

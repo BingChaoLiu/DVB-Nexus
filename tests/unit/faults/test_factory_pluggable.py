@@ -115,12 +115,17 @@ class TestSkeletonWiring:
     def test_phase2_types_resolve_to_skeletons(
         self, fault_type, skeleton_class, target_id, layer
     ) -> None:
-        # The skeleton tier is immutable module state: resolve directly.
-        # (BISS_KEY_MISMATCH left this list in #126 and
-        # T2MI_PLP_MISMATCH in #124: their downstream self-registrations
-        # are live — see test_biss_resolves_to_real_transform /
-        # test_t2mi_plp_resolves_to_real_transform.)
-        assert transform_builder_for(fault_type) is skeleton_class
+        # The skeleton tier is immutable module state: resolve against a
+        # pristine downstream table.  Downstream tickets self-register
+        # their real builders at import time (ruling §10-4) — BISS_KEY_
+        # MISMATCH (#126), T2MI_PLP_MISMATCH (#124), BBHEADER_SYNC_FAULT
+        # (#123) all have live registrations in-process; see
+        # test_biss_resolves_to_real_transform /
+        # test_t2mi_plp_resolves_to_real_transform.  The skeleton-tier
+        # pinning stays order-independent through the file's own
+        # isolation helper.
+        with _clean_override_table():
+            assert transform_builder_for(fault_type) is skeleton_class
 
     def test_biss_resolves_to_real_transform(self) -> None:
         """#126 replaced the BISS_KEY_MISMATCH skeleton: importing the
