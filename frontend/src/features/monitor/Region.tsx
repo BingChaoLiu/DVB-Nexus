@@ -55,6 +55,7 @@ import { AlertsPanel } from "./alerts/AlertsPanel";
 // Panel. SPEC-403's frozen onEvidenceSelect signature is consumed verbatim;
 // the region only holds the locator triple (no navigation, no derivation).
 import { PacketInspectorSection } from "./packet-inspector/PacketInspectorSection";
+import { parsePacketInspectorView, type PacketInspectorView } from "./packet-inspector/viewTypes";
 import { DiagnosisCandidateList, DiagnosisList } from "./diagnosis/DiagnosisList";
 import { JournalTail } from "./journal/JournalTail";
 import { ControlBar } from "./lifecycle/ControlBar";
@@ -330,6 +331,13 @@ function MonitorPage({ sessionId, onUntrack }: { sessionId: string; onUntrack: (
   // diagnose chain has no ts.* facts while the analyze REST face stays
   // frozen 501 (M4 裁定 B), so candidates are honestly zero there. Malformed
   // params seed nothing (honest absence, no fabricated locator).
+  // SPEC-404 §Phase2 (#132): `view` is additive on the deep link only — the
+  // locator triple keeps its semantics; absent/invalid falls back to the MVP
+  // default (viewTypes owns the vocabulary, ruling §10-5). Read-only here
+  // (本页面对 inspect_*/view 参数只读不写).
+  const [drillDownView] = useState<PacketInspectorView>(() =>
+    parsePacketInspectorView(searchParams.get("view")),
+  );
   const [drillDown, setDrillDown] = useState<DiagnosisEvidenceDTO | null>(() => {
     const artifact = searchParams.get("inspect_artifact");
     const pidRaw = searchParams.get("inspect_pid");
@@ -535,7 +543,7 @@ function MonitorPage({ sessionId, onUntrack }: { sessionId: string; onUntrack: (
             <DiagnosisCandidateList candidates={report.candidates} onEvidenceSelect={setDrillDown} />
           </section>
         )}
-        <PacketInspectorSection locator={drillDown} onClose={() => setDrillDown(null)} />
+        <PacketInspectorSection locator={drillDown} view={drillDownView} onClose={() => setDrillDown(null)} />
         <DiagnosisList diagnoses={diagnosesQuery.data ?? []} />
       </Panel>
 
