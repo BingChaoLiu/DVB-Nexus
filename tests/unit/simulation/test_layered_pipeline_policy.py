@@ -44,6 +44,7 @@ from simulation.layered_pipeline import (
 from simulation.ts_runtime import compute_config_hash
 from ts.t2mi.plp import PlpFilterConfig
 
+from tests._support.deterministic import seeded_bytes
 from tests.unit.simulation._ts_runtime_builders import (
     make_generator_config,
     make_session_spec,
@@ -165,6 +166,60 @@ class TestPipelineFingerprint:
         second = pipeline_fingerprint_document(LayerPipelineConfig())
         assert first == second
         assert set(first) == {"bbframe", "t2mi", "plp_assignment", "demux_plp_filter", "biss"}
+
+
+class TestKeyBodyReprSuppression:
+    """``BissFaceConfig`` key bodies never leak through ``repr()``
+    (SPEC-610/611 §9 key discipline — M6 code-review fix round; the
+    fingerprint projection already redacts, the repr face now does too,
+    mirroring ``ScenarioDocument.raw``'s ``repr=False`` precedent)."""
+
+    # 32-hex literals are a data-rule violation → deterministic generator.
+    MODE_E_ESW = "0123456789ABCDEF"
+    MODE_E_INJECTED_ID = seeded_bytes(0x5CE7A, 16).hex().upper()
+
+    @staticmethod
+    def _assert_key_absent(repr_text: str, *secrets: str) -> None:
+        """Case-insensitive containment plus a hex-token guard: the repr
+        must not carry the key bodies in any case spelling."""
+        lowered = repr_text.lower()
+        for secret in secrets:
+            assert secret.lower() not in lowered
+
+    def test_mode_1_repr_omits_session_word(self) -> None:
+        session_word = "a13dbc42908f"
+        config = BissFaceConfig(
+            mode="1", session_word=session_word, pid_scope=(256,)
+        )
+        self._assert_key_absent(repr(config), session_word)
+        # The wrapping pipeline config inherits the suppression.
+        pipeline = LayerPipelineConfig(
+            biss=BissFaceConfig(
+                mode="1", session_word=session_word, pid_scope=(256,)
+            )
+        )
+        self._assert_key_absent(repr(pipeline), session_word)
+
+    def test_mode_e_repr_omits_esw_and_injected_id(self) -> None:
+        config = BissFaceConfig(
+            mode="E",
+            encrypted_sw=self.MODE_E_ESW,
+            injected_id=self.MODE_E_INJECTED_ID,
+            pid_scope=(256,),
+        )
+        self._assert_key_absent(
+            repr(config), self.MODE_E_ESW, self.MODE_E_INJECTED_ID
+        )
+
+    def test_fields_stay_equality_visible(self) -> None:
+        config = BissFaceConfig(
+            mode="1", session_word="a13dbc42908f", pid_scope=(256,)
+        )
+        # repr suppression hides the value from logs, nothing else.
+        assert config.session_word == "a13dbc42908f"
+        assert config == BissFaceConfig(
+            mode="1", session_word="a13dbc42908f", pid_scope=(256,)
+        )
 
 
 class TestDefaultDemuxFilter:

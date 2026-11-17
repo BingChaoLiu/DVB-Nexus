@@ -171,3 +171,43 @@ class TestBissModeERejections:
         assert parsed.content_hash.startswith("sha256:") or len(
             parsed.content_hash
         ) == 64
+
+
+class TestKeyBodyReprSuppression:
+    """The ESW / Injected ID bodies never leak through ``repr()``
+    (SPEC-611 §5 key discipline — M6 code-review fix round; mirrors the
+    ``ScenarioDocument.raw`` ``repr=False`` precedent)."""
+
+    @staticmethod
+    def _assert_key_absent(repr_text: str, *secrets: str) -> None:
+        """Case-insensitive containment plus a hex-token guard: the repr
+        must not carry the key bodies in any case spelling."""
+        lowered = repr_text.lower()
+        for secret in secrets:
+            assert secret.lower() not in lowered
+
+    def test_config_repr_omits_key_bodies(self) -> None:
+        config = BissModeEConfig(
+            mode="E",
+            encrypted_sw=ENCRYPTED_SW,
+            injected_id=INJECTED_ID,
+            pid_scope=(0x0100,),
+        )
+        self._assert_key_absent(repr(config), ENCRYPTED_SW, INJECTED_ID)
+
+    def test_parsed_document_repr_omits_key_bodies(self) -> None:
+        parsed = parse_scenario_document(_with_biss_mode_e())
+        self._assert_key_absent(repr(parsed), ENCRYPTED_SW, INJECTED_ID)
+        # The fields are still readable and equality-visible — repr
+        # suppression hides the value from logs, nothing else.
+        assert parsed.biss is not None
+        assert parsed.biss.encrypted_sw == ENCRYPTED_SW
+        assert parsed.biss.injected_id == INJECTED_ID
+        assert parsed.biss == BissModeEConfig(
+            mode="E",
+            encrypted_sw=ENCRYPTED_SW,
+            injected_id=INJECTED_ID,
+            pid_scope=(0x0100,),
+            ca_pid=8191,
+            ca_system_id=9730,
+        )

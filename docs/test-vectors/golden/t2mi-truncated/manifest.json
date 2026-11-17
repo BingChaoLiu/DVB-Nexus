@@ -1,0 +1,24 @@
+{
+  "vector_id": "t2mi-truncated",
+  "kind": "faulted_ts",
+  "related_specs": [
+    "SPEC-600"
+  ],
+  "generator_version": "tools/golden_t2mi_fault_transform.py v2 (independent tail-truncation transform; no src/ts involvement)",
+  "config_hash": null,
+  "sha256": "sha256:bda6da9e1b04359844a9cbf19cf54559b05c1f9bb274523c0a95edb2e39cbfe1",
+  "packet_count": 2,
+  "fault_plan_ref": "t2mi-minimal",
+  "fault_parameters": {
+    "layer": "T2MI",
+    "transform": "tail_truncation",
+    "target_packet_index": 2,
+    "kept_tail_bytes": 100,
+    "expected_state": "truncated=True, trailing = kept_tail_bytes bytes of packet 2, packets 0–1 parse intact"
+  },
+  "verification": {
+    "path": "bit-level-review",
+    "direction": "independent-tail-truncation-transform→self-parse (truncated=True + verbatim trailing bytes, packets 0–1 intact; no scan/resync — house ruling #11 precedent)",
+    "evidence_ref": "docs/test-vectors/golden/t2mi-truncated/t2mi-truncated.verification.md"
+  }
+}

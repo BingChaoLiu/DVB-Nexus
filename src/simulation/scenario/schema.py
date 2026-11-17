@@ -245,7 +245,9 @@ class BissMode1Config:
     """
 
     mode: str
-    session_word: str
+    # Key body is repr-suppressed (SPEC-610 §9 key discipline; mirrors
+    # ScenarioDocument.raw's repr=False precedent).
+    session_word: str = field(repr=False)
     pid_scope: tuple[int, ...]
     ca_pid: int = 8191  # 0x1FFF, Tech 3292 constant semantics
 
@@ -273,8 +275,10 @@ class BissModeEConfig:
     """
 
     mode: str
-    encrypted_sw: str
-    injected_id: str
+    # Key bodies are repr-suppressed (SPEC-611 §5 key discipline; mirrors
+    # ScenarioDocument.raw's repr=False precedent).
+    encrypted_sw: str = field(repr=False)
+    injected_id: str = field(repr=False)
     pid_scope: tuple[int, ...]
     ca_pid: int = 8191  # 0x1FFF, Tech 3292 constant semantics
     ca_system_id: int = 9730  # 0x2602, BISS2 (Tech 3292 v3) constant semantics

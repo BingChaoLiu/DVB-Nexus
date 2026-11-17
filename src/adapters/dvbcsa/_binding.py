@@ -194,13 +194,19 @@ class DvbcsaBatchCipher:
         self, payloads: Sequence[bytes], cw: bytes, batch_fn
     ) -> "tuple[bytes, ...]":
         key = self._make_key(cw)
-        buffers = [self._validated_buffer(payload) for payload in payloads]
-        lengths = [len(payload) for payload in payloads]
-        out: list[bytes] = []
-        for start in range(0, len(buffers), self._batch_size):
-            chunk = buffers[start:start + self._batch_size]
-            chunk_lengths = lengths[start:start + self._batch_size]
-            out.extend(self._call_batch(batch_fn, chunk, chunk_lengths, key))
+        try:
+            buffers = [self._validated_buffer(payload) for payload in payloads]
+            lengths = [len(payload) for payload in payloads]
+            out: list[bytes] = []
+            for start in range(0, len(buffers), self._batch_size):
+                chunk = buffers[start:start + self._batch_size]
+                chunk_lengths = lengths[start:start + self._batch_size]
+                out.extend(self._call_batch(batch_fn, chunk, chunk_lengths, key))
+        finally:
+            # Native key lifecycle: every alloc is paired with exactly one
+            # free — including the ValueError path (payload >184) and any
+            # batch_fn failure (no handle leaks across the ctypes boundary).
+            self._lib.dvbcsa_bs_key_free(key)
         return tuple(out)
 
     def _make_key(self, cw: bytes) -> int:

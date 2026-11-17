@@ -28,6 +28,52 @@ from tests._support.csa1_oracle import (
 CSA_VECTORS = load_csa1_static_vectors()
 
 
+class _RecordingKeyLib:
+    """Fake of the loaded libdvbcsa_bs ctypes face — records every
+    ``dvbcsa_bs_key_alloc`` / ``dvbcsa_bs_key_free`` call so the
+    alloc/free pairing invariant is observable in a pure unit test
+    (no DLL, no ctypes; the handle is an opaque truthy sentinel)."""
+
+    def __init__(self):
+        self.alloc_calls = 0
+        self.free_calls = 0
+        self.allocated = []
+        self.freed = []
+
+    def dvbcsa_bs_key_alloc(self):
+        self.alloc_calls += 1
+        handle = object()  # opaque truthy native-handle stand-in
+        self.allocated.append(handle)
+        return handle
+
+    def dvbcsa_bs_key_free(self, key):
+        self.free_calls += 1
+        self.freed.append(key)
+
+    def dvbcsa_bs_key_set(self, cw, key):
+        pass
+
+    def dvbcsa_bs_batch_size(self):
+        return 4
+
+    def dvbcsa_bs_encrypt(self, key, entries, maxlen):
+        pass
+
+    def dvbcsa_bs_decrypt(self, key, entries, maxlen):
+        pass
+
+
+def _cipher_with_recording_lib() -> "tuple[DvbcsaBatchCipher, _RecordingKeyLib]":
+    """Build a :class:`DvbcsaBatchCipher` around the recording fake lib
+    (bypasses ``__init__``/dlopen — the lifecycle contract under test
+    lives in ``_run_batch``/``_make_key``)."""
+    lib = _RecordingKeyLib()
+    cipher = object.__new__(DvbcsaBatchCipher)
+    cipher._lib = lib
+    cipher._batch_size = lib.dvbcsa_bs_batch_size()
+    return cipher, lib
+
+
 class TestLoaderDegradation:
     def test_missing_dll_raises_unavailable_error(self):
         """DLL 缺失 = 显式降级错误（诚实态，不静默回落）— SPEC-610 §8.
@@ -45,6 +91,60 @@ class TestLoaderDegradation:
         """The degradation error type is raised (not swallowed into a
         None-returning factory): honest absence, never a fake backend."""
         assert issubclass(DvbcsaUnavailableError, RuntimeError)
+
+
+class TestKeyLifecyclePairing:
+    """Native key alloc/free pairing (M6 code-review fix round).
+
+    ``dvbcsa_bs_key_alloc`` hands back a native handle the GC cannot
+    see — every batch run must pair it with exactly one
+    ``dvbcsa_bs_key_free``, on the happy path *and* on every failure
+    path (payload validation, batch_fn failure).  Recorded via the
+    fake lib; the DLL-gated correctness tests above exercise the real
+    allocator locally (``DVB_NEXUS_DVBCSA_DLL``)."""
+
+    def test_happy_path_pairs_one_free_with_one_alloc(self):
+        cipher, lib = _cipher_with_recording_lib()
+        payloads = tuple(bytes(8 * (i + 1)) for i in range(6))  # 2 chunks
+        cipher.encrypt_batch(payloads, bytes(8))
+        assert lib.alloc_calls == 1
+        assert lib.free_calls == 1
+        assert lib.freed == lib.allocated
+
+    def test_payload_validation_failure_still_frees_key(self):
+        cipher, lib = _cipher_with_recording_lib()
+        with pytest.raises(ValueError):
+            cipher.encrypt_batch([bytes(8), bytes(185)], bytes(8))
+        assert lib.alloc_calls == 1
+        assert lib.free_calls == 1
+        assert lib.freed == lib.allocated
+
+    def test_batch_fn_failure_still_frees_key(self):
+        cipher, lib = _cipher_with_recording_lib()
+
+        def exploding_encrypt(key, entries, maxlen):
+            raise RuntimeError("simulated native failure")
+
+        lib.dvbcsa_bs_encrypt = exploding_encrypt
+        with pytest.raises(RuntimeError):
+            cipher.encrypt_batch([bytes(8)], bytes(8))
+        assert lib.alloc_calls == 1
+        assert lib.free_calls == 1
+        assert lib.freed == lib.allocated
+
+    def test_invalid_control_word_allocates_and_frees_nothing(self):
+        cipher, lib = _cipher_with_recording_lib()
+        with pytest.raises(ValueError):
+            cipher.encrypt_batch([bytes(8)], b"\x01\x02\x03")
+        assert lib.alloc_calls == 0
+        assert lib.free_calls == 0
+
+    def test_decrypt_batch_pairs_free_with_alloc(self):
+        cipher, lib = _cipher_with_recording_lib()
+        cipher.decrypt_batch([bytes(8)], bytes(8))
+        assert lib.alloc_calls == 1
+        assert lib.free_calls == 1
+        assert lib.freed == lib.allocated
 
 
 class TestDvbcsaBatchCipher:

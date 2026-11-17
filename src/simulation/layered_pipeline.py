@@ -164,9 +164,12 @@ class BissFaceConfig:
 
     mode: str  # "1" (CSA1 session word) | "E" (CISSA derived key)
     pid_scope: tuple[int, ...]
-    session_word: str | None = None  # mode "1": 12 hex
-    encrypted_sw: str | None = None  # mode "E": 16 hex
-    injected_id: str | None = None  # mode "E": 32 hex
+    # Key-material fields are repr-suppressed: the key body never leaks
+    # through repr()/f-string logging (SPEC-610 §9; mirrors
+    # ScenarioDocument.raw's repr=False precedent).
+    session_word: str | None = field(repr=False, default=None)  # mode "1": 12 hex
+    encrypted_sw: str | None = field(repr=False, default=None)  # mode "E": 16 hex
+    injected_id: str | None = field(repr=False, default=None)  # mode "E": 32 hex
 
     def __post_init__(self) -> None:
         if self.mode not in (BISS_MODE_1, BISS_MODE_E):
@@ -587,42 +590,41 @@ def run_layered_chain(
     faulted_packets: list[TSPacket] = []
     mark_cursor = 0
     for index, packet in enumerate(TSGenerator().iter_packets(config)):
-        while mark_cursor < len(ts_marks) and ts_marks[mark_cursor][0] <= index:
-            if on_activation is not None:
-                on_activation(ts_marks[mark_cursor][1])
-            mark_cursor += 1
+        mark_cursor = _drain_activations(ts_marks, mark_cursor, index, on_activation)
         baseline_packets.append(packet)
         if tee and ts_filter is not None:
             faulted_packets.append(ts_filter.apply(index, packet))
         else:
             faulted_packets.append(packet)
-    for index in sampler.indexes(
-        item_count=len(faulted_packets),
-        activation_indexes=[mark[0] for mark in ts_marks],
-    ):
-        _emit_packet_sampled(
-            emit, TS_STAGE_LAYER, index, faulted_packets[index].to_bytes()
-        )
+    _emit_stage_samples(
+        emit,
+        TS_STAGE_LAYER,
+        sampler,
+        faulted_packets,
+        [mark[0] for mark in ts_marks],
+        lambda packet: packet.to_bytes(),
+    )
     _stage_completed(emit, TS_STAGE_LAYER, len(faulted_packets))
     stage_counts = {TS_STAGE_LAYER: len(faulted_packets)}
     carry_baseline = b"".join(packet.to_bytes() for packet in baseline_packets)
     carry_faulted = b"".join(packet.to_bytes() for packet in faulted_packets)
     if cancelled():
-        return ChainResult(
+        return _cancelled_chain_result(
             tee=tee,
             baseline_outer=carry_baseline,
             faulted_outer=carry_faulted,
             stage_counts=stage_counts,
             events=events,
-            layer_logs={},
-            biss_scramble_summaries=[],
-            inner_results={},
-            cancelled=True,
         )
 
     # --- stage BISS: scrambler face (contribution order) -------------------
     if biss_face is not None or biss_fault_filter is not None:
         _stage_started(emit, BISS_STAGE_LAYER)
+        biss_marks = (
+            _stage_marks(biss_fault_filter.definitions)
+            if biss_fault_filter is not None
+            else ()
+        )
         if biss_face is not None:
             # Construction scrambling = the scenario's normal operation on
             # every face; the primitive's reserved hook carries the
@@ -635,32 +637,24 @@ def run_layered_chain(
             # Fault path: the mismatched-key scrambler IS the faulted
             # stream's BISS face (key source = the fault, ADR-0011 §2) —
             # it replaces the construction scrambler on this leg.
-            biss_marks = _stage_marks(biss_fault_filter.definitions)
             mark_cursor = 0
             for index, packet in enumerate(faulted_packets):
-                while (
-                    mark_cursor < len(biss_marks)
-                    and biss_marks[mark_cursor][0] <= index
-                ):
-                    if on_activation is not None:
-                        on_activation(biss_marks[mark_cursor][1])
-                    mark_cursor += 1
+                mark_cursor = _drain_activations(
+                    biss_marks, mark_cursor, index, on_activation
+                )
                 faulted_packets[index] = biss_fault_filter.apply(index, packet)
         elif tee and biss_face is not None:
             faulted_packets = list(
                 _scramble_construction(pipeline, faulted_packets, emit)
             )
-        for index in sampler.indexes(
-            item_count=len(faulted_packets),
-            activation_indexes=(
-                [mark[0] for mark in _stage_marks(biss_fault_filter.definitions)]
-                if biss_fault_filter is not None
-                else ()
-            ),
-        ):
-            _emit_packet_sampled(
-                emit, BISS_STAGE_LAYER, index, faulted_packets[index].to_bytes()
-            )
+        _emit_stage_samples(
+            emit,
+            BISS_STAGE_LAYER,
+            sampler,
+            faulted_packets,
+            [mark[0] for mark in biss_marks],
+            lambda packet: packet.to_bytes(),
+        )
         _stage_completed(emit, BISS_STAGE_LAYER, len(faulted_packets))
         stage_counts[BISS_STAGE_LAYER] = len(faulted_packets)
         carry_baseline = b"".join(
@@ -670,21 +664,22 @@ def run_layered_chain(
             packet.to_bytes() for packet in faulted_packets
         )
         if cancelled():
-            return ChainResult(
+            return _cancelled_chain_result(
                 tee=tee,
                 baseline_outer=carry_baseline,
                 faulted_outer=carry_faulted,
                 stage_counts=stage_counts,
                 events=events,
-                layer_logs={},
-                biss_scramble_summaries=[],
-                inner_results={},
-                cancelled=True,
             )
 
     # --- stage BBFRAME: encapsulate + frame-layer filters ------------------
     _stage_started(emit, BBFRAME_STAGE_LAYER)
     bbframe_filter = layer_filters.get(BBFRAME_STAGE_LAYER)
+    bbframe_marks = (
+        _stage_marks(bbframe_filter.definitions)
+        if bbframe_filter is not None
+        else ()
+    )
     baseline_frames = _build_bbframes(carry_baseline, pipeline)
     faulted_frames = _build_bbframes(carry_faulted, pipeline)
     if len(baseline_frames) != len(faulted_frames):  # pragma: no cover
@@ -694,28 +689,20 @@ def run_layered_chain(
             f"{len(faulted_frames)} frame(s)"
         )
     if bbframe_filter is not None:
-        bbframe_marks = _stage_marks(bbframe_filter.definitions)
         mark_cursor = 0
         for index, frame in enumerate(faulted_frames):
-            while (
-                mark_cursor < len(bbframe_marks)
-                and bbframe_marks[mark_cursor][0] <= index
-            ):
-                if on_activation is not None:
-                    on_activation(bbframe_marks[mark_cursor][1])
-                mark_cursor += 1
+            mark_cursor = _drain_activations(
+                bbframe_marks, mark_cursor, index, on_activation
+            )
             faulted_frames[index] = bbframe_filter.apply(index, frame)
-    for index in sampler.indexes(
-        item_count=len(faulted_frames),
-        activation_indexes=(
-            [mark[0] for mark in _stage_marks(bbframe_filter.definitions)]
-            if bbframe_filter is not None
-            else ()
-        ),
-    ):
-        _emit_packet_sampled(
-            emit, BBFRAME_STAGE_LAYER, index, faulted_frames[index]
-        )
+    _emit_stage_samples(
+        emit,
+        BBFRAME_STAGE_LAYER,
+        sampler,
+        faulted_frames,
+        [mark[0] for mark in bbframe_marks],
+        lambda frame: frame,
+    )
     _stage_completed(emit, BBFRAME_STAGE_LAYER, len(faulted_frames))
     stage_counts[BBFRAME_STAGE_LAYER] = len(faulted_frames)
     # The stage summary describes the encapsulator's production face —
@@ -727,21 +714,20 @@ def run_layered_chain(
     carry_baseline = b"".join(baseline_frames)
     carry_faulted = b"".join(faulted_frames)
     if cancelled():
-        return ChainResult(
+        return _cancelled_chain_result(
             tee=tee,
             baseline_outer=carry_baseline,
             faulted_outer=carry_faulted,
             stage_counts=stage_counts,
             events=events,
-            layer_logs={},
-            biss_scramble_summaries=[],
-            inner_results={},
-            cancelled=True,
         )
 
     # --- stage T2MI: encapsulate + packet-layer filters → transmitted face -
     _stage_started(emit, T2MI_STAGE_LAYER)
     t2mi_filter = layer_filters.get(T2MI_STAGE_LAYER)
+    t2mi_marks = (
+        _stage_marks(t2mi_filter.definitions) if t2mi_filter is not None else ()
+    )
     baseline_t2mi = list(_build_t2mi_packets(tuple(baseline_frames), pipeline))
     faulted_t2mi = list(_build_t2mi_packets(tuple(faulted_frames), pipeline))
     if len(baseline_t2mi) != len(faulted_t2mi):  # pragma: no cover
@@ -751,44 +737,32 @@ def run_layered_chain(
             f"{len(faulted_t2mi)} packet(s)"
         )
     if t2mi_filter is not None:
-        t2mi_marks = _stage_marks(t2mi_filter.definitions)
         mark_cursor = 0
         for index, packet in enumerate(faulted_t2mi):
-            while (
-                mark_cursor < len(t2mi_marks)
-                and t2mi_marks[mark_cursor][0] <= index
-            ):
-                if on_activation is not None:
-                    on_activation(t2mi_marks[mark_cursor][1])
-                mark_cursor += 1
+            mark_cursor = _drain_activations(
+                t2mi_marks, mark_cursor, index, on_activation
+            )
             faulted_t2mi[index] = t2mi_filter.apply(index, packet)
-    for index in sampler.indexes(
-        item_count=len(faulted_t2mi),
-        activation_indexes=(
-            [mark[0] for mark in _stage_marks(t2mi_filter.definitions)]
-            if t2mi_filter is not None
-            else ()
-        ),
-    ):
-        _emit_packet_sampled(
-            emit, T2MI_STAGE_LAYER, index, encode_packet(faulted_t2mi[index])
-        )
+    _emit_stage_samples(
+        emit,
+        T2MI_STAGE_LAYER,
+        sampler,
+        faulted_t2mi,
+        [mark[0] for mark in t2mi_marks],
+        encode_packet,
+    )
     _stage_completed(emit, T2MI_STAGE_LAYER, len(faulted_t2mi))
     stage_counts[T2MI_STAGE_LAYER] = len(faulted_t2mi)
     emit_t2mi_stage_summary(emit, collect_t2mi_stage_summary(faulted_t2mi))
     baseline_outer = b"".join(encode_packet(packet) for packet in baseline_t2mi)
     faulted_outer = b"".join(encode_packet(packet) for packet in faulted_t2mi)
     if cancelled():
-        return ChainResult(
+        return _cancelled_chain_result(
             tee=tee,
             baseline_outer=baseline_outer,
             faulted_outer=faulted_outer,
             stage_counts=stage_counts,
             events=events,
-            layer_logs={},
-            biss_scramble_summaries=[],
-            inner_results={},
-            cancelled=True,
         )
 
     # --- receiver face: the demux chain over the received leg(s) -----------
@@ -829,6 +803,64 @@ def run_layered_chain(
 
 
 # --- chain internals ---------------------------------------------------------------
+
+
+def _cancelled_chain_result(
+    *,
+    tee: bool,
+    baseline_outer: bytes,
+    faulted_outer: bytes,
+    stage_counts: dict[str, int],
+    events: list[tuple[str, dict[str, Any]]],
+) -> ChainResult:
+    """The partial-faces result at a cancel boundary: the carries landed so
+    far, empty downstream faces, ``cancelled=True`` (the caller lands them
+    as ``partial`` artifacts)."""
+    return ChainResult(
+        tee=tee,
+        baseline_outer=baseline_outer,
+        faulted_outer=faulted_outer,
+        stage_counts=stage_counts,
+        events=events,
+        layer_logs={},
+        biss_scramble_summaries=[],
+        inner_results={},
+        cancelled=True,
+    )
+
+
+def _drain_activations(
+    marks: Sequence[tuple[int, FaultDefinition]],
+    mark_cursor: int,
+    index: int,
+    on_activation: Callable[[FaultDefinition], None] | None,
+) -> int:
+    """Fire every stage mark whose activation index has been reached by
+    ``index`` (shared-stage order, ADR-0007 item 3) and return the advanced
+    cursor — the per-item activation shape every faulted stage shares."""
+    while mark_cursor < len(marks) and marks[mark_cursor][0] <= index:
+        if on_activation is not None:
+            on_activation(marks[mark_cursor][1])
+        mark_cursor += 1
+    return mark_cursor
+
+
+def _emit_stage_samples(
+    emit,
+    layer: str,
+    sampler: "StageSampler",
+    items: Sequence[Any],
+    activation_indexes: Sequence[int],
+    wire_of: Callable[[Any], bytes],
+) -> None:
+    """Emit the stage's sampled slot faces (sampling policy: SPEC-303
+    §Phase2) — ``wire_of`` lifts one item onto the wire (``to_bytes`` /
+    identity / ``encode_packet``)."""
+    for index in sampler.indexes(
+        item_count=len(items),
+        activation_indexes=activation_indexes,
+    ):
+        _emit_packet_sampled(emit, layer, index, wire_of(items[index]))
 
 
 def _stage_started(emit, layer: str) -> None:

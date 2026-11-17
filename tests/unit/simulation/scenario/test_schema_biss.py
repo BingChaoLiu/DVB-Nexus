@@ -159,3 +159,40 @@ class TestBissSectionRejections:
         assert bad_word.lower() not in " ".join(
             excinfo.value.details
         ).lower()
+
+
+class TestKeyBodyReprSuppression:
+    """The session word never leaks through ``repr()`` (SPEC-610 §9 key
+    discipline — M6 code-review fix round; mirrors the
+    ``ScenarioDocument.raw`` ``repr=False`` precedent)."""
+
+    @staticmethod
+    def _assert_key_absent(repr_text: str, *secrets: str) -> None:
+        """Case-insensitive containment plus a hex-token guard: the repr
+        must not carry the key body in any case spelling."""
+        lowered = repr_text.lower()
+        for secret in secrets:
+            assert secret.lower() not in lowered
+
+    def test_config_repr_omits_session_word(self) -> None:
+        config = BissMode1Config(
+            mode="1",
+            session_word=J96_SESSION_WORD,
+            pid_scope=(0x0100,),
+            ca_pid=8191,
+        )
+        self._assert_key_absent(repr(config), J96_SESSION_WORD)
+
+    def test_parsed_document_repr_omits_session_word(self) -> None:
+        parsed = parse_scenario_document(_with_biss())
+        self._assert_key_absent(repr(parsed), J96_SESSION_WORD)
+        # The field is still readable and equality-visible — repr
+        # suppression hides the value from logs, nothing else.
+        assert parsed.biss is not None
+        assert parsed.biss.session_word == J96_SESSION_WORD
+        assert parsed.biss == BissMode1Config(
+            mode="1",
+            session_word=J96_SESSION_WORD,
+            pid_scope=(0x0100,),
+            ca_pid=8191,
+        )
