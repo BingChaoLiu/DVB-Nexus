@@ -28,6 +28,8 @@
 | `cc-discontinuity` | faulted_ts | CC_DISCONTINUITY：相对偏移 delta=3，落点 slot 50，偏移持续（SPEC-204 §6.3），ref 同上 | L2：独立变换脚本→tsduck-analyze（continuity 报 slot 50 missing 3） | registered |
 | `pmt-pid-mismatch-baseline` | generated_ts | PMT_PID_MISMATCH 对的 baseline（同上几何） | L2：self-generate→tsduck-analyze | registered |
 | `pmt-pid-mismatch` | faulted_ts | PMT_PID_MISMATCH：PAT `program_map_PID` 4096→4100 + CRC 重算（SPEC-204 §6.4），ref 同上 | L2：独立变换脚本→tsduck-analyze（tstables 见 PAT 指向 4100、PMT 孤儿在 4096） | registered |
+| `t2mi-minimal` | generated_ts | 最小合法 T2-MI 流：3 BBFRAME 包（NM UP、BBHEADER 10B、多 UP 尾包形态 [20,20,12]、PLP [0,0,1]、背靠背紧排）（SPEC-600 §11.1，#122） | L1：TS 102 773 §5.1 表推导脚本（无 src 参与）+ TSDuck 3.45-4798 HEM 交叉**NOT TRUSTED**（尾包静默丢失复现，裁定 §10-9） | registered |
+| `t2mi-crc-corrupt` | faulted_ts | T2MI CRC-32 位翻转：包 0 坏包显式标记 + 继续解析、静默丢弃为零（SPEC-600 §8），`fault_plan_ref=t2mi-minimal` | L1：独立变换脚本→self-parse（坏包标记/继续解析逐字节钉扎，TSDuck 3.45 静默丢弃教训 #104） | registered |
 | `biss-j96-mode1` | bit_level | BISS Mode 1：J.96 §8 示例 SW `A13DBC42908F`→CW `A13DBC9A42908F61` 派生钉扎 + CSA1 加扰 roundtrip（SPEC-610）；DLL 依赖面 CI 诚实 NOT RUN（ADR-0011 §5） | L1：标准向量推导脚本（`tools/make_golden_biss_j96.py`，纯 Python CSA1 oracle，无 src 参与）+ 人工评审；DLL 对拍本地绿/CI NOT RUN | registered |
 
 ### #14 Q3 三 TODO 落实路径（已闭环）
