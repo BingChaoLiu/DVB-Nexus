@@ -164,25 +164,41 @@ class TestRulesetUniqueness:
 
 
 class TestBuiltinLoad:
-    """SPEC-307 §6: the four-rule builtin set and its table values."""
+    """SPEC-307 §6 + §Phase2: the builtin set and its table values —
+    the MVP four (§6 table) plus the Phase 2 four (#130, §Phase2 chapter,
+    one rule per encapsulation primitive)."""
+
+    #: The MVP four in the §6 table order (零回归 anchor).
+    MVP_RULE_IDS = (
+        "DIA-PAT-MISSING",
+        "DIA-PMT-CRC-BAD",
+        "DIA-CC-DISCONTINUITY",
+        "DIA-PMT-PID-MISMATCH",
+    )
+
+    #: The Phase 2 four in the §Phase2 candidate order.
+    PHASE2_RULE_IDS = (
+        "DIA-T2MI-PLP-MISMATCH",
+        "DIA-BBHEADER-SYNC-FAULT",
+        "DIA-BISS-KEY-MISMATCH",
+        "DIA-PMT-PID-DRIFT",
+    )
 
     @pytest.fixture(scope="class")
     def builtin(self) -> tuple[DiagnosticRule, ...]:
         return load_builtin_rules()
 
-    def test_loads_exactly_the_four_rules(self, builtin):
+    def test_loads_exactly_the_registered_ruleset(self, builtin):
         assert [rule.rule_id for rule in builtin] == [
-            "DIA-PAT-MISSING",
-            "DIA-PMT-CRC-BAD",
-            "DIA-CC-DISCONTINUITY",
-            "DIA-PMT-PID-MISMATCH",
+            *self.MVP_RULE_IDS,
+            *self.PHASE2_RULE_IDS,
         ]
 
     def test_load_order_follows_the_spec5_ordering(self, builtin):
         """Registration order is the SPEC-307 §5 output ordering (the
         evaluator re-applies it; the static set is pre-sorted)."""
         priorities = [rule.priority for rule in builtin]
-        assert priorities == sorted(priorities) == [10, 20, 30, 40]
+        assert priorities == sorted(priorities) == [10, 20, 30, 40, 50, 60, 70, 80]
 
     @pytest.mark.parametrize(
         ("rule_id", "code", "priority", "severity", "confidence"),
@@ -191,6 +207,10 @@ class TestBuiltinLoad:
             ("DIA-PMT-CRC-BAD", "DIAG_PMT_CRC_BAD", 20, "error", "high"),
             ("DIA-CC-DISCONTINUITY", "DIAG_CC_DISCONTINUITY", 30, "warning", "high"),
             ("DIA-PMT-PID-MISMATCH", "DIAG_PMT_PID_MISMATCH", 40, "error", "medium"),
+            ("DIA-T2MI-PLP-MISMATCH", "DIAG_T2MI_PLP_MISMATCH", 50, "error", "medium"),
+            ("DIA-BBHEADER-SYNC-FAULT", "DIAG_BBHEADER_SYNC_FAULT", 60, "error", "medium"),
+            ("DIA-BISS-KEY-MISMATCH", "DIAG_BISS_KEY_MISMATCH", 70, "error", "medium"),
+            ("DIA-PMT-PID-DRIFT", "DIAG_PMT_PID_DRIFT", 80, "error", "low"),
         ],
     )
     def test_table_values_per_rule(
@@ -203,16 +223,33 @@ class TestBuiltinLoad:
         assert rule.confidence.value == confidence
         assert rule.rule_version == "1.0.0"
 
-    def test_match_event_types_are_observation_family(self, builtin):
+    def test_match_event_types_are_registered_signal_faces(self, builtin):
+        """The match selector per family (SPEC-307 §4 + §Phase2): the MVP
+        four consume observation-family signals (ts.*); the Phase 2
+        three consume their registered candidate events (the strict-key
+        construction/evidence namespaces the §Phase2 chapter names as the
+        evidence), and the drift rule consumes the ts.* observation face
+        per ruling §10-16-③."""
+        from domain.observation.registry import REGISTERED_EVENT_TYPES
+
         for rule in builtin:
+            assert rule.match.event_type in REGISTERED_EVENT_TYPES
+        for rule_id in self.MVP_RULE_IDS:
+            rule = next(r for r in builtin if r.rule_id == rule_id)
             assert rule.match.event_type in TS_EVENT_TYPES
 
-    def test_expected_evidence_is_nonempty_and_registered(self, builtin):
+    def test_expected_evidence_is_registered_and_interlocked(self, builtin):
+        """Every evidence entry is a registered event type (SPEC-301 §4);
+        the MVP four keep their all-ts.* faces unchanged (零回归)."""
+        from domain.observation.registry import validate_event_type
+
         for rule in builtin:
             assert rule.expected_evidence
-            assert all(
-                evidence.startswith("ts.") for evidence in rule.expected_evidence
-            )
+            for evidence in rule.expected_evidence:
+                validate_event_type(evidence)
+        for rule_id in self.MVP_RULE_IDS:
+            rule = next(r for r in builtin if r.rule_id == rule_id)
+            assert all(e.startswith("ts.") for e in rule.expected_evidence)
 
     def test_suppression_is_the_mvp_fixed_declaration(self, builtin):
         for rule in builtin:
@@ -332,7 +369,7 @@ class TestBuiltinRuleSet:
         from domain.diagnosis.rules import BuiltinRuleSet
 
         rules = BuiltinRuleSet().rules()
-        assert len(rules) == 4
+        assert len(rules) == 8
         assert all(rule.enabled for rule in rules)
 
     def test_disabled_rule_is_flagged_not_removed(self):
@@ -342,7 +379,7 @@ class TestBuiltinRuleSet:
             disabled_rule_ids=["DIA-CC-DISCONTINUITY"]
         ).rules()
         by_id = {rule.rule_id: rule for rule in rules}
-        assert len(rules) == 4  # the set keeps the rule visible
+        assert len(rules) == 8  # the set keeps the rule visible
         assert by_id["DIA-CC-DISCONTINUITY"].enabled is False
         assert by_id["DIA-PAT-MISSING"].enabled is True
         # Everything except the switch stays byte-identical.
@@ -366,7 +403,7 @@ class TestRulesProvider:
         from domain.diagnosis.rules import builtin_rules_provider
 
         rules = builtin_rules_provider()
-        assert len(rules) == 4
+        assert len(rules) == 8
         for rule in rules:
             # Structural conformance with the #54 EvaluationRule face.
             for attribute in (

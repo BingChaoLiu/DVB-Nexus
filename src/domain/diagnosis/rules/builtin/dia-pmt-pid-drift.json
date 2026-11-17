@@ -1,0 +1,50 @@
+{
+  "rule_id": "DIA-PMT-PID-DRIFT",
+  "rule_version": "1.0.0",
+  "code": "DIAG_PMT_PID_DRIFT",
+  "priority": 80,
+  "severity": "error",
+  "confidence": "low",
+  "title": "PMT version drifts from the declared expectation",
+  "summary_template": "PMT version {pmt_version} observed against declared expectation {expected_pmt_version}; the demux declared PID map is out of sync",
+  "match": {
+    "event_type": "ts.psi_section_observed",
+    "predicates": [
+      {
+        "field": "payload.section",
+        "op": "eq",
+        "value": "PMT"
+      },
+      {
+        "field": "payload.pmt_version",
+        "op": "exists",
+        "value": null
+      },
+      {
+        "field": "payload.expected_pmt_version",
+        "op": "exists",
+        "value": null
+      }
+    ],
+    "group_by": [
+      "node_id",
+      "pid"
+    ],
+    "window": null
+  },
+  "suppression": {
+    "key": [
+      "code",
+      "node_id"
+    ],
+    "window": "per_run"
+  },
+  "suggested_actions": [
+    "Re-align the demux declared-PID map with the drifted PMT version"
+  ],
+  "expected_evidence": [
+    "ts.psi_section_observed",
+    "fault.applied"
+  ],
+  "enabled": true
+}

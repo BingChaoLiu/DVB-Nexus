@@ -1,0 +1,43 @@
+{
+  "rule_id": "DIA-BBHEADER-SYNC-FAULT",
+  "rule_version": "1.0.0",
+  "code": "DIAG_BBHEADER_SYNC_FAULT",
+  "priority": 60,
+  "severity": "error",
+  "confidence": "medium",
+  "title": "BBFRAME header recovery failed on the received frames",
+  "summary_template": "BBFRAME header recovery failed on {failure_count} frame(s); first failed frame index {first_failed_frame_index}",
+  "match": {
+    "event_type": "bbframe.recovery_failed",
+    "predicates": [
+      {
+        "field": "payload.failure_count",
+        "op": "gt",
+        "value": 0
+      },
+      {
+        "field": "payload.first_failed_frame_index",
+        "op": "exists",
+        "value": null
+      }
+    ],
+    "group_by": [
+      "node_id"
+    ],
+    "window": null
+  },
+  "suppression": {
+    "key": [
+      "code",
+      "node_id"
+    ],
+    "window": "per_run"
+  },
+  "suggested_actions": [
+    "Inspect the BBHEADER of the first failed frame (EN 302 755 §5.1.7)"
+  ],
+  "expected_evidence": [
+    "bbframe.recovery_failed"
+  ],
+  "enabled": true
+}
