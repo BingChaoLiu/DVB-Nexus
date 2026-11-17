@@ -57,7 +57,7 @@ from types import MappingProxyType
 from typing import Any, Mapping
 
 from faults.definition import FaultActivation, FaultDefinition
-from faults.registry import MVP_FAULT_TYPES
+from faults.registry import KNOWN_FAULT_TYPES, LAYER_BY_FAULT_TYPE
 from simulation.clock import SimulationClockConfig
 from simulation.errors import SimulationError
 from simulation.state.graph import (
@@ -695,19 +695,36 @@ def _parse_fault_plan(
             )
             if parsed is not None:
                 expected = parsed
+        # Phase 2 additive (SPEC-204 §Phase2, ticket #131 orchestrator
+        # ruling): a fault's ``layer`` is semantics, not wire state — the
+        # same convention as the run-wire face (#128, which derives it from
+        # ``LAYER_BY_FAULT_TYPE``).  The parse accepts an optional explicit
+        # ``layer`` key (pass-through; the layer-vs-fault-type constraint is
+        # owned by the faults.registry VALIDATING gate) and defaults to the
+        # registry's declared layer, so scenario documents never need to
+        # carry the key and the MVP four still resolve to "TS" exactly as
+        # before the dataclass default did.
+        layer: str | None = None
+        if "layer" in raw_fault:
+            layer = _require_non_empty_str(raw_fault, "layer", path, errors)
         if fault_id is not None:
             if fault_id in seen_ids:
                 errors.append(
                     f"{path}.fault_id: duplicate fault_id within the plan"
                 )
             seen_ids.add(fault_id)
-        if fault_type is not None and fault_type not in MVP_FAULT_TYPES:
+        if fault_type is not None and fault_type not in KNOWN_FAULT_TYPES:
             errors.append(
                 f"{path}.fault_type: {fault_type!r}-shaped value is not in "
-                "the MVP fault-type registry (SPEC-204 §6)"
+                "the fault-type registry (SPEC-204 §6 + §Phase2)"
             )
         if errors and any(detail.startswith(path) for detail in errors):
             continue
+        resolved_layer = (
+            layer
+            if layer is not None
+            else LAYER_BY_FAULT_TYPE.get(fault_type or "", "TS")
+        )
         faults.append(
             FaultDefinition(
                 fault_id=fault_id or "",
@@ -716,6 +733,7 @@ def _parse_fault_plan(
                 parameters=dict(parameters),
                 activation=activation,
                 expected_observations=expected,
+                layer=resolved_layer,
             )
         )
     return tuple(faults)

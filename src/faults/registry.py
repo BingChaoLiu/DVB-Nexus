@@ -29,7 +29,7 @@ optional parameter = minor; removing/renaming/re-semanting = major.
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING, Any, Callable
 
 from faults.definition import FaultActivation, FaultDefinition
 from faults.targets import FaultTarget, parse_target_id
@@ -485,15 +485,27 @@ def _validate_pmt_pid_drift_params(
             "program_number → drifted pmt_pid (SPEC-204 §Phase2 item 4)"
         )
         return
-    for program_number, drifted_pid in pid_map.items():
-        if not isinstance(program_number, int) or isinstance(
-            program_number, bool
+    for raw_program_number, drifted_pid in pid_map.items():
+        # JSON object keys are always strings — an all-digit ASCII string
+        # key is coerced to its int program number so the scenario wire can
+        # carry the mapping (ticket #131 orchestrator ruling; the Python
+        # int-key path is unchanged).  Bools stay excluded even though they
+        # subclass int (MVP-era strictness).
+        if isinstance(raw_program_number, str) and (
+            raw_program_number.isascii() and raw_program_number.isdigit()
         ):
+            program_number: Any = int(raw_program_number)
+        elif isinstance(raw_program_number, int) and not isinstance(
+            raw_program_number, bool
+        ):
+            program_number = raw_program_number
+        else:
             reject(
-                f"PMT_PID_DRIFT program_number {program_number!r} must be "
-                "an int"
+                f"PMT_PID_DRIFT program_number {raw_program_number!r} must "
+                "be an int (or an all-digit string key on the JSON wire)"
             )
-        elif program_number < 1:
+            continue
+        if program_number < 1:
             reject(
                 f"PMT_PID_DRIFT program_number {program_number} must be "
                 "positive (0 is the PAT's program_count indicator)"
