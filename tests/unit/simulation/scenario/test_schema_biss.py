@@ -90,10 +90,12 @@ class TestBissSectionHappyPath:
 
 class TestBissSectionRejections:
     def test_unsupported_mode_rejected(self) -> None:
-        """Mode E sections are SPEC-611/#127 wire face — explicit rejection
-        (additive extension point, never a silent pass)."""
+        """Unsupported biss modes are an explicit rejection (never a
+        silent pass).  The Mode E face ("E") parses since #127 (SPEC-611
+        — see test_schema_biss_mode_e.py); "2" and friends stay outside
+        the scenario wire face."""
         with pytest.raises(ScenarioSchemaInvalidError) as excinfo:
-            parse_scenario_document(_with_biss(mode="E"))
+            parse_scenario_document(_with_biss(mode="2"))
         assert "$.biss.mode" in excinfo.value.details[0]
 
     def test_session_word_wrong_length_rejected(self) -> None:

@@ -1,0 +1,32 @@
+{
+  "vector_id": "biss-mode-e-derive",
+  "kind": "bit_level",
+  "related_specs": [
+    "SPEC-611",
+    "SPEC-610",
+    "SPEC-204"
+  ],
+  "generator_version": "tools/make_golden_biss_mode_e.py (J.96 §9.3/§8 + TS 103 127 §6.3 inline re-implementation; pycryptodome primitives; no src/ involvement)",
+  "config_hash": "sha256:986ce3a5ad0715d20a2f77060653552b13ad0ec6b42ee924486f33a400339e0e",
+  "sha256": "sha256:eda260a4e579a6d209f94fb4a71e4130ae23e58c29e564b77094baf069218a60",
+  "packet_count": 6,
+  "fault_plan_ref": null,
+  "biss": {
+    "mode": "E",
+    "encrypted_sw": "BCD10F7EA1978B2C",
+    "injected_id": "596E46877A891C09FC0AB3D3F5F9F2B4",
+    "derived_session_word": "A13DBC42908F",
+    "derived_cw": "A13DBC9A42908F61",
+    "ciss_key_composition": "CW‖CW (sandbox Mode E → CISSA pin)",
+    "pid_scope": [
+      256
+    ],
+    "ca_pid": 8191,
+    "ca_system_id": 9730
+  },
+  "verification": {
+    "path": "bit-level-review",
+    "direction": "standard-algorithm chain (ITU-T J.96 §9.3 DES-ECB Mode E derivation with the §9.3.3 a odd-parity mapping + §8 checksum formula, cross-checked by three independent implementations in research #106; ETSI TS 103 127 §6.3 CISSA AES-128-CBC fixed-IV per-packet rules) → pycryptodome-generated scrambled stream; the runtime implementation is cross-checked against the registered bytes in the conformance suite; no DLL dependency face",
+    "evidence_ref": "docs/test-vectors/golden/biss-mode-e-derive/biss-mode-e-derive.verification.md"
+  }
+}

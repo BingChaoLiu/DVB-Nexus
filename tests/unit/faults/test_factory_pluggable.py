@@ -130,14 +130,28 @@ class TestSkeletonWiring:
     def test_biss_resolves_to_real_transform(self) -> None:
         """#126 replaced the BISS_KEY_MISMATCH skeleton: importing the
         owning filter module self-registers the real builder (ruling
-        §10-4) — the resolution order puts it ahead of the skeleton tier."""
-        import faults.filters.scrambler  # noqa: F401 — self-registration
+        §10-4) — the resolution order puts it ahead of the skeleton tier.
+        #127 (SPEC-611) replaced the registration with the dispatching
+        builder: Mode 1 definitions still resolve to #126's transform
+        (the identity pin becomes a behavior pin — the resolution
+        produces #126's transform for a Mode 1 definition)."""
+        import faults.filters.biss_mode_e  # noqa: F401 — dispatch registration
+        from faults.definition import FaultActivation, FaultDefinition
         from faults.filters.scrambler import BissKeyMismatchTransform
 
-        assert (
-            transform_builder_for(FAULT_TYPE_BISS_KEY_MISMATCH)
-            is BissKeyMismatchTransform
+        builder = transform_builder_for(FAULT_TYPE_BISS_KEY_MISMATCH)
+        definition = FaultDefinition(
+            fault_id="f-biss-mismatch",
+            fault_type=FAULT_TYPE_BISS_KEY_MISMATCH,
+            target_id="mux-0",
+            parameters={
+                "wrong_session_word": "0123456789AB",
+                "pid_scope": [0x0100],
+            },
+            activation=FaultActivation(kind="session_start", packet_index=None),
+            layer="BISS",
         )
+        assert isinstance(builder(definition), BissKeyMismatchTransform)
 
     def test_t2mi_plp_resolves_to_real_transform(self) -> None:
         """#124 replaced the T2MI_PLP_MISMATCH skeleton: importing the
