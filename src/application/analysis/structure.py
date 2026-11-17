@@ -72,10 +72,13 @@ def t2mi_structure(stream: bytes) -> dict[str, Any]:
                 "packet_index": index,
                 "packet_type": packet.packet_type,
                 "packet_counter": packet.packet_counter,
+                "superframe_index": packet.superframe_index,
+                "reserved": f"0x{packet.reserved[0]:02x}{packet.reserved[1]:02x}",
                 "payload_kind": packet.payload_kind,
                 "payload_bytes_len": packet.payload_bytes_len,
                 "crc32_valid": packet.crc32_valid,
                 "frame_index": packet.frame_index,
+                "interleaving_frame_start": packet.interleaving_frame_start,
                 "plp_id": packet.plp_id,
             }
         )

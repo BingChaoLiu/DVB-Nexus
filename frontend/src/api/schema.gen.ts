@@ -1953,6 +1953,21 @@ export interface components {
              * @description Transport-prefix PLP id (BBFRAME packets only, else None).
              */
             plp_id?: number | null;
+            /**
+             * Superframe Index
+             * @description Header byte 2 high nibble (4-bit superframe index).
+             */
+            superframe_index?: number | null;
+            /**
+             * Reserved
+             * @description Header bytes 2..3 verbatim hex digest (0xNNNN, BE).
+             */
+            reserved?: string | null;
+            /**
+             * Interleaving Frame Start
+             * @description BBFRAME transport-prefix flags bit (third prefix byte, 0x80); None when the prefix face is unavailable — non-BBFRAME packets or a payload too short to carry the flags byte.
+             */
+            interleaving_frame_start?: boolean | null;
         };
         /**
          * T2miStructureViewDTO
