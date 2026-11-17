@@ -343,16 +343,19 @@ class TestLayeredEventDelivery:
         assert applied and applied[0]["layer"] == "T2MI"
         assert applied[0]["applied_packet_indexes"]
 
-    def test_guard_world_skips_only_the_phase2_types(self) -> None:
-        # Today's registry (no stub): the Phase 2 events are skipped by the
-        # guard and the run still completes — no EnvelopeError may ever
-        # break the run outcome (ruling §10-7). The registered families
+    def test_real_registry_delivers_the_phase2_types(self) -> None:
+        # The real registry (#129 landed the entries, no stub): the guard
+        # passes the Phase 2 types through and their envelopes clear
+        # parse_envelope — the registered payload schemas accept the
+        # chain's REAL emission shapes (no EnvelopeError may ever break
+        # the run outcome, ruling §10-7). The registered families
         # (session_*/run_*/fault.*) still publish.
         events = _run_with_delivery()
         types = {event["event_type"] for event in events}
         assert "fault.applied" in types
-        for event_type in types:
-            assert not event_type.startswith(("gen.", "t2mi.", "bbframe.", "biss."))
+        assert any(t.startswith("gen.") for t in types)
+        assert "t2mi.stage_summary" in types
+        assert "t2mi.plp_mismatch" in types
 
 
 def _stub_phase2_registry(monkeypatch) -> None:

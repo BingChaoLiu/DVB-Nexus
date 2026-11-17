@@ -35,6 +35,7 @@ from fastapi import APIRouter, Request, Response
 from starlette.exceptions import HTTPException
 
 from api.dto.artifacts import ArtifactMetaDTO
+from api.dto.encapsulation import StructureViewDTO
 from application.errors import BadRequestError, NotFoundError
 
 __all__ = ["ArtifactsPort", "build_artifacts_router"]
@@ -151,7 +152,10 @@ def build_artifacts_router(port: ArtifactsPort) -> APIRouter:
             },
         )
 
-    @router.get("/artifacts/{artifact_id}/structure")
+    @router.get(
+        "/artifacts/{artifact_id}/structure",
+        response_model=StructureViewDTO,
+    )
     async def get_artifact_structure(
         artifact_id: str,
         view: str = "ts",
@@ -159,8 +163,11 @@ def build_artifacts_router(port: ArtifactsPort) -> APIRouter:
     ) -> dict:
         """The layered structure JSON face (#128, additive; SPEC-404
         §Phase2 data source — the json_map chain assembly, keys = the
-        upstream frozen projections).  Ports without the face keep the
-        honest 501."""
+        upstream frozen projections).  ``response_model`` = the
+        ``view``-discriminated structure union (ticket #129: the codegen
+        plane's reachability face — REQ-API-500-002, the #80 precedent);
+        it re-validates and serializes the assembly unchanged.  Ports
+        without the face keep the honest 501."""
         structure_face = getattr(port, "structure_view", None)
         if structure_face is None:
             raise HTTPException(

@@ -1,19 +1,19 @@
 """gen.* emission discipline at the emitter seam — the unit half
-(ticket #128, SPEC-303 §Phase2, ruling §10-7).
+(ticket #128, SPEC-303 §Phase2, ruling §10-7; registry face flipped by
+#129).
 
 The four Phase 2 namespaces are emitted through the same
 :class:`simulation.events.SimulationEventEmitter` choke point as every
-other run-scoped event (ADR-0006 — no fourth envelope).  Until #129 lands
-the registry entries, ``domain.observation`` rejects the new types with
-``EnvelopeError`` — so the emitter carries the orchestrator-mandated
-"未注册守卫": unregistered types are skipped before envelope construction
-(debug-logged, never delivered), and once #129 registers them the guard
-passes them through untouched.
+other run-scoped event (ADR-0006 — no fourth envelope).  Before #129
+landed the registry entries, ``domain.observation`` rejected the new
+types and the emitter's "未注册守卫" skipped them before envelope
+construction (debug-logged, never delivered).  #129 registered the
+types: the guard now passes them through untouched, and this module
+pins the post-#129 default world against the REAL registry.
 
-Unit layer (no fixtures — unit discipline, tests/README §1): the guard's
-default world against the REAL registry.  The fixture-driven paths (the
-registry stub through the full envelope + the runtime emission face) live
-in the integration half
+Unit layer (no fixtures — unit discipline, tests/README §1): the
+registry-stub envelope paths and the runtime emission face live in the
+integration half
 (``tests/integration/simulation/test_gen_events_delivery.py``); the
 layered-chain delivery posture lives in the layered runtime tests.
 
@@ -32,8 +32,7 @@ pytestmark = pytest.mark.unit
 
 from domain.observation.registry import is_registered
 
-#: The four Phase 2 namespaces (SPEC-303 §Phase2). None of them is
-#: registered before #129 — the guard's default world.
+#: The four Phase 2 namespaces (SPEC-303 §Phase2) — registered by #129.
 PHASE2_EVENT_TYPES = (
     "gen.stage_started",
     "gen.stage_completed",
@@ -48,18 +47,19 @@ PHASE2_EVENT_TYPES = (
 
 
 class TestUnregisteredGuardDefaultWorld:
-    """裁定 §10-7: pre-#129, the Phase 2 types hit the guard's skip path."""
+    """The guard's default world after #129: everything passes through."""
 
-    def test_real_registry_carries_no_phase2_entry_yet(self) -> None:
-        # #129 owns the additive entries; until then the guard must skip
-        # (this pin flips naturally when #129 lands — the guard then
-        # passes the types through and the registry-stub tests keep
-        # holding the shape contract).
+    def test_real_registry_carries_every_phase2_entry(self) -> None:
+        # #129 landed the additive entries (SPEC-303 §Phase2): the guard
+        # now passes the Phase 2 types through untouched — the registry
+        # payload schemas are pinned in
+        # tests/unit/domain/observation/test_phase2_payload_registry.py,
+        # and the stub-based integration tests below keep holding the
+        # envelope shape contract through the full delivery path.
         for event_type in PHASE2_EVENT_TYPES:
-            assert not is_registered(event_type), (
-                f"{event_type} is registered — #129 landed; the #128 guard "
-                "now passes it through (see the registry-stub tests in "
-                "tests/integration/simulation/test_gen_events_delivery.py)"
+            assert is_registered(event_type), (
+                f"{event_type} is not registered — the #129 entry went "
+                "missing; the emitter guard would silently skip it again"
             )
 
     def test_guard_module_surface_exists(self) -> None:

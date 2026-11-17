@@ -11,9 +11,13 @@ import pytest
 
 from domain.observation.errors import EnvelopeErrorCode, EnvelopeError
 from domain.observation.registry import (
+    BBFRAME_EVENT_TYPES,
+    BISS_EVENT_TYPES,
     DELIVERY_PROTECTED_EVENT_TYPES,
     FAULT_EVENT_TYPES,
+    GEN_EVENT_TYPES,
     REGISTERED_EVENT_TYPES,
+    T2MI_EVENT_TYPES,
     WITHDRAWN_EVENT_TYPES,
     is_coalescable,
     is_delivery_protected,
@@ -76,6 +80,18 @@ DIAGNOSIS_EVENTS = frozenset(
     {"diagnosis.raised", "diagnosis.updated", "diagnosis.cleared"}
 )
 
+# Phase 2 encapsulation namespaces (SPEC-303 §Phase2, ticket #129).
+T2MI_EVENTS = frozenset({"t2mi.stage_summary", "t2mi.plp_mismatch"})
+BBFRAME_EVENTS = frozenset(
+    {"bbframe.stage_summary", "bbframe.recovery_failed"}
+)
+BISS_EVENTS = frozenset(
+    {"biss.scramble_applied", "biss.descramble_failed"}
+)
+GEN_EVENTS = frozenset(
+    {"gen.stage_started", "gen.stage_completed", "gen.packet_sampled"}
+)
+
 EXPECTED_REGISTERED = (
     SIMULATION_SESSION_EVENTS
     | SIMULATION_RUN_EVENTS
@@ -86,6 +102,10 @@ EXPECTED_REGISTERED = (
     | SCENARIO_EVENTS
     | RECOVERY_EVENTS
     | DIAGNOSIS_EVENTS
+    | T2MI_EVENTS
+    | BBFRAME_EVENTS
+    | BISS_EVENTS
+    | GEN_EVENTS
 )
 
 
