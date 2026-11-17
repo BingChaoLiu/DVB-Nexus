@@ -82,6 +82,7 @@ from faults.factory import build_semantic_filter_factory
 
 import faults.filters.bbheader_sync as _activate_bbheader_sync  # noqa: F401,E402
 import faults.filters.biss_mode_e as _activate_biss_mode_e  # noqa: F401,E402
+import faults.filters.pmt_pid_drift as _activate_pmt_pid_drift  # noqa: F401,E402
 import faults.filters.scrambler as _activate_scrambler  # noqa: F401,E402
 import faults.filters.t2mi_plp_mismatch as _activate_t2mi_plp_mismatch  # noqa: F401,E402
 

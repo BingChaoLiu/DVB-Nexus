@@ -143,3 +143,35 @@ def pmt_pid_mismatch_fault(*, wrong_pmt_pid: int = 4100) -> FaultDefinition:
         activation=FaultActivation(kind="packet_index", packet_index=0),
         expected_observations=("ts.psi_section_observed",),
     )
+
+
+def pmt_pid_drift_fault(
+    *,
+    new_pid_map: dict | None = None,
+    pmt_version_bump: bool = True,
+    packet_index: int = 100,
+) -> FaultDefinition:
+    """The SC-09-shaped drift fault (SPEC-204 §Phase2 item 4).
+
+    Defaults carry the SC-09 wire's declaration face (the digit-string key
+    program 1 → drifted pmt_pid 4608) on the PMT stream target, but the
+    unit layer drives a generic mid-stream activation index (100, not the
+    frozen pack's 400) and a single observation symbol — the frozen lab
+    pack wire itself stays pinned by tests/integration/simulation/
+    test_lab_pack_v2.py::test_sc09_fault_face.
+    """
+    return FaultDefinition(
+        fault_id="fault-pmt-pid-drift",
+        fault_type="PMT_PID_DRIFT",
+        target_id="demux-0:pid:0x1000",
+        parameters={
+            "new_pid_map": (
+                {"1": 4608} if new_pid_map is None else new_pid_map
+            ),
+            "pmt_version_bump": pmt_version_bump,
+        },
+        activation=FaultActivation(
+            kind="packet_index", packet_index=packet_index
+        ),
+        expected_observations=("ts.psi_section_observed",),
+    )
