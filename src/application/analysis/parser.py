@@ -92,11 +92,19 @@ class PatSectionFact:
 
 @dataclass(frozen=True)
 class PmtSectionFact:
-    """One observed PMT section (CRC-valid via the SPEC-103 gate)."""
+    """One observed PMT section (CRC-valid via the SPEC-103 gate).
+
+    ``version_number`` is the parsed declaration version (the
+    DIA-PMT-PID-DRIFT rule's version-comparison face, ticket #139); a
+    CRC-broken instance cannot be interpreted (integrity before
+    interpretation, SPEC-103 gate order) and carries ``None`` — no
+    version face is invented for a corrupt section.
+    """
 
     packet_index: int
     crc_valid: bool
     gap_ms: int | None
+    version_number: int | None = None
 
 
 @dataclass(frozen=True)
@@ -208,12 +216,13 @@ def analyze_transport_stream(
     dated_crc_bad: set[int] = set()
     for index, packet in enumerate(packets):
         for section in pmt_assembler.push(packet):
-            parse_pmt(section)  # SPEC-103 semantic gate (strict parse)
+            parsed = parse_pmt(section)  # SPEC-103 semantic gate (strict)
             pmt_facts.append(
                 PmtSectionFact(
                     packet_index=index,
                     crc_valid=True,
                     gap_ms=_gap_ms(last_pmt_instance_index, index, slot_ns),
+                    version_number=parsed.version_number,
                 )
             )
             last_pmt_instance_index = index

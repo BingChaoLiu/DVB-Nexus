@@ -329,6 +329,78 @@ class TestPayloadKeyContract:
         assert payload["continuity_error_count"] == 0
         assert payload["artifact_id"] == ARTIFACT_ID
 
+    def test_pmt_version_face_rides_the_parsed_declaration(self):
+        """The parsed PMT version always rides the PMT record; the seeded
+        expectation rides ONLY the contradiction (the PAT pid-contradiction
+        face mirrored for the DIA-PMT-PID-DRIFT rule's version predicates,
+        ticket #139)."""
+        import faults.filters.pmt_pid_drift  # noqa: F401 — builder activation
+
+        # baseline: version face present, no contradiction
+        baseline_publisher = self._analyze(generate_golden_geometry_bytes())
+        baseline_pmts = [
+            d
+            for d in baseline_publisher.documents
+            if d["payload"].get("section") == "PMT"
+            and d["payload"].get("present") is True
+        ]
+        assert [d["payload"]["pmt_version"] for d in baseline_pmts] == [0, 0, 0]
+        assert all("expected_pmt_version" not in d["payload"] for d in baseline_pmts)
+
+        # drift: post-activation PMT instances declare the bumped version
+        ts_bytes = _faulted_bytes(
+            _fault(
+                "PMT_PID_DRIFT", 0x1000,
+                {"new_pid_map": {"1": 4608}, "pmt_version_bump": True}, 100,
+            )
+        )
+        publisher = self._analyze(ts_bytes)
+        pmts = [
+            d
+            for d in publisher.documents
+            if d["payload"].get("section") == "PMT"
+            and d["payload"].get("present") is True
+        ]
+        assert [d["payload"]["pmt_version"] for d in pmts] == [0, 1, 1]
+        contradictions = [
+            d["payload"]["packet_index"]
+            for d in pmts
+            if "expected_pmt_version" in d["payload"]
+        ]
+        assert contradictions == [206, 412]
+        for document in pmts:
+            if "expected_pmt_version" in document["payload"]:
+                assert document["payload"]["expected_pmt_version"] == 0
+
+        # the declaration face of the same fault shows through the existing
+        # PAT contradiction pair (drifted program_map_pid vs seeded one)
+        pat_contradictions = [
+            d["payload"]["packet_index"]
+            for d in publisher.documents
+            if "expected_program_map_pid" in d["payload"]
+        ]
+        assert pat_contradictions == [202, 404]
+
+    def test_corrupt_pmt_instances_carry_no_version_face(self):
+        """A CRC-broken PMT cannot be parsed (integrity before
+        interpretation, SPEC-103 gate order) — no version face is invented."""
+        import faults.filters.pmt_invalid_crc  # noqa: F401 — builder activation
+
+        ts_bytes = _faulted_bytes(
+            _fault(
+                "PMT_INVALID_CRC", 0x1000,
+                {"mode": "persistent", "corruption": "invert"}, 1,
+            )
+        )
+        publisher = self._analyze(ts_bytes)
+        bad = [
+            d
+            for d in publisher.documents
+            if d["payload"].get("crc_valid") is False
+        ]
+        assert len(bad) == 3
+        assert all("pmt_version" not in d["payload"] for d in bad)
+
 
 # --- rule interlock over the bridge payloads -------------------------------------
 

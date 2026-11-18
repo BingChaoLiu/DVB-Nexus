@@ -393,6 +393,94 @@ _BISS_DESCRAMBLE_FAILED_KEYS = frozenset(
     }
 )
 
+#: The #141 same-source face (ticket #141): the Phase 2 payload key sets
+#: in the #129 REPORT §2 display order — the SINGLE source the frontend
+#: gen module (``scripts/dump-payload-keys.mjs`` → ``payloadKeys.gen.ts``)
+#: renders from, replacing the hand-maintained render table keys.  The
+#: import-time self-check below locks THIS face against the frozen
+#: validator constants (a key added to one side without the other fails
+#: at import); a NEWLY registered Phase 2 event type is pinned by the
+#: unit test (test_phase2_payload_key_sets.py — the face must cover
+#: exactly the four Phase 2 families).
+PHASE2_PAYLOAD_KEY_SETS: dict[str, tuple[str, ...]] = {
+    "t2mi.stage_summary": (
+        "packet_count",
+        "padding_count",
+        "packet_type_distribution",
+        "plp_distribution",
+    ),
+    "t2mi.plp_mismatch": (
+        "expected_plp",
+        "actual_plp",
+        "business_absent_evidence",
+    ),
+    "bbframe.stage_summary": (
+        "frame_count",
+        "n_ups_distribution",
+        "stuffing_ratio",
+    ),
+    "bbframe.recovery_failed": (
+        "failure_count",
+        "first_failed_frame_index",
+    ),
+    # the maximal mode face (base + the optional #127 derivation face) —
+    # absent optional keys render nothing on a concrete envelope
+    "biss.scramble_applied": (
+        "pid_scope",
+        "packet_count",
+        "key_fingerprint",
+        "mutation_log_ref",
+        "mode",
+        "derivation_ref",
+        "mismatch_variants",
+    ),
+    "biss.descramble_failed": (
+        "pid_scope",
+        "failed_indices_sample",
+        "self_check_kind",
+        "key_fingerprint_ref",
+        "mode",
+    ),
+    "gen.stage_started": ("layer",),
+    "gen.stage_completed": ("layer", "item_count"),
+    "gen.packet_sampled": (
+        "layer",
+        "packet_index",
+        "byte_size",
+        "sha256",
+    ),
+}
+
+for _event_type, _keys, _frozen in (
+    (
+        event_type,
+        PHASE2_PAYLOAD_KEY_SETS[event_type],
+        frozen,
+    )
+    for event_type, frozen in (
+        ("t2mi.stage_summary", _T2MI_STAGE_SUMMARY_KEYS),
+        ("t2mi.plp_mismatch", _T2MI_PLP_MISMATCH_KEYS),
+        ("bbframe.stage_summary", _BBFRAME_STAGE_SUMMARY_KEYS),
+        ("bbframe.recovery_failed", _BBFRAME_RECOVERY_FAILED_KEYS),
+        (
+            "biss.scramble_applied",
+            _BISS_SCRAMBLE_BASE_KEYS | _BISS_SCRAMBLE_DERIVATION_KEYS,
+        ),
+        ("biss.descramble_failed", _BISS_DESCRAMBLE_FAILED_KEYS),
+        ("gen.stage_started", _GEN_STAGE_STARTED_KEYS),
+        ("gen.stage_completed", _GEN_STAGE_COMPLETED_KEYS),
+        ("gen.packet_sampled", _GEN_PACKET_SAMPLED_KEYS),
+    )
+):
+    if set(_keys) != _frozen:
+        raise ImportError(
+            f"PHASE2_PAYLOAD_KEY_SETS[{_event_type!r}] drifted from the "
+            f"frozen validator key set: ordered face "
+            f"{sorted(_keys)} vs validator {sorted(_frozen)} (ticket #141 "
+            "same-source self-check)"
+        )
+del _event_type, _keys, _frozen
+
 
 def _validate_generation_payload(
     event_type: str, payload: Mapping[str, Any]
@@ -1074,6 +1162,7 @@ __all__ = [
     "FAULT_EVENT_TYPES",
     "GEN_EVENT_TYPES",
     "GENERATION_LAYERS",
+    "PHASE2_PAYLOAD_KEY_SETS",
     "RECOVERY_EVENT_TYPES",
     "REGISTERED_EVENT_TYPES",
     "SCENARIO_EVENT_TYPES",

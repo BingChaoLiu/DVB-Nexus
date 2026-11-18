@@ -272,6 +272,16 @@ class AnalysisService:
             )
             payload["crc_valid"] = fact.crc_valid
             payload["pid"] = config.program.pmt_pid
+            # The parsed version face always rides the record (mirroring the
+            # PAT declaration face above); the seeded expectation rides ONLY
+            # a contradiction — the DIA-PMT-PID-DRIFT rule's version
+            # predicates fire on symptoms, never on clean streams (#139).
+            if fact.version_number is not None:
+                payload["pmt_version"] = fact.version_number
+                if fact.version_number != config.program.version_number:
+                    payload["expected_pmt_version"] = (
+                        config.program.version_number
+                    )
             return payload, config.program.pmt_pid, packet_index
         if isinstance(fact, PatMissingFact):
             packet_index = fact.packet_index

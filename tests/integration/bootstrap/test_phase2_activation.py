@@ -42,16 +42,26 @@ class TestPhase2BuilderActivation:
         )
 
     def test_no_skeleton_builder_is_ever_resolved_for_phase2_layers(self) -> None:
-        # The three Phase 2-layer primitives (#122~#127 deliverables) must
-        # resolve to their real builders. PMT_PID_DRIFT stays a TS-layer
-        # skeleton by design (C2, no M6 implementation ticket).
+        # All four Phase 2 primitives resolve to their real builders (the
+        # three Phase 2-layer primitives #122~#127 + the TS-layer drift,
+        # implemented by patch ticket #139).  A skeleton here means the
+        # composition root failed to activate a real filter module.
         for fault_type in (
             "T2MI_PLP_MISMATCH",
             "BBHEADER_SYNC_FAULT",
             "BISS_KEY_MISMATCH",
+            "PMT_PID_DRIFT",
         ):
             assert "phase2_skeletons" not in _builder_module(fault_type), (
                 f"{fault_type} resolved to a #121 skeleton placeholder — "
                 "the composition root failed to activate the real filter "
                 "module (ruling §10-4)"
             )
+
+    def test_pmt_pid_drift_resolves_the_real_builder(self) -> None:
+        # The TS-layer drift went real in #139 (the #136 收口 patch ticket
+        # D-2): the SC-09 injection chain is wired through the composition
+        # root like the other three.
+        assert _builder_module("PMT_PID_DRIFT") == (
+            "faults.filters.pmt_pid_drift"
+        )

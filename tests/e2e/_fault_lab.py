@@ -129,26 +129,32 @@ class FaultLab:
 
     # --- the eight steps ----------------------------------------------------
 
-    def create_session(self, raw: dict[str, Any]) -> str:
-        """Create — the scenario's simulation_config as the session body."""
+    def create_session(
+        self, raw: dict[str, Any], *, scenario_id: str | None = None
+    ) -> str:
+        """Create — the scenario's simulation_config as the session body.
+
+        ``scenario_id`` rides the body when given: the #80 加载即建 branch
+        (the document governs — the Lab UI's 开局 body shape for registry-
+        foreign topologies, e.g. the v2 pack's ``topo-sc-09``)."""
         clock = raw["simulation_config"]["clock"]
-        response = self._client.post(
-            "/api/v1/sessions",
-            json={
-                "topology_id": raw["initial_topology"]["topology_id"],
-                "topology_revision": raw["initial_topology"]["revision"],
-                "seed": raw["simulation_config"]["seed"],
-                "deterministic": raw["simulation_config"]["mode"]
-                == "deterministic",
-                "clock_config": {
-                    "mode": clock["mode"],
-                    "start_time_ns": clock["start_time_ns"],
-                    "speed_num": clock["speed_num"],
-                    "speed_den": clock["speed_den"],
-                    "tick_quantum_ns": clock["tick_quantum_ns"],
-                },
+        body: dict[str, Any] = {
+            "topology_id": raw["initial_topology"]["topology_id"],
+            "topology_revision": raw["initial_topology"]["revision"],
+            "seed": raw["simulation_config"]["seed"],
+            "deterministic": raw["simulation_config"]["mode"]
+            == "deterministic",
+            "clock_config": {
+                "mode": clock["mode"],
+                "start_time_ns": clock["start_time_ns"],
+                "speed_num": clock["speed_num"],
+                "speed_den": clock["speed_den"],
+                "tick_quantum_ns": clock["tick_quantum_ns"],
             },
-        )
+        }
+        if scenario_id is not None:
+            body["scenario_id"] = scenario_id
+        response = self._client.post("/api/v1/sessions", json=body)
         assert response.status_code == 201, response.text
         return response.json()["session_id"]
 

@@ -13,6 +13,16 @@ function PacketDetail({ packet }: { packet: T2miPacketDTO }) {
     <div className="dvb-pi-fields" data-testid={`t2mi-detail-${packet.packet_index}`}>
       <FieldRow name="packet_type" value={hex2(packet.packet_type)} note="包头字节 0（TS 102 773 §5.1）" />
       <FieldRow name="packet_counter" value={String(packet.packet_counter)} note={`包头字节 1（mod-256，${hex2(packet.packet_counter)}）`} />
+      {packet.superframe_index === null || packet.superframe_index === undefined ? (
+        <FieldRow name="superframe_index" value="null" note="wire 未携带（#122 旧键面）——诚实缺席" />
+      ) : (
+        <FieldRow name="superframe_index" value={String(packet.superframe_index)} note={`包头字节 2 高 nibble（0..15，${hex2(packet.superframe_index)}）`} />
+      )}
+      {packet.reserved === null || packet.reserved === undefined ? (
+        <FieldRow name="reserved" value="null" note="wire 未携带（#122 旧键面）——诚实缺席" />
+      ) : (
+        <FieldRow name="reserved" value={packet.reserved} note="包头字节 2..3 verbatim 摘要（16-bit BE hex）" />
+      )}
       <FieldRow name="payload_kind" testid={`t2mi-payload-kind-${packet.packet_index}`} value={packet.payload_kind} note="wire 枚举原样" />
       <FieldRow name="payload_bytes_len" value={String(packet.payload_bytes_len)} />
       <FieldRow
@@ -35,6 +45,15 @@ function PacketDetail({ packet }: { packet: T2miPacketDTO }) {
         <FieldRow name="plp_id" value="null" note="传输前缀未声明（非 BBFRAME 包）" />
       ) : (
         <FieldRow name="plp_id" testid={`t2mi-plp-${packet.packet_index}`} value={String(packet.plp_id)} note="传输前缀 PLP id" />
+      )}
+      {packet.interleaving_frame_start === null || packet.interleaving_frame_start === undefined ? (
+        <FieldRow name="interleaving_frame_start" value="null" note="传输前缀 flags 位不可用（非 BBFRAME 包或 wire 未携带）" />
+      ) : (
+        <FieldRow
+          name="interleaving_frame_start"
+          value={packet.interleaving_frame_start ? "true" : "false"}
+          note="传输前缀 flags 位（0x80，TSDuck 字节对齐布局）"
+        />
       )}
     </div>
   );
