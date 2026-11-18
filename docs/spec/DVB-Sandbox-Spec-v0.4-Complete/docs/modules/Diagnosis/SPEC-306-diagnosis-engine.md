@@ -1,8 +1,8 @@
 ---
 spec_id: SPEC-306
 title: Diagnosis Engine
-version: 0.5.0
-status: APPROVED
+version: 0.6.0
+status: DRAFT_FOR_REVIEW
 phase: MVP
 owner: Diagnosis
 priority: P0
@@ -130,4 +130,22 @@ diagnosis → event (journal_seq) → payload (pid / packet_index) → artifact_
 
 - SPEC-003 §2.6（Diagnosis 实体与 confidence 禁令）、SPEC-301 §4（事件注册表）、SPEC-502 §4/§5（diagnoses 表与 EventJournal）。
 - [ADR-0005](../../../../adr/0005-architecture-baseline.md) 决策 4（依赖方向与 knowledge 范围）、[ADR-0007](../../../../adr/0007-fault-injection-pipeline-contract.md) 第 4/5 条（共用包序 frame、单一可归因症状）。
+
+## Phase 2 补丁定点修订（随补丁票 [#138](https://github.com/BingChaoLiu/DVB-Nexus/issues/138)，DRAFT_FOR_REVIEW 0.6.0；依据：#136 补丁票评估 D-1）
+
+现状锚定链在 Phase 2 证据事件上无字段映射（三条构造候选规则的 match 事件进不了引擎，diagnose 面零 hit）——结构性扩容，非缺陷回归。本修订全部 additive，MVP 形态逐字保留。
+
+- **引擎输入族扩容（§2.1 additive）**：evaluation feed 在 `ts.*` 观测族之外新增 Phase 2 证据族（离散证据面，三类型）：`t2mi.plp_mismatch`（SPEC-602 §6）、`bbframe.recovery_failed`（SPEC-601 §5）、`biss.descramble_failed`（SPEC-611 §5）。证据面无 source/confidence 轴（SPEC-303 §Phase2 既有裁定——`ts.*` 保持唯一 observation 轴载体）；引擎只消费其 payload 作证据记录。`observation.*` 撤回纪律、journal envelope 形状（journal_seq 全序 / run_id correlation，ADR-0006）与交付策略均不动。
+- **锚定链两态（§6 additive）**：MVP 形态 `diagnosis → event (journal_seq) → payload (pid / packet_index) → artifact_id` 不变。Phase 2 证据事件的 payload 无 pid/packet_index 定位字段，锚定链走**证据形态——locator 字段按命名空间映射**：
+
+  | match 事件 | payload locator 字段 | 锚定语义 |
+  |---|---|---|
+  | `t2mi.plp_mismatch` | `expected_plp` / `actual_plp` + `business_absent_evidence`（plps_seen / bbframe_packet_count / filtered_packet_count / total_packet_count） | PLP 映射错位 + Inner TS 业务缺失证据 |
+  | `bbframe.recovery_failed` | `first_failed_frame_index` + `failure_count` | 首失败帧定位 |
+  | `biss.descramble_failed` | `failed_indices_sample`（有界样本，#126）+ `pid_scope` | 解扰失败包定位（fingerprint 互链面——密钥材料不入 payload，SPEC-610 §9） |
+
+  artifact 解析两态：MVP 经 SPEC-502 `artifacts` 表（pid/packet_index 直达）；Phase 2 经事件引用链解析——`biss.*` 经 `key_fingerprint_ref` / `mutation_log_ref` 解析到 mutation log artifact，`t2mi.*` / `bbframe.*` 解析到该 run 的 Inner TS artifact（gen 层落库产物，SPEC-303 §Phase2）。
+- **EvidenceRef 两态（§7 additive）**：`evidence` 共用形状 `{artifact_id, locator}`；MVP `locator = {pid, packet_index}`（既有三元组 wire 不破坏）；Phase 2 `locator` = 上表 payload 定位字段 verbatim（无对应定位字段的事件不虚填 pid/packet_index）。`diagnosis.*` 三事件 payload schema 同步 additive 放宽（schema 文件随实现落地）。
+- **规则声明零改动**：四条候选规则声明两态通用（match `event_type` + payload 谓词不变，#130 已钉）——点亮 = 馈送扩容 + EvidenceRef 锚定形态，规则 JSON 与 MatchSpec 原语不动（SPEC-307 §Phase2 同步句）。
+- **测试规格 additive（§9）**：SC-06/07/08 E2E 升级为 diagnose 候选断言（四规则各自在其证据事件上产生预期候选，与既有 journal 证据断言 + 规则符号互锁双轨并存）；锚定链路端到端：Phase 2 候选 → journal_seq → locator → artifact 可解析。
 - SPEC-206（通关判定消费方）、SPEC-406（Training Lab UI 消费方）。
