@@ -2,7 +2,7 @@
 spec_id: SPEC-307
 title: Diagnostic Rules
 version: 0.7.0
-status: DRAFT_FOR_REVIEW
+status: APPROVED
 phase: MVP
 owner: Diagnosis
 priority: P0
