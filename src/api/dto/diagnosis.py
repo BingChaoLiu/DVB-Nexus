@@ -26,11 +26,16 @@ class DiagnosisObservationRefDTO(BaseModel):
 
 
 class DiagnosisEvidenceDTO(BaseModel):
-    """The artifact anchor (ADR-0007 item 4 shared packet-order frame)."""
+    """The artifact anchor — TWO states (SPEC-306 §6 MVP + §Phase2 补丁
+    修订, ticket #138): the MVP flat triple ``{artifact_id, pid,
+    packet_index}`` (ADR-0007 item 4 shared packet-order frame), or the
+    Phase 2 ``{artifact_id, locator}`` — the payload locator fields
+    verbatim (never both states; constructed accordingly by the mapper)."""
 
     artifact_id: str
-    pid: int = Field(ge=0, le=8191)
-    packet_index: int = Field(ge=0)
+    pid: int | None = Field(default=None, ge=0, le=8191)
+    packet_index: int | None = Field(default=None, ge=0)
+    locator: dict[str, Any] | None = None
 
 
 class DiagnosisDTO(BaseModel):
@@ -79,6 +84,23 @@ class DiagnosisReportDTO(BaseModel):
     evaluated_at_utc_ms: int
     candidates: list[DiagnosisCandidateDTO]
     warnings: list[str] = Field(default_factory=list)
+
+
+def _evidence_dto_of(evidence: Any) -> "DiagnosisEvidenceDTO":
+    """Map a duck-typed domain ``EvidenceRef`` — TWO states (ticket #138):
+    the Phase 2 ``locator`` state and the MVP flat triple state each keep
+    their own key set (the MVP wire stays byte-identical; Phase 2 never
+    fabricates pid/packet_index)."""
+    locator = getattr(evidence, "locator", None)
+    if locator is not None:
+        return DiagnosisEvidenceDTO(
+            artifact_id=evidence.artifact_id, locator=dict(locator)
+        )
+    return DiagnosisEvidenceDTO(
+        artifact_id=evidence.artifact_id,
+        pid=evidence.pid,
+        packet_index=evidence.packet_index,
+    )
 
 
 def diagnosis_dto_from_record(record: Any) -> DiagnosisDTO:
@@ -131,11 +153,7 @@ def diagnosis_report_dto_from_report(report: Any) -> DiagnosisReportDTO:
                 ],
                 affected_node_ids=list(candidate.affected_node_ids),
                 suggested_actions=list(candidate.suggested_actions),
-                evidence=DiagnosisEvidenceDTO(
-                    artifact_id=candidate.evidence.artifact_id,
-                    pid=candidate.evidence.pid,
-                    packet_index=candidate.evidence.packet_index,
-                ),
+                evidence=_evidence_dto_of(candidate.evidence),
             )
             for candidate in report.candidates
         ],

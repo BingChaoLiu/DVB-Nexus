@@ -20,6 +20,7 @@ from application.diagnosis import (
 )
 from application.errors import NotFoundError, ServiceUnavailableError
 from application.observation.gateway import EventGateway
+from domain.diagnosis.rules import load_builtin_rules
 
 from tests._support.diagnosis_fixtures import (
     RUN_ID,
@@ -289,3 +290,154 @@ class TestRunCompletionTrigger:
             e for e in events if e.event_type.startswith("diagnosis.")
         ]
         assert stack["repository"].query(SESSION_ID) == []
+
+
+class TestPhase2EvidenceFeed:
+    """The #138 feed expansion + anchor stamping at the service face
+    (SPEC-306 §Phase2 补丁修订): the Phase 2 evidence family enters the
+    evaluation feed, ``biss.*`` anchors resolve through the journal
+    reference chain, ``t2mi.*``/``bbframe.*`` through the injected
+    Inner-TS resolver — and the storage failure maps to the §8 503 face.
+    The rules ride the REAL builtin set (the declarations are two-state
+    generic, #130)."""
+
+    @staticmethod
+    def _publish_evidence(gateway, event_type: str, payload: dict) -> None:
+        receipt = gateway.publish(
+            observation_envelope(
+                event_type=event_type,
+                payload=payload,
+                session_id=SESSION_ID,
+                run_id=RUN_ID,
+            )
+        )
+        assert receipt.accepted
+        gateway.drain()
+
+    def test_biss_anchor_resolves_through_the_journal_reference_chain(
+        self, stack
+    ):
+        service = DiagnosisService(
+            stack["journal"],
+            stack["publisher"],
+            stack["repository"],
+            rules_provider=load_builtin_rules,
+            now_utc_ms=lambda: 1_700_000_000_000,
+        )
+        # The reference chain lands BEFORE the evidence event in the
+        # journal — the walk collects the mutation_log_ref wherever it
+        # sits (the service is order-agnostic by construction).
+        self._publish_evidence(
+            stack["gateway"],
+            "biss.descramble_failed",
+            {
+                "pid_scope": [256],
+                "failed_indices_sample": [0, 1, 2],
+                "self_check_kind": "cis_mode1",
+                "key_fingerprint_ref": "fp:abc123",
+                "mode": "1",
+            },
+        )
+        self._publish_evidence(
+            stack["gateway"],
+            "fault.applied",
+            {
+                "fault_id": "fd000000-0000-4000-8000-00000000f008",
+                "fault_type": "BISS_KEY_MISMATCH",
+                "layer": "BISS",
+                "injection_index": 0,
+                "applied_packet_indexes": [0, 1],
+                "mutation_log_ref": "log-artifact-77",
+            },
+        )
+        report = service.evaluate(SESSION_ID, RUN_ID)
+        _drain(stack["gateway"])
+        assert [c.code for c in report.candidates] == ["DIAG_BISS_KEY_MISMATCH"]
+        candidate = report.candidates[0]
+        # The anchor = the mutation-log artifact via the reference chain;
+        # the locator = the payload locator fields verbatim.
+        assert candidate.evidence.artifact_id == "log-artifact-77"
+        assert candidate.evidence.locator == {
+            "pid_scope": [256],
+            "failed_indices_sample": [0, 1, 2],
+        }
+        assert candidate.evidence.pid is None
+
+    def test_inner_ts_resolver_anchors_t2mi_records(self, stack):
+        service = DiagnosisService(
+            stack["journal"],
+            stack["publisher"],
+            stack["repository"],
+            rules_provider=load_builtin_rules,
+            now_utc_ms=lambda: 1_700_000_000_000,
+            inner_ts_resolver=lambda run_id: "inner-9",
+        )
+        self._publish_evidence(
+            stack["gateway"],
+            "t2mi.plp_mismatch",
+            {
+                "expected_plp": 0,
+                "actual_plp": 1,
+                "business_absent_evidence": {
+                    "plps_seen": [1],
+                    "bbframe_packet_count": 4,
+                    "filtered_packet_count": 0,
+                    "total_packet_count": 60,
+                },
+            },
+        )
+        report = service.evaluate(SESSION_ID, RUN_ID)
+        _drain(stack["gateway"])
+        assert [c.code for c in report.candidates] == ["DIAG_T2MI_PLP_MISMATCH"]
+        candidate = report.candidates[0]
+        assert candidate.evidence.artifact_id == "inner-9"
+        assert set(candidate.evidence.locator) == {
+            "expected_plp",
+            "actual_plp",
+            "business_absent_evidence",
+        }
+
+    def test_unwired_resolver_leaves_t2mi_records_unanchored(self, stack):
+        service = DiagnosisService(
+            stack["journal"],
+            stack["publisher"],
+            stack["repository"],
+            rules_provider=load_builtin_rules,
+            now_utc_ms=lambda: 1_700_000_000_000,
+        )
+        self._publish_evidence(
+            stack["gateway"],
+            "t2mi.plp_mismatch",
+            {
+                "expected_plp": 0,
+                "actual_plp": 1,
+                "business_absent_evidence": {
+                    "plps_seen": [1],
+                    "bbframe_packet_count": 4,
+                    "filtered_packet_count": 0,
+                    "total_packet_count": 60,
+                },
+            },
+        )
+        report = service.evaluate(SESSION_ID, RUN_ID)
+        assert report.candidates == ()  # no anchor, no candidate
+        assert report.warnings == ()
+
+    def test_resolver_storage_failure_maps_to_503(self, stack):
+        service = DiagnosisService(
+            stack["journal"],
+            stack["publisher"],
+            stack["repository"],
+            rules_provider=load_builtin_rules,
+            now_utc_ms=lambda: 1_700_000_000_000,
+            inner_ts_resolver=lambda run_id: (_ for _ in ()).throw(
+                sqlite3.OperationalError("disk I/O error")
+            ),
+        )
+        self._publish_evidence(
+            stack["gateway"],
+            "bbframe.recovery_failed",
+            {"failure_count": 2, "first_failed_frame_index": 3},
+        )
+        with pytest.raises(ServiceUnavailableError):
+            service.evaluate(SESSION_ID, RUN_ID)

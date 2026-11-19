@@ -69,26 +69,47 @@
       }
     },
     "evidence_anchor": {
-      "type": "object",
-      "required": ["artifact_id", "pid", "packet_index"],
-      "properties": {
-        "artifact_id": {
-          "type": "string",
-          "minLength": 1,
-          "description": "Resolves through the SPEC-502 artifacts table to the SPEC-503 physical file (SPEC-306 section 6 chain terminus)."
+      "description": "TWO states (SPEC-306 section 6 MVP + SPEC-306 Phase 2 patch revision, ticket #138): the MVP flat triple {artifact_id, pid, packet_index}, or the Phase 2 {artifact_id, locator} — the evidence event's payload locator fields verbatim (no fabricated pid/packet_index). Exactly one state holds.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["artifact_id", "pid", "packet_index"],
+          "properties": {
+            "artifact_id": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Resolves through the SPEC-502 artifacts table to the SPEC-503 physical file (SPEC-306 section 6 chain terminus)."
+            },
+            "pid": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 8191,
+              "description": "13-bit DVB PID (SPEC-301 correlation.pid space)."
+            },
+            "packet_index": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Position in the ADR-0007 item 4 shared packet-order frame (baseline and faulted share one index space — same index, same slot)."
+            }
+          }
         },
-        "pid": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 8191,
-          "description": "13-bit DVB PID (SPEC-301 correlation.pid space)."
-        },
-        "packet_index": {
-          "type": "integer",
-          "minimum": 0,
-          "description": "Position in the ADR-0007 item 4 shared packet-order frame (baseline and faulted share one index space — same index, same slot)."
+        {
+          "type": "object",
+          "required": ["artifact_id", "locator"],
+          "properties": {
+            "artifact_id": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Resolves through the SPEC-502 artifacts table to the SPEC-503 physical file (SPEC-306 section 6 chain terminus) — the Phase 2 reference chain: the mutation-log artifact for biss.*, the run's received-leg Inner TS artifact for t2mi.*/bbframe.*."
+            },
+            "locator": {
+              "type": "object",
+              "minProperties": 1,
+              "description": "The evidence event's payload locator fields verbatim (SPEC-306 Phase 2 anchor-chain table: t2mi.plp_mismatch → expected_plp/actual_plp/business_absent_evidence; bbframe.recovery_failed → first_failed_frame_index/failure_count; biss.descramble_failed → failed_indices_sample/pid_scope)."
+            }
+          }
         }
-      }
+      ]
     },
     "cleared_payload": {
       "type": "object",

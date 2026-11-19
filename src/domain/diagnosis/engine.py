@@ -66,6 +66,15 @@ class ObservationRecord(DomainModel):
     ``source_ns`` is the record's ``time.source.value_ns`` — the
     orchestration anchors derived ``diagnosis.*`` events to the latest
     observed virtual time of the run (deterministic; no wall clock).
+
+    ``evidence_artifact_id`` is the Phase 2 evidence anchor the
+    APPLICATION resolves before handing the record over (SPEC-306
+    §Phase2 补丁修订, ticket #138): the mutation-log artifact via the
+    journal reference chain for ``biss.*``, the run's received-leg Inner
+    TS artifact for ``t2mi.*``/``bbframe.*``. MVP ``ts.*`` records keep
+    ``None`` — their anchor rides the payload triple (SPEC-306 §6 MVP
+    state), and an unstamped evidence record produces no candidate (no
+    anchor, no candidate).
     """
 
     journal_seq: int = Field(ge=1)
@@ -75,6 +84,7 @@ class ObservationRecord(DomainModel):
     node_id: Optional[str] = None
     pid: Optional[int] = Field(default=None, ge=0, le=8191)
     source_ns: int = Field(default=0, ge=0)
+    evidence_artifact_id: Optional[str] = None
 
 
 class RuleMatch(DomainModel):

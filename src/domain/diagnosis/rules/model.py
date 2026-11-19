@@ -21,10 +21,12 @@ Interpreter contract (mirrors the sanctioned shared-fixture interpreter,
 ``tests._support.diagnosis_fixtures``, so the fixture rules and the real
 rules agree):
 
-- a hit needs the full evidence triple in the payload —
-  ``artifact_id``/``pid``/``packet_index`` (the diagnosis-side payload key
-  contract registered by ticket #54; SPEC-306 §6: no anchor, no
-  candidate);
+- a hit needs a complete evidence anchor in ONE of the two states
+  (SPEC-306 §6 + §Phase2 补丁修订, ticket #138): the MVP payload triple
+  ``artifact_id``/``pid``/``packet_index`` (ticket #54 key contract), or
+  — for the Phase 2 evidence family — the application-resolved
+  ``evidence_artifact_id`` plus the namespace-mapped locator (payload
+  locator fields verbatim); no anchor, no candidate;
 - correlation predicates resolve the ADR-0006 decision-3 addressing dual
   form (``node_id``/``pid``) — the hops ``ObservationRecord`` carries;
 - window aggregates compute per declared grouping-key group within the
@@ -53,7 +55,7 @@ from domain.diagnosis.engine import ObservationRecord, RuleMatch
 from domain.diagnosis.model import DiagnosisConfidence, DiagnosisSeverity
 from domain.diagnosis.report import EvidenceRef
 from domain.diagnosis.rules.errors import RuleDefinitionError
-from domain.observation.registry import validate_event_type
+from domain.observation.registry import EVIDENCE_EVENT_TYPES, validate_event_type
 
 __all__ = [
     "DiagnosticRule",
@@ -353,15 +355,27 @@ def _window_selected(
 
 
 def _evidence_of(record: ObservationRecord) -> Optional[EvidenceRef]:
-    """The artifact anchor from the diagnosis payload key contract
-    (ticket #54): ``artifact_id``/``pid``/``packet_index``. Records
-    without the full triple produce no hit — a candidate cannot exist
-    without an evidence anchor (SPEC-306 §6)."""
+    """The artifact anchor — TWO states (SPEC-306 §6 MVP + §Phase2 补丁
+    修订, ticket #138):
+
+    - MVP (ticket #54 payload key contract): the full
+      ``artifact_id``/``pid``/``packet_index`` triple in the payload —
+      the flat ``EvidenceRef`` wire, byte-unchanged.
+    - Phase 2 evidence family: the payload carries no pid/packet_index;
+      the anchor is the application-resolved ``evidence_artifact_id``
+      (mutation-log artifact for ``biss.*`` via the journal reference
+      chain, the run's received-leg Inner TS artifact for
+      ``t2mi.*``/``bbframe.*``) plus the namespace-mapped locator —
+      the payload locator fields verbatim (无对应定位字段不虚填).
+
+    Records without a complete state produce no hit — a candidate cannot
+    exist without an evidence anchor (SPEC-306 §6).
+    """
     payload = record.payload
     artifact_id = payload.get("artifact_id")
     pid = payload.get("pid")
     packet_index = payload.get("packet_index")
-    if not (
+    if (
         isinstance(artifact_id, str)
         and artifact_id
         and _is_int(pid)
@@ -369,8 +383,39 @@ def _evidence_of(record: ObservationRecord) -> Optional[EvidenceRef]:
         and _is_int(packet_index)
         and packet_index >= 0
     ):
-        return None
-    return EvidenceRef(artifact_id=artifact_id, pid=pid, packet_index=packet_index)
+        return EvidenceRef(artifact_id=artifact_id, pid=pid, packet_index=packet_index)
+    if record.event_type in EVIDENCE_EVENT_TYPES:
+        resolved = record.evidence_artifact_id
+        if not (isinstance(resolved, str) and resolved):
+            return None  # unstamped: no anchor, no candidate
+        locator = {
+            key: payload[key]
+            for key in _PHASE2_LOCATOR_FIELDS.get(record.event_type, ())
+            if key in payload
+        }
+        if not locator:
+            return None
+        return EvidenceRef(artifact_id=resolved, locator=locator)
+    return None
+
+
+#: The Phase 2 locator-field mapping (SPEC-306 §Phase2 anchor-chain table):
+#: each evidence event's payload locator fields, taken verbatim.
+_PHASE2_LOCATOR_FIELDS: dict[str, tuple[str, ...]] = {
+    "t2mi.plp_mismatch": (
+        "expected_plp",
+        "actual_plp",
+        "business_absent_evidence",
+    ),
+    "bbframe.recovery_failed": (
+        "first_failed_frame_index",
+        "failure_count",
+    ),
+    "biss.descramble_failed": (
+        "failed_indices_sample",
+        "pid_scope",
+    ),
+}
 
 
 def _validate_summary_template(template: str) -> None:

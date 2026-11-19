@@ -1,5 +1,6 @@
 """Phase 2 rules × the four training-range injection paths (ticket #130
-acceptance, SPEC-307 §Phase2 + §9 row 4 extension).
+acceptance + the #138 diagnose-face upgrade, SPEC-307 §Phase2 + §9 row 4
+extension).
 
 Each rule is interlocked against the REAL injected run of its paired
 primitive through the #128 layered pipeline — the B1 (T2MI_PLP_MISMATCH),
@@ -9,14 +10,20 @@ payload key sets, and the paired rule's declaration is proven to consume
 exactly those shapes (the expected_evidence 互证 + the match/predicate
 key interlock against REAL producer output, not fixture mirrors).
 
-候选 ≠ 事实 discipline, asserted end to end: the REAL evidence payloads
-pass the engine's own registry gate, the paired rules stay loadable and
-reference their events — and under the frozen SPEC-306 §6 anchor gate
-the Phase 2 candidate events produce no diagnosis candidate yet (the
-anchor-path ruling follow-up recorded on #130). The one rule whose
-evidence face is already anchor-capable — DIA-PMT-PID-DRIFT on the
-ts.* observation family (ruling §10-16-③) — is proven through the full
-evaluator candidate path.
+#138 diagnose-face 点亮 (SPEC-306 §Phase2 补丁修订): the three evidence
+events now travel the engine's expanded input family, and each anchored
+record produces its candidate through the FULL evaluator path — the
+anchor is the application-resolved ``evidence_artifact_id`` (the run's
+received-leg Inner TS artifact for ``t2mi.*``/``bbframe.*`` — read from
+the run's real sink records exactly as the composition resolver would;
+the journal reference-chain ``mutation_log_ref`` for ``biss.*``), the
+locator is the payload locator fields verbatim. The rules themselves are
+UNTOUCHED (四规则声明两态通用, #130 已钉 — 点亮 = 馈送扩容 + 锚定形态).
+The unanchored honesty face stays asserted: an evidence record without
+its resolved anchor produces no candidate (no anchor, no candidate,
+SPEC-306 §6). The one MVP-family rule — DIA-PMT-PID-DRIFT on the ts.*
+observation family (ruling §10-16-③) — keeps its full candidate path
+proof.
 
 Marked integration: drives the real TSRuntime layered pipeline (real
 SPEC-108 generator bytes, no wall clock — asyncio.run over the driver).
@@ -85,11 +92,13 @@ def _rule(rule_id: str):
 
 def _run_layered(
     plan: tuple[FaultDefinition, ...], pipeline=LayerPipelineConfig()
-) -> list[dict]:
+) -> tuple[list[dict], LayeredFakeSink]:
     """One real layered run through the full wired delivery posture (the
     #128/#129 harness): the emitted events cross the shared envelope path
     — unregistered types are refused, payload schemas validated — and the
-    delivered envelopes are what the assertions consume."""
+    delivered envelopes are what the assertions consume. The sink comes
+    back too: the Inner-TS artifact ids the anchor chain stamps (the
+    composition resolver reads the SAME records face, ticket #138)."""
     from simulation.runtime import SimulationRuntime
 
     events: list[dict] = []
@@ -98,7 +107,7 @@ def _run_layered(
         def publish(self, event) -> None:
             events.append(dict(event))
 
-    async def main() -> None:
+    async def main() -> LayeredFakeSink:
         sim_runtime = SimulationRuntime(event_sink=RecordingGateway())
         config = make_generator_config(output_packet_count=60)
         session = make_session_spec(session_id="dia-phase2-130")
@@ -113,9 +122,10 @@ def _run_layered(
         result = await ts_runtime.run(prepared, sink)
         assert result.status == "completed", result.error
         ts_runtime.shutdown()
+        return sink
 
-    asyncio.run(main())
-    return events
+    sink = asyncio.run(main())
+    return events, sink
 
 
 def _interlock_asserts(rule_id: str, event_type: str, payloads: list[dict]) -> None:
@@ -149,6 +159,60 @@ def _records_of(event_type: str, payloads: list[dict]) -> tuple[ObservationRecor
     )
 
 
+def _anchored_records_of(
+    event_type: str, payloads: list[dict], anchor: str | None
+) -> tuple[ObservationRecord, ...]:
+    """The same records with the application-resolved evidence anchor
+    stamped (the ``ObservationRecord.evidence_artifact_id`` face the
+    diagnosis service builds — ticket #138)."""
+    return tuple(
+        record.model_copy(update={"evidence_artifact_id": anchor})
+        for record in _records_of(event_type, payloads)
+    )
+
+
+def _received_inner_ts_artifact_id(sink: LayeredFakeSink) -> str:
+    """The run's received-leg Inner TS artifact id — the LAST
+    ``kind=inner_ts`` sink record (the chain reconstructs the baseline
+    leg first, the received leg second; the composition resolver's
+    ``find_by_run`` pick, ticket #138)."""
+    inner_rows = [
+        record for record in sink.records if record["kind"] == "inner_ts"
+    ]
+    assert inner_rows, "the run never landed an Inner TS artifact"
+    return str(inner_rows[-1]["artifact_id"])
+
+
+def _mutation_log_ref_of(events: list[dict]) -> str:
+    """The run's journal reference chain (the service's ``biss.*`` anchor
+    resolution): the first non-None ``mutation_log_ref`` on
+    ``fault.applied`` / ``biss.scramble_applied``."""
+    for event in events:
+        if event["event_type"] in ("fault.applied", "biss.scramble_applied"):
+            ref = event["payload"].get("mutation_log_ref")
+            if isinstance(ref, str) and ref:
+                return ref
+    raise AssertionError("the run never carried a mutation_log_ref reference")
+
+
+def _assert_phase2_candidate(
+    outcome, code: str, rule_id: str, anchor: str, locator_keys: set[str]
+) -> None:
+    """The #138 candidate face, asserted on the FULL evaluator outcome:
+    the one expected candidate, its evidence locator verbatim and its
+    anchor resolvable."""
+    candidates = outcome.report.candidates
+    assert [candidate.code for candidate in candidates] == [code]
+    candidate = candidates[0]
+    assert candidate.rule_id == rule_id
+    assert candidate.evidence.artifact_id == anchor
+    assert set(candidate.evidence.locator) == locator_keys
+    assert candidate.evidence.pid is None
+    assert candidate.evidence.packet_index is None
+    assert candidate.observation_refs, "a candidate without evidence hops"
+    assert candidate.observation_refs[0].journal_seq >= 1
+
+
 class TestB1PlpMappingCandidate:
     """「PLP 映射错位」: the real B1 layered run emits the
     ``t2mi.plp_mismatch`` candidate and DIA-T2MI-PLP-MISMATCH consumes
@@ -164,18 +228,17 @@ class TestB1PlpMappingCandidate:
             expected_observations=("t2mi.plp_mismatch",),
             layer="T2MI",
         )
-        events = _run_layered((fault,))
+        events, _sink = _run_layered((fault,))
         payloads = _collected(events, "t2mi.plp_mismatch")
         _interlock_asserts("DIA-T2MI-PLP-MISMATCH", "t2mi.plp_mismatch", payloads)
         # The honest 缺失 ≠ 零 face: the demux filtered to nothing.
         assert payloads[0]["expected_plp"] == 0
         assert payloads[0]["business_absent_evidence"]["filtered_packet_count"] == 0
 
-    def test_frozen_engine_yields_no_candidate_from_the_candidate_event(self):
-        """候选 ≠ 事实 at the chain end: the real payload carries no
-        SPEC-306 §6 anchor triple, so the frozen evaluator produces no
-        candidate and no warnings (the payload is registry-valid) — the
-        anchor-path follow-up stays visible instead of silently green."""
+    def test_anchored_candidate_event_lights_the_rule(self):
+        """#138 点亮: the real evidence payload, anchored to the run's
+        received-leg Inner TS artifact, produces the candidate through
+        the FULL evaluator — the rule declaration untouched."""
         fault = FaultDefinition(
             fault_id="fd000000-0000-4000-8000-00000000f006",
             fault_type="T2MI_PLP_MISMATCH",
@@ -185,7 +248,43 @@ class TestB1PlpMappingCandidate:
             expected_observations=("t2mi.plp_mismatch",),
             layer="T2MI",
         )
-        events = _run_layered((fault,))
+        events, sink = _run_layered((fault,))
+        payloads = _collected(events, "t2mi.plp_mismatch")
+        outcome = EVALUATOR.evaluate(
+            "sess-x",
+            "run-x",
+            _anchored_records_of(
+                "t2mi.plp_mismatch",
+                payloads,
+                _received_inner_ts_artifact_id(sink),
+            ),
+            load_builtin_rules(),
+            now_utc_ms=NOW_MS,
+        )
+        _assert_phase2_candidate(
+            outcome,
+            "DIAG_T2MI_PLP_MISMATCH",
+            "DIA-T2MI-PLP-MISMATCH",
+            _received_inner_ts_artifact_id(sink),
+            {"expected_plp", "actual_plp", "business_absent_evidence"},
+        )
+
+    def test_unanchored_candidate_event_stays_candidate_free(self):
+        """候选 ≠ 事实 honesty face kept: the real payload carries no
+        SPEC-306 §6 anchor triple, and an UNANCHORED evidence record (no
+        resolved Inner TS — e.g. the resolver port unwired) produces no
+        candidate and no warnings (the payload is registry-valid) — no
+        anchor, no candidate."""
+        fault = FaultDefinition(
+            fault_id="fd000000-0000-4000-8000-00000000f006",
+            fault_type="T2MI_PLP_MISMATCH",
+            target_id="enc-0",
+            parameters={"expected_plp": 0, "actual_plp": 1},
+            activation=FaultActivation(kind="session_start", packet_index=None),
+            expected_observations=("t2mi.plp_mismatch",),
+            layer="T2MI",
+        )
+        events, _sink = _run_layered((fault,))
         payloads = _collected(events, "t2mi.plp_mismatch")
         outcome = EVALUATOR.evaluate(
             "sess-x",
@@ -213,14 +312,16 @@ class TestB2BbheaderSyncCandidate:
             expected_observations=("bbframe.recovery_failed",),
             layer="BBFRAME",
         )
-        events = _run_layered((fault,))
+        events, _sink = _run_layered((fault,))
         payloads = _collected(events, "bbframe.recovery_failed")
         _interlock_asserts(
             "DIA-BBHEADER-SYNC-FAULT", "bbframe.recovery_failed", payloads
         )
         assert payloads[0]["failure_count"] > 0
 
-    def test_frozen_engine_yields_no_candidate_from_the_evidence_event(self):
+    def test_anchored_evidence_event_lights_the_rule(self):
+        """#138 点亮: the real recovery evidence, anchored to the run's
+        received-leg Inner TS artifact, produces the candidate."""
         fault = FaultDefinition(
             fault_id="fd000000-0000-4000-8000-00000000f007",
             fault_type="BBHEADER_SYNC_FAULT",
@@ -230,7 +331,40 @@ class TestB2BbheaderSyncCandidate:
             expected_observations=("bbframe.recovery_failed",),
             layer="BBFRAME",
         )
-        events = _run_layered((fault,))
+        events, sink = _run_layered((fault,))
+        payloads = _collected(events, "bbframe.recovery_failed")
+        outcome = EVALUATOR.evaluate(
+            "sess-x",
+            "run-x",
+            _anchored_records_of(
+                "bbframe.recovery_failed",
+                payloads,
+                _received_inner_ts_artifact_id(sink),
+            ),
+            load_builtin_rules(),
+            now_utc_ms=NOW_MS,
+        )
+        _assert_phase2_candidate(
+            outcome,
+            "DIAG_BBHEADER_SYNC_FAULT",
+            "DIA-BBHEADER-SYNC-FAULT",
+            _received_inner_ts_artifact_id(sink),
+            {"first_failed_frame_index", "failure_count"},
+        )
+
+    def test_unanchored_evidence_event_stays_candidate_free(self):
+        """候选 ≠ 事实 honesty face kept (no resolved anchor → no
+        candidate, no warnings)."""
+        fault = FaultDefinition(
+            fault_id="fd000000-0000-4000-8000-00000000f007",
+            fault_type="BBHEADER_SYNC_FAULT",
+            target_id="enc-0",
+            parameters={"field": "SYNCD", "mode": "corrupt"},
+            activation=FaultActivation(kind="packet_index", packet_index=1),
+            expected_observations=("bbframe.recovery_failed",),
+            layer="BBFRAME",
+        )
+        events, _sink = _run_layered((fault,))
         payloads = _collected(events, "bbframe.recovery_failed")
         outcome = EVALUATOR.evaluate(
             "sess-x",
@@ -292,7 +426,7 @@ class TestBissKeyMismatchCandidate:
         )
 
     def test_rule_interlocks_with_the_real_run_emission(self, golden_loader):
-        events = _run_layered((self._fault(),), self._pipeline(golden_loader))
+        events, _sink = _run_layered((self._fault(),), self._pipeline(golden_loader))
         payloads = _collected(events, "biss.descramble_failed")
         _interlock_asserts(
             "DIA-BISS-KEY-MISMATCH", "biss.descramble_failed", payloads
@@ -302,10 +436,41 @@ class TestBissKeyMismatchCandidate:
             assert "0123456789ab" not in json.dumps(payload)
         assert payloads[0]["mode"] == "1"
 
-    def test_frozen_engine_yields_no_candidate_from_the_candidate_event(
-        self, golden_loader
-    ):
-        events = _run_layered((self._fault(),), self._pipeline(golden_loader))
+    def test_anchored_candidate_event_lights_the_rule(self, golden_loader):
+        """#138 点亮: the real descramble evidence, anchored through the
+        journal reference chain (the run's ``mutation_log_ref`` — the
+        mutation-log artifact binding, exactly what the diagnosis service
+        resolves), produces the candidate."""
+        events, _sink = _run_layered((self._fault(),), self._pipeline(golden_loader))
+        payloads = _collected(events, "biss.descramble_failed")
+        outcome = EVALUATOR.evaluate(
+            "sess-x",
+            "run-x",
+            _anchored_records_of(
+                "biss.descramble_failed",
+                payloads,
+                _mutation_log_ref_of(events),
+            ),
+            load_builtin_rules(),
+            now_utc_ms=NOW_MS,
+        )
+        _assert_phase2_candidate(
+            outcome,
+            "DIAG_BISS_KEY_MISMATCH",
+            "DIA-BISS-KEY-MISMATCH",
+            _mutation_log_ref_of(events),
+            {"failed_indices_sample", "pid_scope"},
+        )
+        # 密钥纪律 survives the anchor chain: the candidate summary and
+        # locator carry fingerprints/shapes only, never key material.
+        candidate = outcome.report.candidates[0]
+        assert "0123456789ab" not in json.dumps(candidate.summary)
+        assert "0123456789ab" not in json.dumps(candidate.evidence.locator)
+
+    def test_unanchored_candidate_event_stays_candidate_free(self, golden_loader):
+        """候选 ≠ 事实 honesty face kept (no resolved anchor → no
+        candidate, no warnings)."""
+        events, _sink = _run_layered((self._fault(),), self._pipeline(golden_loader))
         payloads = _collected(events, "biss.descramble_failed")
         outcome = EVALUATOR.evaluate(
             "sess-x",
