@@ -59,6 +59,7 @@ class ArtifactRepository(Protocol):
     def register(self, meta: ArtifactMeta) -> None: ...
     def get(self, artifact_id: str) -> Optional[ArtifactRow]: ...
     def find_by_sha256(self, sha256: str) -> list[ArtifactRow]: ...
+    def find_by_run(self, run_id: str, *, kind: Optional[str] = None) -> list[ArtifactRow]: ...
 
 
 @dataclass(frozen=True)
@@ -179,6 +180,25 @@ class SqliteArtifactRepository:
             "SELECT * FROM artifacts WHERE sha256 = ? ORDER BY created_at_utc_ms, artifact_id",
             (sha256,),
         ).fetchall()
+        return [_artifact_row(row) for row in rows]
+
+    def find_by_run(self, run_id: str, *, kind: Optional[str] = None) -> list[ArtifactRow]:
+        """The run's landed artifact rows, landing order (additive, ticket
+        #138: the diagnosis anchor chain resolves the run's Inner TS
+        artifact — the received leg lands after the baseline leg, so the
+        LAST row is the received one)."""
+        if kind is None:
+            rows = self._conn.execute(
+                "SELECT * FROM artifacts WHERE run_id = ?"
+                " ORDER BY created_at_utc_ms, artifact_id",
+                (run_id,),
+            ).fetchall()
+        else:
+            rows = self._conn.execute(
+                "SELECT * FROM artifacts WHERE run_id = ? AND kind = ?"
+                " ORDER BY created_at_utc_ms, artifact_id",
+                (run_id, kind),
+            ).fetchall()
         return [_artifact_row(row) for row in rows]
 
 

@@ -15,6 +15,7 @@ from ts.t2mi.errors import T2miError
 from ts.t2mi.packet import (
     T2MI_CRC_SIZE,
     T2MI_HEADER_SIZE,
+    T2MI_INTERLEAVING_FRAME_START_FLAG,
     T2MI_TYPE_BBFRAME,
     T2MI_TYPE_PADDING,
     T2miPacket,
@@ -189,3 +190,54 @@ class TestConstructionGuards:
         with pytest.raises(T2miError) as error:
             _packet(packet_type=0x100)
         assert error.value.code == "T2MI_PACKET_TYPE_OUT_OF_RANGE"
+
+
+class TestBytes2To5NamedFaces:
+    """The bytes-2..5 named faces (ticket #140 — SPEC-404 §Phase2
+    「6 字节包头逐字段（TS 102 773 §5.1）」: byte 2 = superframe_index
+    (high nibble), byte 3 = reserved, byte 4..5 = payload_bits 16-bit BE
+    — the last already exposed; the teaching view needed the named
+    decodes of the first two)."""
+
+    def test_superframe_index_rides_header_byte2_high_nibble(self) -> None:
+        for value in (0, 1, 7, 15):
+            packet = _packet(superframe_index=value)
+            assert packet.superframe_index == value
+
+    def test_superframe_index_leaves_reserved_verbatim(self) -> None:
+        # the named face is a decode; the raw bytes stay the byte authority
+        # (SPEC-103 §7 保留纪律) — low nibble / byte 3 are untouched
+        reserved_pair = bytes([0x70 | 0x0A, 0xBC])  # high nibble 7 + verbatim rest
+        packet = T2miPacket(
+            packet_type=T2MI_TYPE_BBFRAME,
+            packet_counter=0,
+            reserved=reserved_pair,
+            payload_bits=64,
+            payload=_payload(8),
+            crc32=0,
+        )
+        assert packet.superframe_index == 7
+        assert packet.reserved == reserved_pair
+        # and the encoding round-trips the verbatim pair
+        encoded = encode_packet(packet)
+        assert encoded[2:4] == reserved_pair
+
+    def test_interleaving_frame_start_from_prefix_flags_bit(self) -> None:
+        # BBFRAME transport prefix flags byte, bit 0x80 (TSDuck byte-aligned
+        # layout), built programmatically per tests/README §5
+        prefix = bytes([0x00, 0x05, T2MI_INTERLEAVING_FRAME_START_FLAG])
+        started = _packet(payload=prefix + _payload(8))
+        assert started.interleaving_frame_start is True
+        not_started = _packet(
+            payload=bytes([prefix[0], prefix[1], prefix[2] ^ T2MI_INTERLEAVING_FRAME_START_FLAG])
+            + _payload(8),
+        )
+        assert not_started.interleaving_frame_start is False
+
+    def test_interleaving_frame_start_none_for_non_bbframe(self) -> None:
+        # the honest tri-state discipline (frame_index/plp_id pattern):
+        # the prefix flags byte does not exist without the prefix
+        padding = _packet(packet_type=T2MI_TYPE_PADDING, payload=_payload(8))
+        assert padding.interleaving_frame_start is None
+        short = _packet(payload=_payload(2))  # < 3 prefix bytes: no face
+        assert short.interleaving_frame_start is None

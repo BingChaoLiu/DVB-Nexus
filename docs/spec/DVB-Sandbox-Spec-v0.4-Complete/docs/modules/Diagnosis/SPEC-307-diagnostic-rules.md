@@ -1,7 +1,7 @@
 ---
 spec_id: SPEC-307
 title: Diagnostic Rules
-version: 0.6.0
+version: 0.7.0
 status: APPROVED
 phase: MVP
 owner: Diagnosis
@@ -137,3 +137,8 @@ MVP 有限声明式集合（ticket #13 Q-B-②）：
   3. BISS_KEY_MISMATCH → 「BISS 密钥错位」候选：证据 = biss.descramble_failed + 密钥指纹互链（区分解扰失败 vs 码流损坏）；
   4. PMT_PID_DRIFT → 「PMT/Demux 过滤不同步」候选：证据 = PSI 版本对比 + 声明 PID 无数据漂移。
 - 诊断规则与故障原语同批落库；confidence 三档静态声明机制不变（候选 ≠ 事实纪律不变）。
+
+## Phase 2 补丁定点修订（随补丁票 [#138](https://github.com/BingChaoLiu/DVB-Nexus/issues/138)，DRAFT_FOR_REVIEW 0.7.0；依据：#136 补丁票评估 D-1）
+
+- **diagnose 面点亮**：四条候选规则声明**两态通用**（match `event_type` 与 payload 谓词零改动，#130 已钉）。引擎输入族扩容至 Phase 2 证据族（`t2mi.plp_mismatch` / `bbframe.recovery_failed` / `biss.descramble_failed`；MVP `ts.*` 观测族不动，锚定链与 EvidenceRef 两态语义见 SPEC-306 §6/§7 Phase 2 补丁修订）后，三条构造候选规则在各自证据事件上产生候选，diagnose 面全部点亮——SC-06/07/08 E2E 升级为 diagnose 候选断言（与既有 journal 证据断言双轨并存）。规则注册与校验面（§7 启动 fail-fast、match 引用事件类型必须在注册表内）语义不变：证据族三类型已在 SPEC-301 §4 注册表内。
+- **`DIA-PMT-PID-DRIFT` 点亮路径**：match 事件 `ts.psi_section_observed` 本就在观测族内，点亮依赖故障原语 `PMT_PID_DRIFT` 的 transform 实现与注入链贯通（补丁票 #139，纯实现缺口——SPEC-204 §Phase2 已定义原语语义，无规格修订）。

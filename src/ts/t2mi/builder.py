@@ -48,6 +48,7 @@ from ts.crc import mpeg2_crc32
 from ts.t2mi.errors import T2miError
 from ts.t2mi.packet import (
     T2MI_BBHEADER_SIZE,
+    T2MI_INTERLEAVING_FRAME_START_FLAG,
     T2MI_TYPE_BBFRAME,
     T2miPacket,
     make_header_reserved,
@@ -71,9 +72,6 @@ T2MI_BUILD_EMPTY = "T2MI_BUILD_EMPTY"
 T2MI_BUILD_FRAME_SHORT = "T2MI_BUILD_FRAME_SHORT"
 T2MI_BUILD_FRAME_NOT_UP_ALIGNED = "T2MI_BUILD_FRAME_NOT_UP_ALIGNED"
 T2MI_BUILD_PLP_SEQUENCE_MISMATCH = "T2MI_BUILD_PLP_SEQUENCE_MISMATCH"
-
-#: interleaving_frame_start flag bit in the BBFRAME transport prefix.
-T2MI_INTERLEAVING_FRAME_START_FLAG = 0x80
 
 _COUNTER_MODULUS = 256
 

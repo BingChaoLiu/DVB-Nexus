@@ -494,9 +494,14 @@ export function ExperimentConsole({
 
   // Jump wiring (§7.6 Plan A): the SPEC-404 §4.2 Monitor deep link seeds the
   // packet inspector with the locator triple verbatim — no monitor/**
-  // import, no decoding here.
+  // import, no decoding here. #138 two-state evidence: the Phase 2 locator
+  // state carries no pid/packet_index (无对应定位字段不虚填) — the packet
+  // deep link has no target there and the jump honestly no-ops.
   const jumpToEvidence = useCallback(
-    (locator: { artifact_id: string; pid: number; packet_index: number }) => {
+    (locator: { artifact_id: string; pid?: number | null; packet_index?: number | null }) => {
+      if (locator.pid === null || locator.pid === undefined || locator.packet_index === null || locator.packet_index === undefined) {
+        return;
+      }
       navigate(
         `/monitor?session=${encodeURIComponent(sessionId)}&inspect_artifact=${encodeURIComponent(locator.artifact_id)}&inspect_pid=${locator.pid}&inspect_packet=${locator.packet_index}`,
       );

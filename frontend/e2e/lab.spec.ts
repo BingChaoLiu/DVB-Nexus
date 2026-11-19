@@ -329,9 +329,12 @@ test.describe("Training Lab — SC-04 honest INCONCLUSIVE chain", () => {
 //   presence; the DLL-driven full injection chain is the LOCAL env-gated
 //   enhancement below (DVB_NEXUS_DVBCSA_DLL; skip reason visible with
 //   -ra, §5-11) — key MATERIAL is asserted as shape only, never literals;
-// - SC-09 (PMT_PID_DRIFT): landing + loader + UI 开局/呈现 assertions only —
-//   the TS-layer primitive is an honest skeleton (apply raises, ruling
-//   §10-15④), so the faulted run is deliberately NOT exercised here.
+// - SC-09 (PMT_PID_DRIFT): full chain since #139 closed the transform gap
+//   (the #136 收口 patch ticket D-2): 开局 → inject → diagnose (honest zero
+//   candidates — the analysis bridge is the declared UI gap, M4 裁定 B; the
+//   PSI version-comparison evidence chain is the backend e2e's face) →
+//   recover → verify PASS → packet-inspector view ts deep link (the
+//   declaration faces stay parseable).
 // Disciplines unchanged: shapes over literals (UUID [0-9a-f-]{36}), the
 // promise-预挂 request watches, and zero regression for the v1 chains above.
 // ---------------------------------------------------------------------------
@@ -667,11 +670,20 @@ test.describe("Training Lab — SC-08 BISS key mismatch (Lab Pack v2, CI face)",
   });
 });
 
-test.describe("Training Lab — SC-09 PMT PID drift (Lab Pack v2, honest landing face)", () => {
-  test("library carries the v2 pack; detail declares the drift fault; 开局 + auto-baseline complete (faulted run NOT exercised)", async ({
+test.describe("Training Lab — SC-09 PMT PID drift (Lab Pack v2 full chain)", () => {
+  test.setTimeout(150_000);
+
+  test("开局 → inject → diagnose(诚实零候选——Analyze 桥是 UI 声明缺口) → recover → verify PASS → view ts deep link", async ({
     page,
     request,
   }) => {
+    const solutionRequests: string[] = [];
+    page.on("request", (req) => {
+      if (req.url().includes(`/api/v1/scenarios/${SC09}/solution`)) {
+        solutionRequests.push(req.url());
+      }
+    });
+
     // --- Library: the v2 four render in the server registry order (filename
     // ASC after the v1 five) — the SPEC-406 §Phase2 场景库自然承载.  Each
     // title rides its own row anchor.
@@ -715,12 +727,8 @@ test.describe("Training Lab — SC-09 PMT PID drift (Lab Pack v2, honest landing
       expect.arrayContaining(["ts.psi_section_observed", "fault.applied"]),
     );
 
-    // --- 开局/呈现: session READY + the auto-baseline (empty plan) completes
-    // and the pointer falls on Inject.  The faulted run is DELIBERATELY not
-    // exercised: PMT_PID_DRIFT is an honest TS-layer skeleton whose apply
-    // raises (ruling §10-15④ — M6 has no implementation ticket; the gap is
-    // recorded in the #131 REPORT and the patch ticket is on the #136
-    // 收口评估 list).
+    // --- 开局: session READY + the auto-baseline (empty plan) completes and
+    // the pointer falls on Inject.
     await page.goto(`/lab?scenario=${SC09}`);
     await page.getByRole("button", { name: "开始实验" }).click();
     await expect(page.getByTestId("lab-console-session")).toBeVisible({ timeout: 30_000 });
@@ -728,8 +736,64 @@ test.describe("Training Lab — SC-09 PMT PID drift (Lab Pack v2, honest landing
     expect(sessionId).toMatch(/^[0-9a-f-]{36}$/);
     const autoRow = page.getByTestId(/^lab-run-row-/).first();
     await expect(autoRow).toHaveText(/completed/, { timeout: 60_000 });
+    const autoBaselineRunId = (await autoRow.getAttribute("data-testid"))!.replace("lab-run-row-", "");
     await expect(page.getByTestId("lab-step-generate")).toContainText("基线完成");
     await expect(page.getByTestId("lab-step-inject")).toHaveClass(/dvb-lab-step-current/);
-    await expect(page.getByRole("button", { name: /注入故障/ })).toBeEnabled();
+
+    // --- Inject: the drift chain rides the real TS-layer transform (#139).
+    await page.getByRole("button", { name: /注入故障/ }).click();
+    const injectRow = page.getByTestId(/^lab-run-row-/).nth(1);
+    await expect(injectRow).toHaveText(/completed/, { timeout: 60_000 });
+    await expect(injectRow).toContainText("faulted_ts");
+    const injectedRunId = (await injectRow.getAttribute("data-testid"))!.replace("lab-run-row-", "");
+    expect(injectedRunId).not.toBe(autoBaselineRunId);
+
+    // --- Diagnose (honest ZERO-candidate face): the UI journal carries NO
+    // ts.* observations — the analysis bridge is the declared UI gap (M4
+    // 裁定 B, §7.2 Analyze 不可用), so the PSI version-comparison evidence
+    // lives in the BACKEND e2e only (test_e2e_fault_lab_sc09_pmt_pid_drift).
+    // The zero is deterministic (no rule matches fault.*/journal faces).
+    await page.getByRole("button", { name: /对注入 Run 评估/ }).click();
+    await expect(
+      page.getByText(
+        new RegExp(`report: run ${injectedRunId} · 0 candidates · 0 warnings`),
+      ),
+    ).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("lab-step-diagnose")).toContainText("已诊断");
+
+    // --- Recover (empty-plan rerun) then verify PASS.
+    await page.getByRole("button", { name: /恢复重跑/ }).click();
+    const recoverRow = page.getByTestId(/^lab-run-row-/).nth(2);
+    await expect(recoverRow).toHaveText(/completed/, { timeout: 60_000 });
+    const recoveryRunId = (await recoverRow.getAttribute("data-testid"))!.replace("lab-run-row-", "");
+    expect(recoveryRunId).not.toBe(injectedRunId);
+
+    await page.getByLabel("baseline_run_id").fill(injectedRunId);
+    await page.getByLabel("recovery_run_id").fill(recoveryRunId);
+    await page.getByRole("button", { name: /提交判定/ }).click();
+    const verdict = page.getByTestId("verify-verdict");
+    await expect(verdict).toBeVisible({ timeout: 15_000 });
+    await expect(verdict).toHaveText(/PASS/);
+    const card = page.locator(".dvb-mon-verify-card");
+    await expect(card).toContainText("fault-cleared");
+
+    // --- Solution reveal unlocks on PASS (通关前零请求).
+    expect(solutionRequests).toEqual([]);
+    await page.getByRole("button", { name: "展开参考解" }).click();
+    await expect(page.getByTestId("lab-solution-text")).toContainText("恢复路径", { timeout: 15_000 });
+    expect(solutionRequests).toHaveLength(1);
+    expect(solutionRequests[0]).toContain(`/api/v1/scenarios/${SC09}/solution`);
+
+    // --- Packet inspector deep link (§10-20-⑦: TS layer → default view ts):
+    // the drift fault's PMT packets stay structurally inspectable — the
+    // drift is a legal declaration update, not corruption.  The deep link
+    // runs LAST (see the SC-06 chain comment for the remount ordering).
+    const faultedArtifactId = await artifactIdOfKind(request, sessionId, injectedRunId, "faulted_ts");
+    await page.goto(
+      `/monitor?session=${sessionId}&inspect_artifact=${faultedArtifactId}&inspect_pid=4096&inspect_packet=412`,
+    );
+    await expect(page.getByTestId("packet-inspector")).toBeVisible();
+    await expect(page.getByTestId("inspect-view")).toHaveText("view ts");
+    await expect(page.getByTestId("inspect-field-sync")).toContainText("0x47");
   });
 });

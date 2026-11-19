@@ -90,6 +90,28 @@ class T2miPacketDTO(_StrictDTO):
         le=255,
         description="Transport-prefix PLP id (BBFRAME packets only, else None).",
     )
+    # --- bytes-2..5 named faces (ticket #140, SPEC-404 §Phase2 6-byte-header
+    # rows; optional so the #122 8-key wire stays validating) ---------------
+
+    superframe_index: int | None = Field(
+        default=None,
+        ge=0,
+        le=15,
+        description="Header byte 2 high nibble (4-bit superframe index).",
+    )
+    reserved: str | None = Field(
+        default=None,
+        pattern=r"^0x[0-9a-f]{4}$",
+        description="Header bytes 2..3 verbatim hex digest (0xNNNN, BE).",
+    )
+    interleaving_frame_start: bool | None = Field(
+        default=None,
+        description=(
+            "BBFRAME transport-prefix flags bit (third prefix byte, 0x80);"
+            " None when the prefix face is unavailable — non-BBFRAME"
+            " packets or a payload too short to carry the flags byte."
+        ),
+    )
 
 
 # --- BBFrame face (#123; wire_detail() nine keys) --------------------------------

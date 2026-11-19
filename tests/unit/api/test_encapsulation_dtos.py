@@ -82,15 +82,20 @@ class TestT2miPacketDTOMirror:
             dto = T2miPacketDTO.model_validate(row)
             assert dto.model_dump() == row
 
-    def test_wire_key_set_is_exactly_the_eight_faces(self):
+    def test_wire_key_set_is_exactly_the_eleven_faces(self):
+        # #140 additive: the #122 eight faces + the bytes-2..5 named faces
+        # (superframe_index / reserved digest / interleaving_frame_start)
         assert set(T2miPacketDTO.model_fields) == {
             "packet_index",
             "packet_type",
             "packet_counter",
+            "superframe_index",
+            "reserved",
             "payload_kind",
             "payload_bytes_len",
             "crc32_valid",
             "frame_index",
+            "interleaving_frame_start",
             "plp_id",
         }
 

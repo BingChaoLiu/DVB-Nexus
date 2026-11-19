@@ -13,8 +13,8 @@ downstream tickets and self-register via
   (``faults.filters.bbheader_sync``);
 - ``BissKeyMismatchSkeletonTransform``  → real implementation in #126
   (scrambler filter family, ``faults.filters.scrambler``);
-- ``PmtPidDriftSkeletonTransform``      → real implementation in #128's
-  TS-layer wiring (the C2 TS-layer equivalent, ADR-0010 §3).
+- ``PmtPidDriftSkeletonTransform``      → real implementation in #139
+  (``faults.filters.pmt_pid_drift``, the #136 收口 patch ticket D-2).
 
 Skeletons are honest placeholders, never silent pass-throughs: applying
 one raises ``NotImplementedError`` naming the owning ticket.  A prepared

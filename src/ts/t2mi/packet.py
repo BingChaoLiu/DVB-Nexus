@@ -79,6 +79,11 @@ T2MI_TYPE_PADDING = 0xFF
 #: everything else parses into the explicit unknown state).
 T2MI_KNOWN_PACKET_TYPES: frozenset[int] = frozenset({T2MI_TYPE_BBFRAME, T2MI_TYPE_PADDING})
 
+#: interleaving_frame_start flag bit in the BBFRAME transport prefix
+#: (``frame_idx(1) + PLP_id(1) + flags(1)``, TSDuck byte-aligned layout).
+#: Owned here (the prefix is packet-face data); the builder imports it.
+T2MI_INTERLEAVING_FRAME_START_FLAG = 0x80
+
 # --- error codes owned by this module ---
 
 T2MI_PACKET_TYPE_OUT_OF_RANGE = "T2MI_PACKET_TYPE_OUT_OF_RANGE"
@@ -182,6 +187,20 @@ class T2miPacket:
     def superframe_index(self) -> int:
         """4-bit T2-MI superframe index (header byte 2 high nibble)."""
         return (self.reserved[0] >> 4) & _MASK_NIBBLE
+
+    @property
+    def interleaving_frame_start(self) -> bool | None:
+        """The BBFRAME transport-prefix ``interleaving_frame_start`` flag
+        bit (``0x80`` of the third prefix byte, TSDuck byte-aligned
+        layout), or ``None`` when the prefix face is unavailable — a
+        non-BBFRAME payload, or a payload too short to carry the flags
+        byte.  The honest tri-state discipline (``frame_index`` /
+        ``plp_id`` pattern): the flags byte does not exist without the
+        prefix (#140 face).
+        """
+        if self.packet_type != T2MI_TYPE_BBFRAME or len(self.payload) < 3:
+            return None
+        return bool(self.payload[2] & T2MI_INTERLEAVING_FRAME_START_FLAG)
 
     @property
     def payload_bytes_len(self) -> int:

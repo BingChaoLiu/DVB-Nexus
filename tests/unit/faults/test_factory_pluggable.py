@@ -210,13 +210,15 @@ class TestSkeletonWiring:
             assert filter_instance is not None
 
     def test_skeleton_transform_is_explicitly_not_implemented(self) -> None:
-        # Subject is a still-skeleton primitive (PMT_PID_DRIFT stays the
-        # #128-owned skeleton; T2MI_PLP_MISMATCH went real in #124,
-        # BBHEADER_SYNC_FAULT in #123 — each with its own layer-face
-        # refusal instead of the placeholder NotImplementedError).
+        # The skeleton placeholder discipline is structural: the #121
+        # skeleton classes themselves still refuse to fake a transform
+        # (all four Phase 2 primitives have real builders since #139 —
+        # the skeletons remain as the honest-refusal tier they were
+        # created for).
         from faults.filters.pat_missing import null_packet
+        from faults.filters.phase2_skeletons import PmtPidDriftSkeletonTransform
 
-        transform = transform_builder_for(FAULT_TYPE_PMT_PID_DRIFT)(
+        transform = PmtPidDriftSkeletonTransform(
             _definition(
                 FAULT_TYPE_PMT_PID_DRIFT, "demux-0:pid:0x1000", "TS"
             )
@@ -225,6 +227,16 @@ class TestSkeletonWiring:
         packet = null_packet()
         with pytest.raises(NotImplementedError):
             transform.apply(0, packet)
+
+    def test_pmt_pid_drift_resolves_the_real_ts_builder(self) -> None:
+        # The TS-layer drift went real in #139 (the #136 收口 patch
+        # ticket D-2): the SC-09 injection chain builder resolves to the
+        # real transform, never the skeleton.
+        from faults.filters.pmt_pid_drift import PmtPidDriftTransform
+
+        assert transform_builder_for(FAULT_TYPE_PMT_PID_DRIFT) is (
+            PmtPidDriftTransform
+        )
 
 
 class TestRegisterTransformSemantics:
@@ -272,13 +284,15 @@ class TestRegisterTransformSemantics:
             def transform(self, index, packet):  # pragma: no cover
                 return packet
 
-        # Skeleton wiring is present out of the box...
-        assert (
-            transform_builder_for(FAULT_TYPE_PMT_PID_DRIFT)
-            is phase2_skeletons.PmtPidDriftSkeletonTransform
-        )
-        # ...and the owning ticket replaces it without touching factory.py.
+        # The skeleton tier remains the shadowed fallback (all four Phase 2
+        # primitives have real builders since #139 — the tier persists for
+        # exactly this replacement semantics)...
         with _clean_override_table():
+            assert transform_builder_for(FAULT_TYPE_PMT_PID_DRIFT) is (
+                phase2_skeletons.PmtPidDriftSkeletonTransform
+            )
+            # ...and a downstream registration shadows it without touching
+            # factory.py.
             register_transform(FAULT_TYPE_PMT_PID_DRIFT, RealBuilder)
             assert transform_builder_for(FAULT_TYPE_PMT_PID_DRIFT) is RealBuilder
 

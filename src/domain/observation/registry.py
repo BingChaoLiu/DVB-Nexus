@@ -123,6 +123,19 @@ BISS_EVENT_TYPES = frozenset(
     {"biss.scramble_applied", "biss.descramble_failed"}
 )
 
+#: The Phase 2 evidence family (SPEC-306 §2.1 Phase 2 补丁修订, ticket
+#: #138): the three constructed-candidate rule match events. A DISCRETE
+#: evidence face feeding the diagnosis engine — NOT observations (no
+#: source/confidence axes; the ``ts.*`` branch stays the only
+#: observation-axes carrier, SPEC-303 §Phase2). ``observation.*`` retraction
+#: discipline and the journal envelope shape are untouched. Exactly the
+#: three ``t2mi.*`` / ``bbframe.*`` / ``biss.*`` members below that carry
+#: candidate evidence payloads (the stage summaries stay construction
+#: faces, not evidence).
+EVIDENCE_EVENT_TYPES = frozenset(
+    {"t2mi.plp_mismatch", "bbframe.recovery_failed", "biss.descramble_failed"}
+)
+
 #: ``gen.*`` (SPEC-303 §Phase2): the three construction-event types.
 #: Stage-level + sampled-packet-level only — the full per-packet stream
 #: is closed (#112); magnitude stays O(layers) + O(sampling).
@@ -392,6 +405,94 @@ _BISS_DESCRAMBLE_FAILED_KEYS = frozenset(
         "mode",
     }
 )
+
+#: The #141 same-source face (ticket #141): the Phase 2 payload key sets
+#: in the #129 REPORT §2 display order — the SINGLE source the frontend
+#: gen module (``scripts/dump-payload-keys.mjs`` → ``payloadKeys.gen.ts``)
+#: renders from, replacing the hand-maintained render table keys.  The
+#: import-time self-check below locks THIS face against the frozen
+#: validator constants (a key added to one side without the other fails
+#: at import); a NEWLY registered Phase 2 event type is pinned by the
+#: unit test (test_phase2_payload_key_sets.py — the face must cover
+#: exactly the four Phase 2 families).
+PHASE2_PAYLOAD_KEY_SETS: dict[str, tuple[str, ...]] = {
+    "t2mi.stage_summary": (
+        "packet_count",
+        "padding_count",
+        "packet_type_distribution",
+        "plp_distribution",
+    ),
+    "t2mi.plp_mismatch": (
+        "expected_plp",
+        "actual_plp",
+        "business_absent_evidence",
+    ),
+    "bbframe.stage_summary": (
+        "frame_count",
+        "n_ups_distribution",
+        "stuffing_ratio",
+    ),
+    "bbframe.recovery_failed": (
+        "failure_count",
+        "first_failed_frame_index",
+    ),
+    # the maximal mode face (base + the optional #127 derivation face) —
+    # absent optional keys render nothing on a concrete envelope
+    "biss.scramble_applied": (
+        "pid_scope",
+        "packet_count",
+        "key_fingerprint",
+        "mutation_log_ref",
+        "mode",
+        "derivation_ref",
+        "mismatch_variants",
+    ),
+    "biss.descramble_failed": (
+        "pid_scope",
+        "failed_indices_sample",
+        "self_check_kind",
+        "key_fingerprint_ref",
+        "mode",
+    ),
+    "gen.stage_started": ("layer",),
+    "gen.stage_completed": ("layer", "item_count"),
+    "gen.packet_sampled": (
+        "layer",
+        "packet_index",
+        "byte_size",
+        "sha256",
+    ),
+}
+
+for _event_type, _keys, _frozen in (
+    (
+        event_type,
+        PHASE2_PAYLOAD_KEY_SETS[event_type],
+        frozen,
+    )
+    for event_type, frozen in (
+        ("t2mi.stage_summary", _T2MI_STAGE_SUMMARY_KEYS),
+        ("t2mi.plp_mismatch", _T2MI_PLP_MISMATCH_KEYS),
+        ("bbframe.stage_summary", _BBFRAME_STAGE_SUMMARY_KEYS),
+        ("bbframe.recovery_failed", _BBFRAME_RECOVERY_FAILED_KEYS),
+        (
+            "biss.scramble_applied",
+            _BISS_SCRAMBLE_BASE_KEYS | _BISS_SCRAMBLE_DERIVATION_KEYS,
+        ),
+        ("biss.descramble_failed", _BISS_DESCRAMBLE_FAILED_KEYS),
+        ("gen.stage_started", _GEN_STAGE_STARTED_KEYS),
+        ("gen.stage_completed", _GEN_STAGE_COMPLETED_KEYS),
+        ("gen.packet_sampled", _GEN_PACKET_SAMPLED_KEYS),
+    )
+):
+    if set(_keys) != _frozen:
+        raise ImportError(
+            f"PHASE2_PAYLOAD_KEY_SETS[{_event_type!r}] drifted from the "
+            f"frozen validator key set: ordered face "
+            f"{sorted(_keys)} vs validator {sorted(_frozen)} (ticket #141 "
+            "same-source self-check)"
+        )
+del _event_type, _keys, _frozen
 
 
 def _validate_generation_payload(
@@ -1028,14 +1129,56 @@ def _require_string_list(
 
 
 def _require_evidence(event_type: str, payload: Mapping[str, Any]) -> None:
+    """SPEC-306 §7 evidence anchor — TWO states (SPEC-306 §Phase2 补丁
+    修订, ticket #138):
+
+    - MVP: ``{artifact_id, pid, packet_index}`` (the flat triple wire,
+      byte-unchanged);
+    - Phase 2: ``{artifact_id, locator}`` — ``locator`` a non-empty
+      object of the evidence event's payload locator fields verbatim
+      (no fabricated pid/packet_index: 无对应定位字段不虚填).
+
+    Exactly one state must hold; a partial MVP triple (pid without
+    packet_index or vice versa) is refused in both states.
+    """
     evidence = payload.get("evidence")
     if not isinstance(evidence, Mapping):
         raise EnvelopeError(
             EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
             f"payload 'evidence' for {event_type!r} must be an object "
-            "{artifact_id, pid, packet_index} (SPEC-306 §6/§7)",
+            "{artifact_id, pid, packet_index} or {artifact_id, locator}"
+            " (SPEC-306 §6/§7)",
         )
     _require_non_empty_str(event_type, evidence, "artifact_id")
+    locator = evidence.get("locator")
+    has_pid = "pid" in evidence
+    has_packet_index = "packet_index" in evidence
+    if locator is not None:
+        # Phase 2 state: locator verbatim, no locator+pid mixing.
+        if not isinstance(locator, Mapping) or not locator:
+            raise EnvelopeError(
+                EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+                f"payload evidence locator for {event_type!r} must be a"
+                " non-empty object of the payload locator fields verbatim"
+                " (SPEC-306 §Phase2)",
+            )
+        if has_pid or has_packet_index:
+            raise EnvelopeError(
+                EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+                f"payload evidence for {event_type!r} must carry either"
+                " the MVP {pid, packet_index} triple or the Phase 2"
+                " locator — never both states (SPEC-306 §Phase2)",
+            )
+        return
+    if has_pid != has_packet_index:
+        raise EnvelopeError(
+            EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+            f"evidence pid/packet_index for {event_type!r} must be"
+            " present together (the MVP anchor triple), got pid="
+            f"{evidence.get('pid')!r} packet_index="
+            f"{evidence.get('packet_index')!r}",
+        )
+    pid = evidence.get("pid")
     pid = evidence.get("pid")
     if (
         not isinstance(pid, int)
@@ -1071,9 +1214,11 @@ __all__ = [
     "DIAGNOSIS_CONFIDENCES",
     "DIAGNOSIS_EVENT_TYPES",
     "DIAGNOSIS_SEVERITIES",
+    "EVIDENCE_EVENT_TYPES",
     "FAULT_EVENT_TYPES",
     "GEN_EVENT_TYPES",
     "GENERATION_LAYERS",
+    "PHASE2_PAYLOAD_KEY_SETS",
     "RECOVERY_EVENT_TYPES",
     "REGISTERED_EVENT_TYPES",
     "SCENARIO_EVENT_TYPES",

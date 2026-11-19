@@ -215,9 +215,17 @@ def build_pending_router(
             raise HTTPException(status_code=_501, detail=_DIAGNOSIS_DETAIL)
         return list(await diagnosis_port.list_diagnoses(session_id))
 
-    @router.post("/sessions/{session_id}/runs/{run_id}/diagnose")
+    @router.post(
+        "/sessions/{session_id}/runs/{run_id}/diagnose",
+        response_model=DiagnosisReportDTO,
+        response_model_exclude_none=True,
+    )
     async def diagnose_run(session_id: str, run_id: str) -> DiagnosisReportDTO:
-        # Idempotent re-evaluation (SPEC-306 §5 evaluate).
+        # Idempotent re-evaluation (SPEC-306 §5 evaluate). None fields are
+        # excluded at serialization so each evidence state keeps its exact
+        # key set (ticket #138 two-state: the MVP triple wire stays
+        # byte-identical; the Phase 2 locator state never carries null
+        # pid/packet_index — 无对应定位字段不虚填).
         if diagnosis_port is None:
             raise HTTPException(status_code=_501, detail=_DIAGNOSIS_DETAIL)
         return await diagnosis_port.diagnose(session_id, run_id)

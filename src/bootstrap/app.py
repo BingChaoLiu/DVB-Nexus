@@ -82,6 +82,7 @@ from faults.factory import build_semantic_filter_factory
 
 import faults.filters.bbheader_sync as _activate_bbheader_sync  # noqa: F401,E402
 import faults.filters.biss_mode_e as _activate_biss_mode_e  # noqa: F401,E402
+import faults.filters.pmt_pid_drift as _activate_pmt_pid_drift  # noqa: F401,E402
 import faults.filters.scrambler as _activate_scrambler  # noqa: F401,E402
 import faults.filters.t2mi_plp_mismatch as _activate_t2mi_plp_mismatch  # noqa: F401,E402
 
@@ -378,11 +379,23 @@ def build_production_app(
         exports=exports,
         reader=_build_metrics_reader(metrics_engine),
     )
+    # The Phase 2 evidence anchor port (SPEC-306 §Phase2 补丁修订, #138):
+    # the diagnosis engine resolves ``t2mi.*``/``bbframe.*`` candidates to
+    # the run's received-leg Inner TS artifact (``kind=inner_ts``). The
+    # chain lands the baseline leg first, the received leg second
+    # (``run_layered_chain``'s leg order), so the LAST row is the received
+    # one; a run without landed Inner TS resolves to None (no anchor → no
+    # candidate — the honest degradation face).
+    def _inner_ts_artifact_resolver(run_id: str) -> str | None:
+        rows = artifact_repository.find_by_run(run_id, kind="inner_ts")
+        return rows[-1].artifact_id if rows else None
+
     diagnosis_service = DiagnosisService(
         journal,
         gateway,
         SqliteDiagnosisRepository(connection),
         rules_provider=builtin_rules_provider,
+        inner_ts_resolver=_inner_ts_artifact_resolver,
     )
     bind_run_completion_trigger(gateway, diagnosis_service.evaluate)
 

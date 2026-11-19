@@ -59,6 +59,11 @@ jobs:
       - name: DTO drift lock (live OpenAPI dump vs committed generated types)
         working-directory: frontend
         run: npm run dto:check
+      # Ticket #141 drift lock: the Phase 2 payloadKeys gen module vs the
+      # registry's ordered same-source face (the render table's authority).
+      - name: Payload-keys drift lock (registry face vs committed generated module)
+        working-directory: frontend
+        run: npm run payload-keys:check
 
   e2e-smoke:
     runs-on: ubuntu-latest

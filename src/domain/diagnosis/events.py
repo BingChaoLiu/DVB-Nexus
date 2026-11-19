@@ -37,8 +37,9 @@ __all__ = [
 #: Producer identity (reported in ticket #54; SPEC-300 §12 duty).
 PRODUCER_ID = "diagnosis-engine"
 
-#: Bumped with the diagnosis package's spec baseline (SPEC-306 0.5.0).
-PRODUCER_VERSION = "0.5.0"
+#: Bumped with the diagnosis package's spec baseline (SPEC-306 0.6.0 —
+#: the §Phase2 补丁修订, ticket #138).
+PRODUCER_VERSION = "0.6.0"
 
 #: Ingestion observation domain (SPEC-300 §6 vocabulary).
 WALL_CLOCK_DOMAIN = "wall:utc"
@@ -167,6 +168,22 @@ def _diagnosis_envelope(
     observed_ns: int,
     instance_id: str,
 ) -> Mapping[str, Any]:
+    evidence = candidate.evidence
+    if evidence.locator is not None:
+        # Phase 2 anchor state (SPEC-306 §Phase2 补丁修订, #138): the
+        # locator travels verbatim; no pid/packet_index is fabricated —
+        # the correlation pid stays the neutral None.
+        evidence_block: dict[str, Any] = {
+            "artifact_id": evidence.artifact_id,
+            "locator": evidence.locator,
+        }
+    else:
+        # MVP flat triple (SPEC-306 §6) — byte-unchanged wire.
+        evidence_block = {
+            "artifact_id": evidence.artifact_id,
+            "pid": evidence.pid,
+            "packet_index": evidence.packet_index,
+        }
     payload = {
         "diagnosis_id": candidate.diagnosis_id,
         "rule_id": candidate.rule_id,
@@ -182,14 +199,10 @@ def _diagnosis_envelope(
         ],
         "affected_node_ids": list(candidate.affected_node_ids),
         "suggested_actions": list(candidate.suggested_actions),
-        "evidence": {
-            "artifact_id": candidate.evidence.artifact_id,
-            "pid": candidate.evidence.pid,
-            "packet_index": candidate.evidence.packet_index,
-        },
+        "evidence": evidence_block,
     }
     correlation = {key: None for key in _CORRELATION_KEYS}
-    correlation["pid"] = candidate.evidence.pid
+    correlation["pid"] = evidence.pid
     if candidate.affected_node_ids:
         correlation["node_id"] = candidate.affected_node_ids[0]
     document = {

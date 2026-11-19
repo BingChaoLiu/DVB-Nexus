@@ -98,10 +98,13 @@ class TestArtifactStructureEndpoint:
             "packet_index",
             "packet_type",
             "packet_counter",
+            "superframe_index",
+            "reserved",
             "payload_kind",
             "payload_bytes_len",
             "crc32_valid",
             "frame_index",
+            "interleaving_frame_start",
             "plp_id",
         }
 
