@@ -2,7 +2,7 @@
 spec_id: SPEC-306
 title: Diagnosis Engine
 version: 0.6.0
-status: DRAFT_FOR_REVIEW
+status: APPROVED
 phase: MVP
 owner: Diagnosis
 priority: P0

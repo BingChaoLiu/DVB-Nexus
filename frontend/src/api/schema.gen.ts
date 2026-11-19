@@ -969,15 +969,23 @@ export interface components {
         };
         /**
          * DiagnosisEvidenceDTO
-         * @description The artifact anchor (ADR-0007 item 4 shared packet-order frame).
+         * @description The artifact anchor — TWO states (SPEC-306 §6 MVP + §Phase2 补丁
+         *     修订, ticket #138): the MVP flat triple ``{artifact_id, pid,
+         *     packet_index}`` (ADR-0007 item 4 shared packet-order frame), or the
+         *     Phase 2 ``{artifact_id, locator}`` — the payload locator fields
+         *     verbatim (never both states; constructed accordingly by the mapper).
          */
         DiagnosisEvidenceDTO: {
             /** Artifact Id */
             artifact_id: string;
             /** Pid */
-            pid: number;
+            pid?: number | null;
             /** Packet Index */
-            packet_index: number;
+            packet_index?: number | null;
+            /** Locator */
+            locator?: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
          * DiagnosisObservationRefDTO

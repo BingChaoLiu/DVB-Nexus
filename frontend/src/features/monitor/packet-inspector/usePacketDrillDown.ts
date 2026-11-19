@@ -115,6 +115,11 @@ export function usePacketDrillDown(
   view: PacketInspectorView = "ts",
 ): PacketDrillDownState {
   const structureView = view === "t2mi" || view === "bbframe" ? view : null;
+  // #138 two-state evidence: the MVP triple carries packet_index, the Phase 2
+  // locator state does not (无对应定位字段不虚填) — the ts packet face has no
+  // drill target there (honest idle); the layered structure views stay
+  // reachable (they only need the artifact id).
+  const packetIndex = locator === null ? null : (locator.packet_index ?? null);
 
   const structureQuery = useQuery({
     queryKey: ["packet-inspector", locator === null ? null : locator.artifact_id, "structure", structureView],
@@ -130,7 +135,7 @@ export function usePacketDrillDown(
     // Layered views skip the meta/Range face entirely (SPEC-404 §Phase2: the
     // structure JSON is the data source; layered artifacts have no 188
     // packet geometry — packet_size is honestly null there).
-    enabled: locator !== null && structureView === null,
+    enabled: locator !== null && packetIndex !== null && structureView === null,
     staleTime: GATE_STALE_MS,
     retry: false,
   });
@@ -148,21 +153,22 @@ export function usePacketDrillDown(
     meta === undefined ||
     meta.packet_count === undefined ||
     meta.packet_count === null ||
-    (locator !== null && locator.packet_index < meta.packet_count);
+    (packetIndex !== null && packetIndex < meta.packet_count);
 
   const contentQuery = useQuery({
-    queryKey: ["packet-inspector", locator === null ? null : locator.artifact_id, locator === null ? null : locator.packet_index],
+    queryKey: ["packet-inspector", locator === null ? null : locator.artifact_id, packetIndex],
     queryFn: (): Promise<ArtifactContentResult> =>
-      getArtifactContent(locator!.artifact_id, { range: packetRange(locator!.packet_index) }),
+      getArtifactContent(locator!.artifact_id, { range: packetRange(packetIndex!) }),
     // Metadata-first is a hard ordering (§4.3): the Range request must not
     // race the meta request — it waits for meta to arrive AND pass both gates.
-    enabled: locator !== null && structureView === null && meta !== undefined && metaGateOk && inRange,
+    enabled:
+      locator !== null && packetIndex !== null && structureView === null && meta !== undefined && metaGateOk && inRange,
     staleTime: GATE_STALE_MS,
     retry: false,
   });
 
   return useMemo(() => {
-    if (locator === null) return { phase: "idle" } as const;
+    if (locator === null || packetIndex === null) return { phase: "idle" } as const;
     if (structureView !== null) {
       if (structureQuery.isError) return toStructureErrorState(structureView, structureQuery.error);
       const structure = structureQuery.data;
@@ -194,7 +200,7 @@ export function usePacketDrillDown(
     if (!inRange) {
       return {
         phase: "out-of-range",
-        packetIndex: locator.packet_index,
+        packetIndex,
         packetCount: meta.packet_count as number,
       } as const;
     }
@@ -226,5 +232,5 @@ export function usePacketDrillDown(
       errorCode: "UNEXPECTED_STATUS",
       message: `expected 206 for the single-packet range, got ${content.status}`,
     } as const;
-  }, [locator, structureView, structureQuery.isError, structureQuery.error, structureQuery.data, metaQuery.isError, metaQuery.error, meta, metaGateOk, inRange, contentQuery.isError, contentQuery.error, contentQuery.data]);
+  }, [locator, packetIndex, structureView, structureQuery.isError, structureQuery.error, structureQuery.data, metaQuery.isError, metaQuery.error, meta, metaGateOk, inRange, contentQuery.isError, contentQuery.error, contentQuery.data]);
 }

@@ -15,7 +15,9 @@ Confidence stays the rule's static three-tier declaration — the engine
 computes no score (SPEC-003 §2.6, brief §6 axis discipline).
 """
 
-from pydantic import Field
+from typing import Any, Optional
+
+from pydantic import Field, model_validator
 
 from domain._base import DomainModel
 from domain.diagnosis.model import DiagnosisConfidence, DiagnosisSeverity
@@ -38,16 +40,51 @@ class ObservationRef(DomainModel):
 
 
 class EvidenceRef(DomainModel):
-    """The artifact anchor (SPEC-306 §6 chain terminus).
+    """The artifact anchor (SPEC-306 §6 chain terminus) — TWO states
+    (SPEC-306 §Phase2 补丁修订, ticket #138):
 
-    ``pid`` is the 13-bit DVB PID space; ``packet_index`` follows the
-    ADR-0007 item 4 shared frame (baseline and faulted share one packet
-    order, same index = same slot).
+    - MVP: the flat triple ``{artifact_id, pid, packet_index}`` — the
+      existing wire, byte-unchanged. ``pid`` is the 13-bit DVB PID space;
+      ``packet_index`` follows the ADR-0007 item 4 shared frame (baseline
+      and faulted share one packet order, same index = same slot).
+    - Phase 2: ``{artifact_id, locator}`` — ``locator`` carries the
+      evidence event's payload locator fields verbatim (no fabricated
+      pid/packet_index: 无对应定位字段不虚填).
+
+    Exactly one state must hold (validated below); a partial MVP triple
+    is refused in both states.
     """
 
     artifact_id: str = Field(min_length=1)
-    pid: int = Field(ge=0, le=8191)
-    packet_index: int = Field(ge=0)
+    pid: Optional[int] = Field(default=None, ge=0, le=8191)
+    packet_index: Optional[int] = Field(default=None, ge=0)
+    locator: Optional[dict[str, Any]] = None
+
+    @model_validator(mode="after")
+    def _two_state(self) -> "EvidenceRef":
+        has_pid = self.pid is not None
+        has_packet_index = self.packet_index is not None
+        if self.locator is not None:
+            if has_pid or has_packet_index:
+                raise ValueError(
+                    "evidence carries either the MVP {pid, packet_index}"
+                    " triple or the Phase 2 locator — never both states"
+                    " (SPEC-306 §Phase2)"
+                )
+            if not self.locator:
+                raise ValueError("Phase 2 evidence locator must be non-empty")
+            return self
+        if has_pid != has_packet_index:
+            raise ValueError(
+                "the MVP anchor triple needs pid and packet_index together"
+                " (SPEC-306 §6)"
+            )
+        if not (has_pid and has_packet_index):
+            raise ValueError(
+                "evidence needs the MVP triple or a Phase 2 locator"
+                " (SPEC-306 §6/§7)"
+            )
+        return self
 
 
 class DiagnosisCandidate(DomainModel):

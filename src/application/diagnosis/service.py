@@ -21,6 +21,8 @@ Error mapping (SPEC-306 §8 + SPEC-500 §6):
 
 - journal read failure → ``ServiceUnavailableError(OBS_STORAGE_UNAVAILABLE)``
   (HTTP 503 via the declarative api mapping);
+- Inner-TS artifact resolution failure (the Phase 2 anchor port) → the
+  same 503 face (SPEC-306 §Phase2 anchor chain);
 - unknown session/run → ``NotFoundError`` (HTTP 404);
 - rule isolation / skipped payloads / no match stay inside the domain
   evaluator as warnings and never fail the evaluation.
@@ -56,10 +58,11 @@ from domain.diagnosis.events import (
     updated_envelope,
 )
 from domain.diagnosis.report import DiagnosisReport
-from domain.observation.registry import TS_EVENT_TYPES
+from domain.observation.registry import EVIDENCE_EVENT_TYPES, TS_EVENT_TYPES
 
 __all__ = [
     "DiagnosisService",
+    "InnerTsArtifactResolver",
     "JournalReader",
     "TERMINAL_RUN_EVENT_TYPES",
     "bind_run_completion_trigger",
@@ -76,8 +79,31 @@ TERMINAL_RUN_EVENT_TYPES = frozenset(
 #: ruleset per SPEC-306 §8).
 RulesProvider = Callable[[], Optional[Sequence[EvaluationRule]]]
 
+#: The Phase 2 Inner-TS artifact anchor port (SPEC-306 §Phase2 补丁修订,
+#: ticket #138): run_id → the run's received-leg Inner TS artifact id
+#: (``kind=inner_ts``, the gen-layer landed artifact), or ``None`` when
+#: the run landed none. The composition root adapts the SPEC-502
+#: artifacts read face onto this narrow callable; an unwired port leaves
+#: ``t2mi.*``/``bbframe.*`` evidence records unstamped (no anchor → no
+#: candidate — the honest degradation face).
+InnerTsArtifactResolver = Callable[[str], Optional[str]]
+
 #: Wall clock injection (SPEC-201 discipline): epoch-ms source.
 NowUtcMs = Callable[[], int]
+
+#: The Phase 2 evidence events whose anchor resolves to the run's Inner
+#: TS artifact (the ``biss.*`` face resolves through the journal
+#: reference chain instead — see ``_read_run_observations``).
+_INNER_TS_ANCHORED_EVENT_TYPES = frozenset(
+    {"t2mi.plp_mismatch", "bbframe.recovery_failed"}
+)
+
+#: The journal reference-chain carriers for the ``biss.*`` anchor: the
+#: run's first non-``None`` ``mutation_log_ref`` on these event types
+#: resolves to the mutation-log artifact (SPEC-306 §Phase2 事件引用链).
+_MUTATION_LOG_REF_EVENT_TYPES = frozenset(
+    {"fault.applied", "biss.scramble_applied"}
+)
 
 #: Journal read page (== the SPEC-502 hard cap; pagination walks pages).
 _PAGE_LIMIT = 2_000
@@ -124,12 +150,14 @@ class DiagnosisService:
         *,
         rules_provider: RulesProvider | None = None,
         now_utc_ms: NowUtcMs | None = None,
+        inner_ts_resolver: InnerTsArtifactResolver | None = None,
     ) -> None:
         self._journal = journal
         self._publisher = publisher
         self._repository = repository
         self._rules_provider = rules_provider
         self._now_utc_ms: NowUtcMs = now_utc_ms or _default_now_utc_ms
+        self._inner_ts_resolver = inner_ts_resolver
 
     # --- SPEC-306 §5 face -------------------------------------------------------
 
@@ -192,12 +220,28 @@ class DiagnosisService:
         """Read the run's observation-class records from the journal.
 
         Pagination walks the full session stream (hard-capped pages);
-        records of the run outside the ``ts.*`` observation family are
-        skipped (fault.*/simulation.* engine events are NOT observations,
-        brief §6; the domain only sees observation records).
+        records of the run outside the ``ts.*`` observation family and
+        the Phase 2 evidence family are skipped (fault.*/simulation.*
+        engine events are NOT observations or evidence, brief §6 +
+        SPEC-306 §Phase2; the domain only sees those two faces).
+
+        The Phase 2 evidence records get their anchors stamped here
+        (SPEC-306 §Phase2 补丁修订, ticket #138 — the engine stays pure,
+        the application resolves):
+
+        - ``biss.*`` through the JOURNAL reference chain: the run's
+          first non-``None`` ``mutation_log_ref`` on ``fault.applied`` /
+          ``biss.scramble_applied`` (the mutation-log artifact binding);
+        - ``t2mi.*`` / ``bbframe.*`` through the injected Inner-TS
+          resolver (the run's received-leg ``kind=inner_ts`` artifact).
+
+        An unresolved anchor leaves the record unstamped — the domain
+        then produces no candidate for it (no anchor, no candidate,
+        SPEC-306 §6).
         """
         records: list[ObservationRecord] = []
         saw_run = False
+        mutation_log_ref: Optional[str] = None
         after_seq = 0
         while True:
             rows = self._journal_query(session_id, after_seq=after_seq, limit=_PAGE_LIMIT)
@@ -210,7 +254,15 @@ class DiagnosisService:
                 if scope.get("run_id") != run_id:
                     continue
                 saw_run = True
-                if row.event_type not in TS_EVENT_TYPES:
+                if row.event_type in _MUTATION_LOG_REF_EVENT_TYPES:
+                    ref = (envelope.get("payload") or {}).get("mutation_log_ref")
+                    if isinstance(ref, str) and ref and mutation_log_ref is None:
+                        mutation_log_ref = ref
+                    continue
+                if not (
+                    row.event_type in TS_EVENT_TYPES
+                    or row.event_type in EVIDENCE_EVENT_TYPES
+                ):
                     continue
                 correlation = envelope.get("correlation") or {}
                 records.append(
@@ -236,7 +288,49 @@ class DiagnosisService:
                 f"unknown run {run_id!r} in session {session_id!r}: no"
                 " journal events carry this run (SPEC-500 §6 row 404)",
             )
+        if any(record.event_type in EVIDENCE_EVENT_TYPES for record in records):
+            inner_ts_id = self._resolve_inner_ts_artifact(run_id) if any(
+                record.event_type in _INNER_TS_ANCHORED_EVENT_TYPES
+                for record in records
+            ) else None
+            records = [
+                self._stamp_evidence_anchor(record, mutation_log_ref, inner_ts_id)
+                for record in records
+            ]
         return records
+
+    @staticmethod
+    def _stamp_evidence_anchor(
+        record: ObservationRecord,
+        mutation_log_ref: Optional[str],
+        inner_ts_id: Optional[str],
+    ) -> ObservationRecord:
+        """Stamp one record's Phase 2 evidence anchor (two-state, §Phase2):
+        the ``biss.*`` face resolves to the mutation-log artifact, the
+        ``t2mi.*``/``bbframe.*`` faces to the run's received-leg Inner
+        TS artifact; ``ts.*`` records stay unstamped (payload triple)."""
+        if record.event_type == "biss.descramble_failed":
+            return record.model_copy(
+                update={"evidence_artifact_id": mutation_log_ref}
+            )
+        if record.event_type in _INNER_TS_ANCHORED_EVENT_TYPES:
+            return record.model_copy(update={"evidence_artifact_id": inner_ts_id})
+        return record
+
+    def _resolve_inner_ts_artifact(self, run_id: str) -> Optional[str]:
+        """The injected Inner-TS anchor port (composition-root adapted
+        onto the SPEC-502 artifacts read face). Storage failures map to
+        the §8 503 face — same posture as the journal read."""
+        if self._inner_ts_resolver is None:
+            return None
+        try:
+            return self._inner_ts_resolver(run_id)
+        except (sqlite3.Error, StorageError) as exc:
+            raise ServiceUnavailableError(
+                OBS_STORAGE_UNAVAILABLE,
+                f"inner-ts artifact resolution failed for run {run_id!r}:"
+                f" {exc} (SPEC-306 §Phase2 anchor chain)",
+            ) from exc
 
     def _commit_lifecycle(
         self,

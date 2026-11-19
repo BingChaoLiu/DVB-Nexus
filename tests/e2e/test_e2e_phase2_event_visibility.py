@@ -196,3 +196,69 @@ class TestPhase2EventVisibility:
             assert (
                 pulled_recovery[0]["journal_seq"] == ws_frame["journal_seq"]
             ), "WS frame and REST pull read the same journal row"
+
+
+class TestPhase2DiagnoseFace:
+    """The #138 diagnose-face 点亮 on the PRODUCTION composition
+    (SPEC-306 §Phase2 补丁修订): the layered run's evidence events enter
+    the engine's expanded input family, the run-completion trigger
+    evaluates, and the diagnose endpoint serves the Phase 2 candidate —
+    its anchor chain resolvable end to end (candidate → journal_seq →
+    locator → artifact content)."""
+
+    def test_layered_evidence_run_lights_the_diagnose_face(self, tmp_path) -> None:
+        raw, _document = load_scenario("cc-discontinuity")
+        with FaultLab(db_path=tmp_path / "phase2-diagnose.sqlite") as lab:
+            session_id = lab.create_session(raw)
+            lab.start_session(session_id)
+
+            inject_run_id = lab.submit_run(
+                session_id, [BBHEADER_SYNC_FAULT_WIRE]
+            )
+            lab.await_run(session_id, inject_run_id)
+            lab.drain()
+
+            # The run-completion trigger evaluated on the committed
+            # terminal event; the idempotent endpoint re-serves it.
+            report = lab.diagnose(session_id, inject_run_id)
+            # The trigger's lifecycle events (raised) were published
+            # during the drain's commit fan-out — one more sweep commits
+            # them (publish-then-drain discipline).
+            lab.drain()
+            candidates = report["candidates"]
+            assert [c["code"] for c in candidates] == ["DIAG_BBHEADER_SYNC_FAULT"]
+            candidate = candidates[0]
+            assert candidate["rule_id"] == "DIA-BBHEADER-SYNC-FAULT"
+            assert candidate["confidence"] == "medium"
+            # The Phase 2 anchor state — exact key set, no fabricated
+            # pid/packet_index (无对应定位字段不虚填).
+            evidence = candidate["evidence"]
+            assert set(evidence) == {"artifact_id", "locator"}
+            assert set(evidence["locator"]) == {
+                "failure_count",
+                "first_failed_frame_index",
+            }
+            assert evidence["locator"]["failure_count"] >= 1
+            assert isinstance(evidence["locator"]["first_failed_frame_index"], int)
+
+            # The anchor chain resolves end to end: the Inner TS artifact
+            # the evidence points at serves its content.
+            content = lab.artifact_content(evidence["artifact_id"])
+            assert len(content) > 0 and len(content) % 188 == 0
+
+            # The stored row + the raised event agree (the lifecycle
+            # committed through the two-state registry gate).
+            rows = lab.diagnoses(session_id)
+            assert [row["code"] for row in rows] == ["DIAG_BBHEADER_SYNC_FAULT"]
+            raised = [
+                item
+                for item in lab.events(session_id)
+                if item["event_type"] == "diagnosis.raised"
+            ]
+            assert raised and raised[0]["payload"]["evidence"]["locator"] == {
+                "first_failed_frame_index": evidence["locator"][
+                    "first_failed_frame_index"
+                ],
+                "failure_count": evidence["locator"]["failure_count"],
+            }
+            assert "pid" not in raised[0]["payload"]["evidence"]

@@ -40,14 +40,24 @@ function LocatorButton({
   onSelect?: DiagnosisSharedProps["onEvidenceSelect"];
   row: DiagnosisDTO | DiagnosisCandidateDTO;
 }) {
+  // #138 two-state evidence (SPEC-306 §Phase2): the MVP triple renders the
+  // pid/packet face; the Phase 2 locator state renders its payload locator
+  // fields verbatim — never a fabricated pid/packet.
+  const mvpState = evidence.pid !== null && evidence.pid !== undefined && evidence.packet_index !== null && evidence.packet_index !== undefined;
+  const label = mvpState
+    ? `evidence: ${evidence.artifact_id} / pid ${evidence.pid} / packet ${evidence.packet_index}`
+    : `evidence: ${evidence.artifact_id} / locator ${JSON.stringify(evidence.locator ?? {})}`;
+  const title = mvpState
+    ? `artifact ${evidence.artifact_id} · pid ${evidence.pid} · packet ${evidence.packet_index}`
+    : `artifact ${evidence.artifact_id} · locator ${JSON.stringify(evidence.locator ?? {})}`;
   return (
     <button
       type="button"
       className="dvb-mon-locator"
       onClick={() => onSelect?.(evidence, row)}
-      title={`artifact ${evidence.artifact_id} · pid ${evidence.pid} · packet ${evidence.packet_index}`}
+      title={title}
     >
-      evidence: {evidence.artifact_id} / pid {evidence.pid} / packet {evidence.packet_index}
+      {label}
     </button>
   );
 }
