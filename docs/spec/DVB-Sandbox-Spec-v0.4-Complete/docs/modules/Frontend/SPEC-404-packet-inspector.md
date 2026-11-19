@@ -1,7 +1,7 @@
 ---
 spec_id: SPEC-404
 title: Packet Inspector
-version: 0.6.0
+version: 0.7.0
 status: APPROVED
 phase: MVP
 owner: Frontend
@@ -260,3 +260,10 @@ fixture 纪律（验收「取包落点与 artifact 字节逐位一致」）：�
 - **BBFrame 视图**（view=bbframe）：BBHEADER 10 字节逐字段（MATYPE/UPL/DFL/SYNC/SYNCD/CRC-8，EN 302 755 §5.1.7）+ CRC-8 校验 + UP 边界标注；文案教学锚点「SYNCD 是数据字段内首个 UP 的位距离，不是同步字节」直接入视图文案。
 - **BISS 加扰态标注**：payload 层 scrambled/clear 标注 + 密钥指纹引用（密钥本体永不渲染）；biss.descramble_failed 证据与 mutation log 互链。
 - 排除项维持（#114）：不做 BISS Mode E 计算器式交互（ESW/Injected ID 计算过程展示属 SPEC-611 语义面，UI 只呈证据）；不做 section 树/PES/A-B 对照（既有非目标延续）。
+
+## Phase 3 定点修订（随落笔票 #158，DRAFT_FOR_REVIEW 0.7.0；依据：细裁 [#153](https://github.com/BingChaoLiu/DVB-Nexus/issues/153) Q1/Q2/Q4）
+
+- **节点详情面板**（新增呈现位）：点击画布 RF/SEC 节点 → 详情侧栏渲染该节点 `state_observed` 快照**全量 metrics**（通用 metrics 列表渲染，注册表驱动、非拟物控件）+ **CauseRef 因果链**（列表呈现、指向根因节点可跳转画布定位）。
+- **数据源契约** = SPEC-305 Phase 3 修订查询面（rf.*/sec.* 快照过滤）+ 既有事件订阅；零新增前端数据通道。
+- **view 参数不扩**：SIM_STATE Run 无码流无 artifact——包检查器对状态域实验呈现**空态三问**（「这是什么 · 为什么空（状态域 Run 不产码流，空 ≠ 干净）· 下一步去哪（按钮跳节点详情面板）」），不把空表渲染成「零问题」。
+- **排除项预裁**（[#153](https://github.com/BingChaoLiu/DVB-Nexus/issues/153) Q5）：独立物理仪表盘页面、拟物控件（电压表盘/信号强度条/天线动画）、时序回放/动画不进本规格（无教学必需性）。

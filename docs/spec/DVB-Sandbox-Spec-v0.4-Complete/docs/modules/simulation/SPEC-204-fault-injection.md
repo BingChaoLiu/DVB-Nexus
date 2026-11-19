@@ -1,7 +1,7 @@
 ---
 spec_id: SPEC-204
 title: Fault Injection Framework
-version: 0.6.0
+version: 0.7.0
 status: APPROVED
 phase: MVP
 owner: Simulation Engine
@@ -211,3 +211,14 @@ DEFINED -> SCHEDULED -> ACTIVE -> APPLIED -> REMOVED
 - **等位替换不变式逐层保持**：每层过滤器长度/包序不变，CBR 在 TS 层与 Inner TS 层各自成立；tee 双写 artifact 面维持最外层，中间层证据走 mutation log（含密钥指纹——密钥本体不落）。
 - **加扰器过滤器类型**：filters 族新增 scrambler（构造特性与 fault 注入共用，密钥来源不同——[ADR-0011](../../../../../docs/adr/0011-biss-scramble-path.md)）。
 - 四原语的 expected_observations 符号名引用观测注册表（事件定义见 SPEC-303/304 与 ADR-0006 关联面同批修订）。
+
+## Phase 3 定点修订（随落笔票 #156，DRAFT_FOR_REVIEW 0.7.0；依据：细裁 [#151](https://github.com/BingChaoLiu/DVB-Nexus/issues/151)，[ADR-0012](../../../../../docs/adr/0012-phase3-l0-evaluation-form.md)）
+
+- **layer 枚举扩容**：{TS, BBFRAME, T2MI, BISS} → {TS, BBFRAME, T2MI, BISS, RF, SEC}；默认 "TS" 不变（additive 序列化/指纹兼容，照 #111 先例）。
+- **执行通路按层路由**：包级 layer（TS/BBFRAME/T2MI/BISS）维持 ADR-0007 过滤器契约 `apply(index, packet)`；state 层（RF/SEC）走**求值前纯变换**（fault plan 对 node config/context 做确定性变换后求值，求值器不感知 fault 概念——ADR-0012 决定 3）。同一 FaultDefinition 统一定义、按 layer 路由两条通路。
+- **首版 state 层原语两条**（注册表条目）：
+  - `TONE_RESIDUE`（RF 层，A2）：params = {target lnb node, tone_actual}；语义 = `tone_actual ≠ tone_commanded`（消费 SPEC-621 双字段分离缝）→ 下游 tuner ber_state 升档/失锁由求值自然传播。
+  - `UB_SLOT_CONFLICT`（SEC 层，A1）：params = {tuner_node, conflicting_ub_slot}；语义 = 运行期把该 tuner 的 ub_slot 错配到已占用槽位 → SCR 堆叠互扰 → tuner lock 失败 + CauseRef 冲突对（SPEC-623 判定语义）。
+- **候选池不进首版**（诚实标注）：LNB_SHORT_CIRCUIT（SPEC-621 短路五态承接）/ SWITCH_MISCONFIG（寄存器错配）/ THERMAL_FAULT。
+- **状态域等位替换**：声明字段级改写 + baseline/faulted 观测流字段级对齐（field-level diff）；**不承诺包级不变式**（无包流可保持——等位替换不变式定义按 layer 域分立，诚实标注）。
+- **expected_observations**：必填语义不变；state 层原语引用状态观测符号（rf.*/sec.*，SPEC-303 Phase 3 修订注册表）；prepare 校验扩展 = fault 目标节点存在 + layer 路由可达（state 层变换器注册存在），失败照 `SIM_FAULT_*` 码族拒绝。

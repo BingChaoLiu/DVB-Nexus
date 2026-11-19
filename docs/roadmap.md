@@ -21,7 +21,7 @@
 | Phase | 主题 | 核心内容 | 前置条件 |
 |---|---|---|---|
 | **Phase 2** ✅ 已完成（2026-11-17） | 高级封装层 | T2-MI 解封装三级子图、BBFrame/PLP 提取、BISS Mode 1 加解扰、教学靶场 B/C 系列案例 | MVP TS 闭环验收通过；语义级故障注入能力（构造期注入）可用 |
-| **Phase 3** | RF/SEC 沙盘 | LNB/DiSEqC/Tuner/Unicable 的 L0 状态模型与物理视图、DiSEqC 命令模型、A 系列靶场 | L0 求值引擎成熟（架构评审裁决其 MVP 形态）；端口模型扩展 |
+| **Phase 3** | RF/SEC 沙盘 | LNB/DiSEqC/Tuner/Unicable 的 L0 状态模型与物理视图、DiSEqC 命令模型、A 系列靶场 | L0 求值引擎成熟（架构评审裁决其 MVP 形态）；端口模型扩展 ✅ 前置已达成（L0 形态 = SPEC-202 冻结骨架上注册求值器，[ADR-0012](adr/0012-phase3-l0-evaluation-form.md)；端口模型扩展随 [#148](https://github.com/BingChaoLiu/DVB-Nexus/issues/148)——Phase 3 地图 [#143](https://github.com/BingChaoLiu/DVB-Nexus/issues/143) 决策+规格就绪 2026-11-20，实现随 milestone M7） |
 | **Phase 4** | Live Engineering | Linux DVB Frontend 接入、实况流监测与告警、D2 系列实战案例 | Linux/WSL2 运行环境（见 §5 Windows 限制）；Observation 告警链路成熟 |
 | **Later** | 工程增强 | Time Machine（Ring Buffer/事件冻结/回放）、TS Differential Analyzer（双流差异）、`playback_ready` 档、MPTS 多节目调度 | 按需另启 effort |
 
@@ -40,10 +40,10 @@
 | SPEC-610 | BISS Mode 1 | BISS-1 参数、解扰接口和证据 | ✅ 已实现（0.5.1 APPROVED，2026-11-17） |
 | SPEC-611 | BISS Mode E | ESW/Injected ID 计算和验证 | ✅ 已实现（0.5.1 APPROVED，2026-11-17） |
 | SPEC-612 | DVB-CA | PMT CA Descriptor、ECM/EMM 关系 | P3（规格未编写） |
-| SPEC-620 | RF Simulation | RF 参数和质量状态模型 | P2 |
-| SPEC-621 | LNB Model | 本振、极化、电压和频段状态 | P2 |
-| SPEC-622 | DiSEqC Controller | 命令模型、端口和控制状态 | P2 |
-| SPEC-623 | Unicable | EN 50494/EN 50607 槽位与调谐模型 | P2 |
+| SPEC-620 | RF Simulation | RF 参数和质量状态模型 | ✅ 规格就绪（0.6.0 APPROVED，2026-11-20；实现随 M7） |
+| SPEC-621 | LNB Model | 本振、极化、电压和频段状态 | ✅ 规格就绪（0.6.0 APPROVED，2026-11-20；14 态真值表 normative；实现随 M7） |
+| SPEC-622 | DiSEqC Controller | 命令模型、端口和控制状态 | ✅ 规格就绪（0.6.0 APPROVED，2026-11-20；首版 1.x 单向子集；实现随 M7） |
+| SPEC-623 | Unicable | EN 50494/EN 50607 槽位与调谐模型 | ✅ 规格就绪（0.6.0 APPROVED，2026-11-20；位布局/公式为四实现源码级共识标注；实现随 M7） |
 | SPEC-630 | Linux DVB Frontend Adapter | Linux DVB API 接入 | P3 |
 | SPEC-631 | Live TS Input | 文件/网络/硬件输入统一接口 | P2 |
 | SPEC-632 | Live Monitoring | 实况指标与告警 | P2 |
@@ -61,6 +61,8 @@
 > **MVP 裁决（2026-11-14，[v03 故障案例库 → MVP 靶场映射 #17](https://github.com/BingChaoLiu/DVB-Nexus/issues/17)）**：八案例**全部不在 MVP**——A1/A2/B1/B2/C1/C2/D1 依赖 RF/T2MI/BISS/CA/FastScan 域（ADR-0002 划出），D2 是唯一 TS 层案例但需 MVP 外的新故障原语；MVP 靶场 = 四类故障原语（ADR-0007）直接构造的内置 Lab Pack v1 五景，不逐案对应 v03 案例（详见 #17 决议）。
 
 ### 领域 A：射频与前端供电链路（Phase 3）
+
+> ✅ **域模型与规格已就绪（2026-11-20，Phase 3 地图 [#143](https://github.com/BingChaoLiu/DVB-Nexus/issues/143)）**：L0 形态裁决 [ADR-0012](adr/0012-phase3-l0-evaluation-form.md)、SPEC-620~623 APPROVED（modules/rf/）；A1/A2 症状链的物理依据与注入缝已随 #144/#145/#146 research 票 + [#149](https://github.com/BingChaoLiu/DVB-Nexus/issues/149)/[#151](https://github.com/BingChaoLiu/DVB-Nexus/issues/151) 裁决就位（TONE_RESIDUE / UB_SLOT_CONFLICT 双原语）；场景文档规格化随落笔票 [#157](https://github.com/BingChaoLiu/DVB-Nexus/issues/157)。
 
 - **A1 Unicable 频道槽位冲突**：多 tuner 共享单根同轴电缆，两个接收端被分配相同 **User Band 槽位频率**（如 1210 MHz），导致无法锁定。⚠️ 订正：SCR 展开名为 **Satellite Channel Router**（EN 50494；非"Subscriber Channel Radio"）；冲突本质是同一 User Band 被两个接收端占用导致 SCR 堆叠信号互相干扰，**不是 LNB 本振冲突**。EN 50607（dCSS/Unicable II）扩展至最多 32 个 UB。
 - **A2 22kHz 持续音调残留**：高频段正常、切低频段时 BER 飙升——LNB 供电/多路开关异常使低频段指令混入残留 22kHz，LNB 错误切入高频本振。训练目标：物理视图电压（13/18V）× 22kHz 组合逻辑排查。
@@ -104,6 +106,7 @@
 
 ### Unicable（Phase 3）
 - EN 50494/EN 50607 正文付费，术语与架构层面已核实（Satellite Channel Router、User Band、dCSS 32 UB）；具体条款号实现时需购买原文核对
+> ✅ **2026-11-20 实测补充**（[#145](https://github.com/BingChaoLiu/DVB-Nexus/issues/145)）：正文仍付费，但**位级布局与频率公式经 tvheadend/VDR/MuMuDVB/minisatip 四家独立实现源码级交叉验证一致**（Unicable I = `[0xE0,0x10,0x5A,d1,d2]` UB 3bit/t 10bit；Unicable II = `[0x70,d1,d2,d3]` UB 5bit→32/t 11bit；公式 I=(f_IF+f_UB+2)/4−350、II=f_IF−100）——SPEC-623 以「四实现源码级共识」口径落规格并留 11 项条款号缺口清单（诚实标注待原文核对）；kernel 无任何 SCR 属性（用户态消息构造层）已核实。findings 分支 research/unicable-scr-dcss。
 
 ## 6. 参考索引
 

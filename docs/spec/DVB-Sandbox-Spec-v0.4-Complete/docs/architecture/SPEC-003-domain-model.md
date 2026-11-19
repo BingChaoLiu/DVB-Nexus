@@ -1,7 +1,7 @@
 ---
 spec_id: SPEC-003
 title: Domain Model and Shared Contracts
-version: 0.6.0
+version: 0.7.0
 status: APPROVED
 phase: BASELINE
 owner: Architecture
@@ -237,3 +237,12 @@ interface TSArtifact {
 - **BBFrame 定位**：节点内部层次，**非独立信号平面**（五平面枚举无 BBFrame，不新增第六平面）；BBHEADER 语义（EN 302 755 §5.1.7）属内部结构面。
 - **端口模型零扩展**：既有 direction/plane/protocol/max_connections 四属性足够；BBFrame 层参数入节点 config。
 - 等位替换不变式延展出**逐层语义**（layer ∈ {TS, BBFRAME, T2MI, BISS}，SPEC-204 同批修订）。
+
+## Phase 3 定点修订（随落笔票 #156，DRAFT_FOR_REVIEW 0.7.0；依据：Phase 3 地图 [#143](https://github.com/BingChaoLiu/DVB-Nexus/issues/143) 决议链 #147/#148/#149/#150/#151/#152，[ADR-0012](../../../../../docs/adr/0012-phase3-l0-evaluation-form.md)）
+
+- **来源枚举扩容**（§2.4）：`ObservationSource` 五值 → 六值，新增 `'state_evaluator'`（L0 求值产物专用来源，恒配 `simulated` 置信度；state_evaluator 产物禁标 parsed/measured——轴纪律延伸，[#152](https://github.com/BingChaoLiu/DVB-Nexus/issues/152) Q1）。
+- **平面启用**：`MVP_ENABLED_PLANES` 由 {MPEG_TS, T2MI} 扩为 {MPEG_TS, T2MI, RF, SEC_CONTROL}；`IP` 维持禁用（Phase 4）（[#148](https://github.com/BingChaoLiu/DVB-Nexus/issues/148) Q5）。
+- **节点类型注册表三类**（[#148](https://github.com/BingChaoLiu/DVB-Nexus/issues/148) Q4）：`lnb`（config：`lnb_kind`/`lo_frequencies`/`scr` 子段——结构归 SPEC-623）、`tuner`（config：`tuning_request`/`ub_slot`/`diseqc_commands`）、`diseqc_switch`（config：`power_pass`）；经既有 NodeType 注册表机制接入，前端零特制。
+- **端口共享连接语义**（[#148](https://github.com/BingChaoLiu/DVB-Nexus/issues/148) Q1）：机制面零扩展——`PortSpec.max_connections` 既有 per-port 基数承载 1:N 共享同轴（SCR/LNB 输出端口扇出，多 tuner 共享单根同轴的 A1 拓扑）；连接 wire 形状零新增。
+- **validator violation 族新增 `SIM_TOPO_UB_*`**（[#148](https://github.com/BingChaoLiu/DVB-Nexus/issues/148) Q2 / [#150](https://github.com/BingChaoLiu/DVB-Nexus/issues/150) Q3）：tuner.ub_slot 必须命中本拓扑 SCR 的 ub_assignments 表项；同 UB 双 tuner 配置期冲突拒绝；ub_slot 超出 protocol 位宽（I >7 / II >31）拒绝；同 lnb 混用 EN50494/EN50607 拒绝。**静态校验与运行期 fault 注入分层**：基线拓扑永远合法，错配仅 fault plan 期生效（[#151](https://github.com/BingChaoLiu/DVB-Nexus/issues/151) Q2）。
+- **「至多一条 DC 通路」**（DiSEqC 总线硬约束，[#144](https://github.com/BingChaoLiu/DVB-Nexus/issues/144)）经连接基数表达。

@@ -1,7 +1,7 @@
 ---
 spec_id: SPEC-303
 title: Timeline Recorder
-version: 0.6.0
+version: 0.7.0
 status: APPROVED
 phase: MVP
 owner: Observation
@@ -131,3 +131,13 @@ checkpoint 包含：`checkpoint_id`、`session_id`、`journal_seq`、`clock_doma
   - `gen.*`：stage_started / stage_completed / packet_sampled（构造事件三型，layer 字段贯穿 {TS, BBFRAME, T2MI, BISS}；注入点包必发射；全量 packet 级事件流已被 #112 明确关闭）。
 - journal_seq per-session 全序、run_id 关联、source/confidence 枚举沿用；全部离散事件面，无连续指标流新增。
 - `ts.*` 观测流缺失（SPEC-408 §10 申报 1）口径维持诚实 INCONCLUSIVE。
+
+## Phase 3 定点修订（随落笔票 #156，DRAFT_FOR_REVIEW 0.7.0；依据：细裁 [#152](https://github.com/BingChaoLiu/DVB-Nexus/issues/152)，[ADR-0006](../../../../../docs/adr/0006-canonical-event-envelope.md) 注册表 additive）
+
+- **信封注册表新增两命名空间**（additive；按节点主平面归档）：
+  - `rf.*`：`rf.state_observed`（tuner 快照：lock_state / if_frequency_khz / ber_state / locked_transponder_id / causes——payload = NodeEvalResult 形状 JSON-safe，[#152](https://github.com/BingChaoLiu/DVB-Nexus/issues/152) Q2）；
+  - `sec.*`：`sec.state_observed`（lnb 快照：voltage / tone_commanded / tone_actual / tone_composite / band_selected / lo_frequency_khz / polarization_delivered / short_circuit_state / ub_assignments；switch 快照：committed_switch_state / uncommitted_switch_state / port_selected / power_pass）。
+- **事件形态 = per-node 状态快照**；状态变化传播复用 `topology.state_changed` 既有义务（changed_nodes 纯 diff + 信封发布），**不新增 per-metric 变化事件流**（照 #112 关闭全量流先例）。
+- **SIM_STATE Run journal 构成** = rf.*/sec.* state_observed + topology.state_changed + fault.*（注入时，结构化证据）；**无 gen.***——构造流水线事件是 TS 构造域，状态域 Generate 产物即 state_observed 流，不冒充构造事件。
+- **来源/置信度联动**：state_observed 来源 = `state_evaluator`（SPEC-003 §2.4 Phase 3 修订）、置信度 = simulated 恒定配对。
+- **UB 冲突非独立事件**：tuner 快照内 lock_state=unlocked + CauseRef 冲突对的组合事实（SPEC-623 判定语义）。

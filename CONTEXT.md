@@ -99,6 +99,40 @@ _Avoid_: 把期望 PLP 缺失说成零流量、把 PLP 分布当观测流
 单 BBFrame 携带多个 UP 的封装形态；尾包不足 N_UPS 的填充语义须确定性。
 _Avoid_: 静默丢尾包（TSDuck 3.45 缺陷形态）、跳过 CRC-8 校验
 
+### Phase 3 RF/SEC 沙盘
+
+**SIM_STATE Run（状态域 Run）**:
+以 L0 状态求值产物（rf.*/sec.* state_observed 流）为证据的一等运行形态；无 gen.* 构造事件、无 TS artifact；L0 独立求值不门控 L1 生成（ADR-0012）。
+_Avoid_: 冒充构造事件、把状态 Run 无码流说成「干净」、给状态 Run 承诺包级证据
+
+**state_evaluator（状态求值来源）**:
+观测来源枚举 Phase 3 新增值：L0 求值产物专用，恒配 simulated 置信度（SPEC-003 §2.4）。
+_Avoid_: 标 parsed/measured、与 generator 混用、给状态快照标测量口径
+
+**终态求值（Terminal-state Evaluation）**:
+SIM_STATE 求值是纯函数终态判定（同输入同输出，无墙钟/随机）；时序过程（scanning、hiccup 节奏、tone 波形、命令历史重放）不仿真。
+_Avoid_: 造时序态、把参考时序表当求值产物、承诺过程仿真
+
+**状态域等位替换（State-domain Slot-Preserving Substitution）**:
+state 层 fault 仅改写参数指定的状态字段（求值前纯变换），baseline 与 faulted Run 观测流字段级可对齐；不承诺包级不变式（无包流可保持，按 layer 域分立定义）。
+_Avoid_: 把包级 CR/188 对齐套在状态层、把字段改写说成增删节点
+
+**tone_commanded / tone_actual**:
+命令音调与 LNB 实际音调的分离双字段（SPEC-621）；二者错配 = A2 原语 TONE_RESIDUE 的注入缝。
+_Avoid_: 合并为单字段、把残留 tone 说成 LNB 本振漂移（漂移 ±3MHz 与偏移 850MHz 差两个量级）
+
+**UB 冲突（堆叠互扰）**:
+双接收端请求同一 User Band → SCR 在同一频槽堆叠两路信号互扰 → 无法锁定；冲突发生在 SCR 堆叠层，与 LNB 本振无关（A1 订正口径）。配置期静态冲突（SIM_TOPO_UB_*）与运行期错配（UB_SLOT_CONFLICT fault）分层。
+_Avoid_: 说成 LNB 本振冲突、把基线拓扑配成非法、混谈静态校验与 fault 注入
+
+**14 态真值表**:
+voltage 3 态 × tone 4 模式 + 2 复合态的 band/极化/LO 选择 normative 表（SPEC-621 附录 A；四源逐格核实）；IF 重叠区 1100–1950 MHz 同槽位对应两 RF 相差 850 MHz，tone 是唯一消歧器。
+_Avoid_: 凭记忆填格、跳过复合态、把 ToneBurst 说成 band 切换（它只选 SA/SB）
+
+**state_observed（状态快照事件）**:
+per-node 状态快照事件（rf.*/sec.* 命名空间，payload = NodeEvalResult 形状）；状态变化复用 topology.state_changed diff，不造 per-metric 事件流。
+_Avoid_: 全量 per-metric 流（#112 先例已关闭）、把 UB 冲突做成独立事件
+
 ### 实验
 
 **故障靶场（Fault Lab）**:
@@ -137,8 +171,8 @@ _Avoid_: 把空表渲染成「零问题/干净」、用弹窗 tour 替代静态�
 ### 观察与证据
 
 **观测（Observation）**:
-某一时刻实际检测到的事实记录，必带来源（generator / internal_parser / tsduck / hardware / rule_engine）与置信度（simulated / parsed / measured / inferred），禁止混标。
-_Avoid_: 把 SIM_STATE 产物标为 parsed、把 TSDuck 输出标为 measured
+某一时刻实际检测到的事实记录，必带来源（generator / internal_parser / tsduck / hardware / rule_engine / state_evaluator）与置信度（simulated / parsed / measured / inferred），禁止混标。
+_Avoid_: 把 SIM_STATE 产物标为 parsed、把 TSDuck 输出标为 measured、把 state_evaluator 产物标为 parsed/measured
 
 **证据（Evidence）**:
 可下钻的原始数据关联：观测 → PID + packet index + Artifact，从诊断结果可直达原始码流。

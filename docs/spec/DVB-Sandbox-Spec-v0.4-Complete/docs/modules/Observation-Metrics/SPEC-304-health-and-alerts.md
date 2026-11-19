@@ -1,7 +1,7 @@
 ---
 spec_id: SPEC-304
 title: Health and Alert Engine
-version: 0.6.0
+version: 0.7.0
 status: APPROVED
 phase: MVP
 owner: Observation
@@ -151,3 +151,11 @@ inactive -> pending -> firing -> resolving -> resolved
 
 - **告警面零扩容**：PCR_JITTER_HIGH 维持 MVP 惰性（ts.* 观测流缺失，roadmap §4 D2 残留原语候选不在本图）；t2mi.*/bbframe.*/biss.*/gen.* 事件走诊断/证据消费面（SPEC-307/303），不进 alert 面板语义。
 - 包检查器证据面（T2-MI 包视图/BBFrame 视图/BISS 加扰态标注）的数据源契约 = artifact 字节 + 自研解封装器结构 JSON（json_map 生成链）+ 中间层 mutation log 摘要；前端渲染归 SPEC-404 修订（Phase 2 前端票 #119）。
+
+## Phase 3 定点修订（随落笔票 #156，DRAFT_FOR_REVIEW 0.7.0；依据：细裁 [#152](https://github.com/BingChaoLiu/DVB-Nexus/issues/152) Q4）
+
+- **告警注册扩容两条**（Phase 2「零扩容」先例解除——状态域有真实阈值告警需求）：
+  - `TUNER_UNLOCKED`（warning）：`rf.state_observed` lock_state=unlocked；
+  - `BER_SEVERE`（error）：`rf.state_observed` ber_state=severe。
+- ber_state=elevated **不告警**——留给 SPEC-307 诊断规则组合判定（TONE_RESIDUE_SUSPECT / UB_CONFLICT_SUSPECT）；304 阈值告警与 307 根因候选两轴不混（CONTEXT.md Diagnosis 纪律）。
+- 告警数据源 = state_evaluator 来源观测（simulated 置信度）；PCR_JITTER_HIGH 维持 MVP 惰性不变；前端呈现归 SPEC-403 修订（Phase 3 前端票 #158）。

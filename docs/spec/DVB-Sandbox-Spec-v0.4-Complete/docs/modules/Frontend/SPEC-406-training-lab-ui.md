@@ -1,7 +1,7 @@
 ---
 spec_id: SPEC-406
 title: Training Lab
-version: 0.6.0
+version: 0.7.0
 status: APPROVED
 phase: MVP
 owner: Frontend
@@ -324,3 +324,10 @@ POST /api/v1/sessions/{session_id}/runs/{recovery_run_id}/verify
 - **深链 view 参数消费**：诊断证据 → Monitor 包检查器深链追加 view 参数（三元组语义不变）。
 - **Lab Pack v2 场景承载**：场景库列表自然包含 v2 四场景（SC-06~09 落库后）；initial_topology 可读化对 t2mi_encapsulator/t2mi_demux 新节点类型自动获得（统计行 + 结构化渲染，零特制——[#110](https://github.com/BingChaoLiu/DVB-Nexus/issues/110) 裁决）。
 - 八步闭环结构不变：Analyze 缺口维持诚实 501 呈现；当前动作/指引条/run 主级化/自动基线/hints 全部场景无关机制零改动。
+
+## Phase 3 定点修订（随落笔票 #158，DRAFT_FOR_REVIEW 0.7.0；依据：细裁 [#153](https://github.com/BingChaoLiu/DVB-Nexus/issues/153)，Lab Pack v3 [#157](https://github.com/BingChaoLiu/DVB-Nexus/issues/157)）
+
+- **状态域实验承载**：Lab 八步闭环/Stepper/自动基线/`initial_topology` 可读化机制对 SIM_STATE Run **自动获得**（零特制，照 #114 先例——真改动仅呈现位新增）。
+- **「生成过程」折叠区的状态域形态**：SIM_STATE Run 无 gen.* 构造流水线——折叠区呈现 **L0 求值摘要**（节点数/各节点 health/快照事件计数，数据源 = journal 快照事件），不冒充构造事件。
+- **Lab Pack v3 场景承载**：schema_version 3 场景（SC-10/SC-11）随引擎面（l0_state_evaluators/fault_registry >= 0.7.0）在 Lab 实验台可开实验；空 fault_plan 重跑 = 恢复路径（八步链 Verify 步呈现 fault_inactive 判据三查）。
+- **排除项**：时序回放/动画、拟物控件不出现在 Lab 面板（[#153](https://github.com/BingChaoLiu/DVB-Nexus/issues/153) Q5 预裁延续）。

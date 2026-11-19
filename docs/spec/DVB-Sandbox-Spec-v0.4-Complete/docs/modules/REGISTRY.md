@@ -99,6 +99,15 @@ SPEC-604+ 未来模块目录不在本表维护：`docs/roadmap.md` §3 是唯一
 | SPEC-610 | BISS Mode 1 | 加扰/解扰双向接口（DVB-CSA1 + DES）、session word 48-bit 口径、密钥指纹纪律、C1 原语挂钩 | SPEC-100/204/301 | P2 |
 | SPEC-611 | BISS Mode E | ESW/Injected ID 派生、BISS2/CISSA 纯 Python、两种错配证据可区分 | SPEC-610/100 | P2 |
 
+**SPEC-620/621（RF/SEC 沙盘状态模型）已随 Phase 3 地图 [#143](https://github.com/BingChaoLiu/DVB-Nexus/issues/143) 落笔**（自动推进授权：check_specs 0 failed + 决议链对齐自检通过翻 **APPROVED 0.6.0**，2026-11-20，repo 主事后审计；SPEC-622/623 随落笔票 [#155](https://github.com/BingChaoLiu/DVB-Nexus/issues/155) 并入本表），收录于 [rf/](rf/SPEC-INDEX-RF.md)：
+
+| Spec ID | 名称 | 范围 | 建议依赖 | 优先级 |
+|---|---|---|---|---|
+| SPEC-620 | RF Simulation | tuner 五组状态（lock_state/if_frequency/ber_state 三档/错锁素材）、锁定求值规则表、rf.state_observed、A1/A2 症状承载 | SPEC-621/003/202/301 | P2 |
+| SPEC-621 | LNB Model | lnb 四组状态（电压/tone 双字段/band-LO/短路五态）、14 态 normative 真值表、lnb_kind 两变体、sec.state_observed、A2 注入缝 | SPEC-003/202/301 | P2 |
+| SPEC-622 | DiSEqC Controller | 1.x 单向命令子集（0x38/0x39 + framing/address 词汇）、双寄存器终态化、port_selected 派生、时序常量参考表 | SPEC-003/202/301/621 | P2 |
+| SPEC-623 | Unicable | EN 50494/50607 位布局与频率公式（四实现共识标注）、ub_assignments 结构、UB 冲突判定、条款号缺口清单留档 | SPEC-622/620/003/202/301 | P2 |
+
 ## G. 模块 Spec 完成条件
 
 每个 Module Spec 至少必须包含：目标、范围、术语、架构、数据模型、公开接口、处理算法、错误处理、资源约束、依赖、测试向量、验收标准、非目标、兼容性与交付要求。

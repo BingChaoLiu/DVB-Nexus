@@ -1,7 +1,7 @@
 ---
 spec_id: SPEC-401
 title: Topology Editor
-version: 0.5.2
+version: 0.6.0
 status: APPROVED
 phase: MVP
 owner: Frontend
@@ -298,3 +298,10 @@ path 语法 → 画布实体映射（权威 = `src/simulation/state/validate.py`
 - **MVP_ENABLED_PLANES 镜像扩容**：`readonly ["MPEG_TS", "T2MI"]`（镜像 domain MVP_ENABLED_PLANES，同源纪律；连线预检四项之平面项随扩容自动放行 T2MI 连线——「平面不符」原因枚举文案改为「平面不符（当前支持 MPEG_TS / T2MI）」）。
 - **BBFrame 词汇纪律**：面板/画布文案不得出现「BBFrame 平面」（BBFrame = 节点内部层次，[#110] 裁决）；两类型 label/description 文案以 CONTEXT.md「Phase 2 封装层」词条组为准。
 - 既有排除项延续：RF 面 tuner/gain 随 Phase 3 平面扩面入表；编辑器功能增强五项与「用户自定义拓扑进闭环」非目标不变。
+
+## Phase 3 定点修订（随落笔票 #158，DRAFT_FOR_REVIEW 0.6.0；依据：细裁 [#153](https://github.com/BingChaoLiu/DVB-Nexus/issues/153)，Phase 3 地图 [#143](https://github.com/BingChaoLiu/DVB-Nexus/issues/143)）
+
+- **节点类型注册表三类新类型**：`lnb` / `tuner` / `diseqc_switch` 经既有注册表机制自动上画布（零特制卡片逻辑，照 #110 先例）；节点卡片状态摘要 = health 徽标 + 关键 metrics（tuner：lock_state/ber_state；lnb：voltage/tone_actual/band_selected；switch：port_selected）——数据源 = SPEC-305 查询面 + 事件订阅（[#153](https://github.com/BingChaoLiu/DVB-Nexus/issues/153) Q2，零新前端数据通道）。
+- **`MVP_ENABLED_PLANES` 前端镜像扩容**：{MPEG_TS, T2MI} → {MPEG_TS, T2MI, RF, SEC_CONTROL}（SPEC-003 Phase 3 修订镜像）。
+- **共享连接呈现**：lnb/SCR 输出端口 `maxConnections` 1:N 扇出（多 tuner 共享单根同轴）= 画布多条连线正常渲染，零特制（[#148](https://github.com/BingChaoLiu/DVB-Nexus/issues/148) 机制面零扩展裁决的呈现面）。
+- CauseRef 因果链呈现归 SPEC-404 修订（本票不重复）。

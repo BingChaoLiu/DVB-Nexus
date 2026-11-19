@@ -1,7 +1,7 @@
 ---
 spec_id: SPEC-403
 title: Stream Monitor
-version: 0.6.0
+version: 0.7.0
 status: APPROVED
 phase: MVP
 owner: Frontend
@@ -319,3 +319,9 @@ stopped    -> disposed
 - **view 参数透传句**：包检查器组件定义在 SPEC-404（复用边界既裁不变）；Monitor 侧深链/入口对 view 参数原样透传，不自造视图语义。
 - **新命名空间事件呈现**：t2mi.*/bbframe.*/biss.* 事件（SPEC-303 Phase 2 修订章）进入 journal 尾窗与诊断候选明细的自然消费（注册表驱动，无面板新增）；「解扰失败 ≠ 码流损坏」「缺失 ≠ 零」诚实纪律句随事件文案落位。
 - 观测类判据口径维持诚实 INCONCLUSIVE（SPEC-408 §10 申报 1 延续）。
+
+## Phase 3 定点修订（随落笔票 #158，DRAFT_FOR_REVIEW 0.7.0；依据：细裁 [#152](https://github.com/BingChaoLiu/DVB-Nexus/issues/152) Q4/Q5、[#153](https://github.com/BingChaoLiu/DVB-Nexus/issues/153)）
+
+- **Monitor 消费 `rf.*` / `sec.*` 事件**：`rf.state_observed` / `sec.state_observed` 进时间线（注册表驱动呈现、零特制视图，照 #114/#119 先例）；payload 为 NodeEvalResult 形状 JSON-safe metrics。
+- **告警呈现两条**：`TUNER_UNLOCKED`（warning）/ `BER_SEVERE`（error）进既有告警面（SPEC-304 Phase 3 修订注册）；`elevated` 档不告警（留给 SPEC-307 诊断候选组合，两轴不混）。
+- **诚实口径维持**：快照事件来源 = `state_evaluator`、置信度 = simulated——呈现层不得混标 parsed/measured（CONTEXT.md 观测轴纪律）；`topology.state_changed` 呈现照既有义务。

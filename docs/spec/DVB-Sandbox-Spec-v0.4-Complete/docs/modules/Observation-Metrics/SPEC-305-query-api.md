@@ -1,7 +1,7 @@
 ---
 spec_id: SPEC-305
 title: Observation Query API
-version: 0.5.0
+version: 0.6.0
 status: APPROVED
 phase: MVP
 owner: Observation
@@ -154,3 +154,8 @@ HTTP 映射：400 查询/信封非法；401 未认证；403 scope 禁止；404 �
 
 - SPEC-300（组件与错误模型）、SPEC-302 §8（查询形状同源）、SPEC-304 §5（告警记录权威）。
 - SPEC-301 §5（snapshot + journal_seq cursor 恢复协议）。
+
+## Phase 3 定点修订（随落笔票 #156，DRAFT_FOR_REVIEW 0.6.0；依据：细裁 [#152](https://github.com/BingChaoLiu/DVB-Nexus/issues/152) / [#153](https://github.com/BingChaoLiu/DVB-Nexus/issues/153)）
+
+- **查询面扩容**：Run 状态快照查询支持 `rf.*` / `sec.*` 事件过滤（namespace / 事件类型 / node_type 维度），承载前端节点详情面板与画布状态摘要读路径（[#153](https://github.com/BingChaoLiu/DVB-Nexus/issues/153) Q2：静态读走查询面、实时走既有事件订阅，零新前端数据通道）。
+- 快照查询返回 JSON-safe metrics 全量（NodeEvalResult 形状）+ journal_seq cursor 恢复协议沿用（SPEC-301 §5）。
