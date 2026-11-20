@@ -9,7 +9,9 @@ disciplines enforced by engines, not model invariants.
 
 Two axes live here and must never be conflated (ticket #13 Q3 cross-cutting
 ruling):
-- ``ObservationSource`` — who produced the fact (five values);
+- ``ObservationSource`` — who produced the fact (six values since
+  SPEC-003 §Phase3, ticket #160: the L0 evaluation product source
+  ``state_evaluator`` joins the closed set);
 - ``ConfidenceKind`` — how it was produced (four values).
 Diagnosis's rule-level ``low/medium/high`` confidence is a DIFFERENT axis
 (SPEC-306/307 static declaration), see ``domain.diagnosis``.
@@ -29,13 +31,20 @@ from domain.observation.ids import Identifier, OpaqueEntityId
 
 
 class ObservationSource(str, Enum):
-    """Who produced the fact (SPEC-003 section 2.4)."""
+    """Who produced the fact (SPEC-003 section 2.4).
+
+    ``STATE_EVALUATOR`` is the SPEC-003 §Phase3 addition (ticket #160):
+    the dedicated source for L0 state-evaluation products, always paired
+    with ``ConfidenceKind.SIMULATED`` — ``state_evaluator`` products must
+    never be labelled ``parsed``/``measured`` (axis discipline extension).
+    """
 
     GENERATOR = "generator"
     INTERNAL_PARSER = "internal_parser"
     TSDUCK = "tsduck"
     HARDWARE = "hardware"
     RULE_ENGINE = "rule_engine"
+    STATE_EVALUATOR = "state_evaluator"
 
 
 class ConfidenceKind(str, Enum):

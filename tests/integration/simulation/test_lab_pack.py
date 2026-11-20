@@ -155,7 +155,12 @@ def test_topologies_use_the_frozen_node_type_strings() -> None:
         "t2mi_encapsulator",
         "t2mi_demux",
     }
-    enabled_planes = {"MPEG_TS", "T2MI"}  # MVP_ENABLED_PLANES, Phase 2 face
+    enabled_planes = {
+        "MPEG_TS",
+        "T2MI",
+        "RF",
+        "SEC_CONTROL",
+    }  # MVP_ENABLED_PLANES, Phase 3 face (#160)
     for index, (name, raw) in enumerate(_lab_pack()):
         topology = raw["initial_topology"]
         planes = set()

@@ -34,6 +34,11 @@ FROZEN_STATE_EXPORTS = frozenset(
         "SIM_TOPO_ENDPOINT_MISSING",
         "SIM_TOPO_MEDIA_INCOMPATIBLE",
         "SIM_TOPO_SELF_LOOP",
+        # Unicable UB validator codes (SPEC-003 §Phase3, ticket #160)
+        "SIM_TOPO_UB_PROTOCOL_MIXED",
+        "SIM_TOPO_UB_SLOT_CONFLICT",
+        "SIM_TOPO_UB_SLOT_OUT_OF_RANGE",
+        "SIM_TOPO_UB_SLOT_UNMATCHED",
         "TopologyViolation",
         "validate_topology",
         # evaluation interface + skeleton walk (SPEC-202 section 6)
@@ -53,7 +58,8 @@ FROZEN_STATE_EXPORTS = frozenset(
     }
 )
 
-#: SPEC-202 section 8 codes appended to the package-level error module.
+#: SPEC-202 section 8 codes appended to the package-level error module,
+#: plus the SPEC-003 §Phase3 SIM_TOPO_UB_* family (ticket #160).
 FROZEN_ERROR_CODES = frozenset(
     {
         "SIM_TOPO_DUPLICATE_ID",
@@ -64,6 +70,10 @@ FROZEN_ERROR_CODES = frozenset(
         "SIM_TOPO_SELF_LOOP",
         "SIM_TOPO_CYCLE",
         "SIM_EVAL_NODE_FAILED",
+        "SIM_TOPO_UB_SLOT_UNMATCHED",
+        "SIM_TOPO_UB_SLOT_CONFLICT",
+        "SIM_TOPO_UB_SLOT_OUT_OF_RANGE",
+        "SIM_TOPO_UB_PROTOCOL_MIXED",
     }
 )
 

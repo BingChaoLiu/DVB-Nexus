@@ -47,6 +47,10 @@ from simulation.state.validate import (
     SIM_TOPO_ENDPOINT_MISSING,
     SIM_TOPO_MEDIA_INCOMPATIBLE,
     SIM_TOPO_SELF_LOOP,
+    SIM_TOPO_UB_PROTOCOL_MIXED,
+    SIM_TOPO_UB_SLOT_CONFLICT,
+    SIM_TOPO_UB_SLOT_OUT_OF_RANGE,
+    SIM_TOPO_UB_SLOT_UNMATCHED,
     TopologyViolation,
     validate_topology,
 )
@@ -71,6 +75,11 @@ __all__ = [
     "SIM_TOPO_ENDPOINT_MISSING",
     "SIM_TOPO_MEDIA_INCOMPATIBLE",
     "SIM_TOPO_SELF_LOOP",
+    # Unicable UB validator codes (SPEC-003 §Phase3, ticket #160)
+    "SIM_TOPO_UB_PROTOCOL_MIXED",
+    "SIM_TOPO_UB_SLOT_CONFLICT",
+    "SIM_TOPO_UB_SLOT_OUT_OF_RANGE",
+    "SIM_TOPO_UB_SLOT_UNMATCHED",
     "TopologyViolation",
     "validate_topology",
     # evaluation interface + skeleton walk (SPEC-202 section 6 / section 8)
