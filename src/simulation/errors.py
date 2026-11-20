@@ -33,6 +33,21 @@ SPEC-202 section 8 codes (ticket #40, appended — SPEC-202 §5/§8):
   is isolated as error health and the report is surfaced; the whole-graph
   evaluation never crashes (report path in ``simulation.state.evaluate``).
 
+SPEC-003 §Phase3 codes (ticket #160, appended — the ``SIM_TOPO_UB_*``
+family; SPEC-623 §7/§8 layering: config-period violations only, the
+baseline topology is always legal and misassignment is fault-plan
+territory):
+
+- ``SIM_TOPO_UB_SLOT_UNMATCHED``    tuner ``ub_slot`` hits no
+  ``ub_assignments`` entry of any path-reachable SCR (rule 1).
+- ``SIM_TOPO_UB_SLOT_CONFLICT``     two tuners claim the same UB slot in
+  one SCR table — config-period static conflict (rule 2).
+- ``SIM_TOPO_UB_SLOT_OUT_OF_RANGE`` ``ub_slot`` beyond the protocol bit
+  width (EN 50494 > 7 / EN 50607 > 31) — table entries and tuner
+  configs (rule 3).
+- ``SIM_TOPO_UB_PROTOCOL_MIXED``    one tuner's reachable SCR set mixes
+  EN 50494 and EN 50607 (rule 4; the two UB spaces are independent).
+
 SPEC-200 section 8 codes (ticket #41, appended — SPEC-200 §5/§6/§8):
 
 - ``SIM_SESSION_NOT_FOUND``            unknown session_id (404 semantics).
@@ -98,6 +113,25 @@ SIM_TOPO_CYCLE = "SIM_TOPO_CYCLE"
 #: SPEC-202 section 8 — evaluator-internal exception; the node is isolated
 #: as error health and the failure reported (never crashes the whole graph).
 SIM_EVAL_NODE_FAILED = "SIM_EVAL_NODE_FAILED"
+
+# --- SPEC-003 §Phase3 (ticket #160 — the SIM_TOPO_UB_* family) ------------------
+
+#: SPEC-003 §Phase3 — tuner ``ub_slot`` hits no ``ub_assignments`` entry
+#: of any path-reachable SCR (rule 1).
+SIM_TOPO_UB_SLOT_UNMATCHED = "SIM_TOPO_UB_SLOT_UNMATCHED"
+
+#: SPEC-003 §Phase3 — two tuners claim the same UB slot in one SCR table:
+#: config-period static conflict (rule 2; SPEC-623 §6 ``ub_conflicts``).
+SIM_TOPO_UB_SLOT_CONFLICT = "SIM_TOPO_UB_SLOT_CONFLICT"
+
+#: SPEC-003 §Phase3 — ``ub_slot`` beyond the protocol bit width
+#: (EN 50494 > 7 / EN 50607 > 31): checked on SCR table entries and tuner
+#: configs (rule 3).
+SIM_TOPO_UB_SLOT_OUT_OF_RANGE = "SIM_TOPO_UB_SLOT_OUT_OF_RANGE"
+
+#: SPEC-003 §Phase3 — one tuner's reachable SCR set mixes EN 50494 and
+#: EN 50607; the two UB spaces are independent (rule 4; SPEC-623 §7).
+SIM_TOPO_UB_PROTOCOL_MIXED = "SIM_TOPO_UB_PROTOCOL_MIXED"
 
 # --- SPEC-200 section 8 (ticket #41) ------------------------------------------
 

@@ -2,8 +2,9 @@
 
 Seam: public construction/validation surface of ``domain.observation``
 (Observation) plus the two closed-set vocabularies ``ObservationSource``
-(five values) and ``ConfidenceKind`` (four values). Expected literals come
-from SPEC-003 section 2.4 text.
+(six values since SPEC-003 §Phase3 — #160 adds ``state_evaluator``) and
+``ConfidenceKind`` (four values). Expected literals come from SPEC-003
+section 2.4 text.
 """
 
 import pytest
@@ -26,14 +27,21 @@ def _observation(**overrides) -> Observation:
 
 
 class TestEnumClosedSets:
-    def test_observation_source_has_exactly_the_five_spec_sources(self):
+    def test_observation_source_has_exactly_the_six_spec_sources(self):
+        # SPEC-003 §Phase3 (ticket #160): five → six values, the L0
+        # evaluation product source joins the closed set (always paired
+        # with ``simulated`` confidence; never parsed/measured).
         assert {member.value for member in ObservationSource} == {
             "generator",
             "internal_parser",
             "tsduck",
             "hardware",
             "rule_engine",
+            "state_evaluator",
         }
+
+    def test_state_evaluator_member_value(self):
+        assert ObservationSource.STATE_EVALUATOR.value == "state_evaluator"
 
     def test_confidence_kind_has_exactly_the_four_spec_kinds(self):
         assert {member.value for member in ConfidenceKind} == {

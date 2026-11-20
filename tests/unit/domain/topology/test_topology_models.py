@@ -56,13 +56,20 @@ class TestEnumClosedSets:
             "bidirectional",
         }
 
-    def test_mvp_enables_mpeg_ts_and_t2mi_planes(self):
-        # SPEC-003 §Phase2 (ticket #121): the enabled set expands
-        # {MPEG_TS} → {MPEG_TS, T2MI}; RF / SEC_CONTROL / IP stay
-        # disabled (Phase 3/4).  ADR-0005 decision 5 remains the
-        # validator-side rule (non-enabled planes are forbidden).
+    def test_phase3_enables_mpeg_ts_t2mi_rf_and_sec_control_planes(self):
+        # SPEC-003 §Phase3 (ticket #160): the enabled set expands
+        # {MPEG_TS, T2MI} → {MPEG_TS, T2MI, RF, SEC_CONTROL}; IP stays
+        # disabled (Phase 4).  ADR-0005 decision 5 remains the
+        # validator-side rule (non-enabled planes are forbidden); per
+        # ruling A10 the enabled set is a data constant, not wired into
+        # the validator.
         assert MVP_ENABLED_PLANES == frozenset(
-            {SignalPlane.MPEG_TS, SignalPlane.T2MI}
+            {
+                SignalPlane.MPEG_TS,
+                SignalPlane.T2MI,
+                SignalPlane.RF,
+                SignalPlane.SEC_CONTROL,
+            }
         )
 
 

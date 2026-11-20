@@ -1,4 +1,4 @@
-"""SPEC-003 §Phase2 — the backend NodeType registry and config schemas.
+"""SPEC-003 §Phase2/§Phase3 — the backend NodeType registry and config schemas.
 
 Phase 2 (ticket #121, ADR-0010 §3) adds ``t2mi_encapsulator`` and
 ``t2mi_demux`` to the node type registry — the single declaration point
@@ -18,11 +18,32 @@ SPEC-602 §5):
   strict_crc`` — the ``plp_filter.mode`` subsection carries the
   ``plp_mode`` semantics, see the #121 report's interface list).
 
+Phase 3 (ticket #160, ADR-0012) adds the RF/SEC trio — ``lnb`` /
+``tuner`` / ``diseqc_switch`` (SPEC-003 §Phase3; SPEC-621 §5 /
+SPEC-622 §5 / SPEC-623 §5):
+
+- ``LnbConfigDTO`` = ``lnb_kind`` + ``lo_frequencies``
+  (:class:`LoFrequenciesDTO`, ``{low_khz, high_khz}``) + optional ``scr``
+  (:class:`ScrConfigDTO` = ``protocol`` + ``ub_assignments`` list of
+  :class:`UbAssignmentDTO` — the structure is owned by SPEC-623;
+  ``legacy_cascade`` must not carry an ``scr`` sub-segment, SPEC-621 §8);
+- ``TunerConfigDTO`` = ``tuning_request`` (:class:`TuningRequestDTO`) +
+  ``ub_slot`` (optional; the protocol-dependent width upper bound is
+  validator rule territory — SIM_TOPO_UB_SLOT_OUT_OF_RANGE) +
+  ``diseqc_commands`` (optional structured command intent,
+  :class:`DiseqcCommandsDTO`, SPEC-622 §5);
+- ``SwitchConfigDTO`` = ``power_pass`` (config passthrough; the power
+  domain evaluation belongs to SPEC-621).
+
 Node ``config`` stays an opaque dict on the wire (``TopologyNodeDTO``);
 these Pydantic models are the schema authority the topology validator and
 the scenario loader (#128) validate against via
 :func:`validate_node_config`.  No Pydantic DTO in ``src/api/dto/`` changes
-shape → no OpenAPI/dto:check impact.
+shape → no OpenAPI/dto:check impact.  The simulation-side consumers
+(#161 evaluators) read ``config`` dicts directly and must NOT import this
+module (importlinter contract 8) — their mirrored vocabulary is drift-
+locked from the tests layer (ruling A1, see
+``tests/unit/simulation/state/test_validate.py``).
 """
 
 from __future__ import annotations
@@ -38,23 +59,37 @@ from domain.topology.model import PortDirection, SignalPlane
 __all__ = [
     "ALL_NODE_TYPES",
     "BBFrameBuildParamsDTO",
+    "DiseqcCommandsDTO",
+    "DiseqcNibbleWriteDTO",
+    "DiseqcTargetRegisterDTO",
+    "LnbConfigDTO",
+    "LoFrequenciesDTO",
     "MVP_NODE_TYPES",
     "NODE_CONFIG_INVALID",
+    "NODE_TYPE_DISEQC_SWITCH",
+    "NODE_TYPE_LNB",
     "NODE_TYPE_T2MI_DEMUX",
     "NODE_TYPE_T2MI_ENCAPSULATOR",
     "NODE_TYPE_TS_DEMUX",
     "NODE_TYPE_TS_GENERATOR",
     "NODE_TYPE_TS_MONITOR",
     "NODE_TYPE_TS_MUX",
+    "NODE_TYPE_TUNER",
     "NODE_TYPE_UNKNOWN",
     "NodeTypePortSpec",
     "NodeTypeSpec",
     "PHASE2_NODE_TYPES",
+    "PHASE3_NODE_TYPES",
     "PlpAssignmentDTO",
     "PlpAssignmentEntryDTO",
     "PlpFilterConfigDTO",
+    "ScrConfigDTO",
+    "SwitchConfigDTO",
     "T2miDemuxConfigDTO",
     "T2miEncapsulatorConfigDTO",
+    "TunerConfigDTO",
+    "TuningRequestDTO",
+    "UbAssignmentDTO",
     "get_node_type",
     "validate_node_config",
 ]
@@ -67,6 +102,9 @@ NODE_TYPE_TS_DEMUX = "ts_demux"
 NODE_TYPE_TS_MONITOR = "ts_monitor"
 NODE_TYPE_T2MI_ENCAPSULATOR = "t2mi_encapsulator"
 NODE_TYPE_T2MI_DEMUX = "t2mi_demux"
+NODE_TYPE_LNB = "lnb"
+NODE_TYPE_TUNER = "tuner"
+NODE_TYPE_DISEQC_SWITCH = "diseqc_switch"
 
 # --- T2-MI config schemas (SPEC-600/601/602 §5) -------------------------------------
 
@@ -143,6 +181,193 @@ class T2miDemuxConfigDTO(DomainModel):
 
     plp_filter: PlpFilterConfigDTO
     strict_crc: bool = True
+
+
+# --- Phase 3 config schemas (SPEC-621/622/623 §5, ticket #160) ----------------------
+
+
+class UbAssignmentDTO(DomainModel):
+    """One SCR user-band assignment (SPEC-623 §5 ``UbAssignmentDTO``).
+
+    ``ub_slot``'s protocol-dependent width upper bound (EN 50494 0–7 /
+    EN 50607 0–31) is validator rule territory
+    (``SIM_TOPO_UB_SLOT_OUT_OF_RANGE``), so the DTO pins ``>= 0`` only.
+    """
+
+    tuner_node: str = Field(min_length=1)
+    ub_slot: int = Field(ge=0)
+    ub_center_freq_mhz: int = Field(ge=1)
+    #: EN 50494: ``"A"``/``"B"``; EN 50607: int 0–63.  Cross-checked
+    #: against the owning SCR's protocol by :class:`ScrConfigDTO`.
+    position: str | int
+    #: Optional multihome PIN variant (EN 50494 0x5C / EN 50607 0x71).
+    pin: int | None = Field(default=None, ge=0, le=255)
+    ub_bandwidth_mhz: int = Field(default=46, ge=1)
+
+    @model_validator(mode="after")
+    def _position_vocabulary(self) -> "UbAssignmentDTO":
+        if isinstance(self.position, bool) or not isinstance(
+            self.position, (str, int)
+        ):
+            raise ValueError(
+                "position must be 'A'/'B' (EN 50494) or int 0..63 "
+                "(EN 50607)"
+            )
+        if isinstance(self.position, str):
+            if self.position not in ("A", "B"):
+                raise ValueError(
+                    f"position {self.position!r} outside the EN 50494 "
+                    "vocabulary ('A'/'B')"
+                )
+        elif not 0 <= self.position <= 63:
+            raise ValueError(
+                f"position {self.position} outside the EN 50607 domain "
+                "(int 0..63)"
+            )
+        return self
+
+
+class ScrConfigDTO(DomainModel):
+    """The lnb-side SCR sub-segment (SPEC-623 §5 ``ScrConfigDTO``).
+
+    The spec's default user-band frequency group (1210/1420/1680/2040
+    MHz) is explicitly non-normative reference data and stays
+    spec-document-only — the wire shape is exactly the SC-10 draft's.
+    """
+
+    protocol: Literal["EN50494", "EN50607"]
+    ub_assignments: list[UbAssignmentDTO]
+
+    @model_validator(mode="after")
+    def _assignments_consistency(self) -> "ScrConfigDTO":
+        tuner_nodes = [entry.tuner_node for entry in self.ub_assignments]
+        if len(tuner_nodes) != len(set(tuner_nodes)):
+            raise ValueError(
+                "scr.ub_assignments: duplicate tuner_node entries — one "
+                "tuner holds at most one user band per SCR (SPEC-623 §5 "
+                "tuner→assignment map semantics)"
+            )
+        if self.protocol == "EN50494":
+            for entry in self.ub_assignments:
+                if isinstance(entry.position, bool) or not isinstance(
+                    entry.position, str
+                ):
+                    raise ValueError(
+                        "scr.ub_assignments: EN 50494 position must be "
+                        "'A'/'B'"
+                    )
+        else:
+            for entry in self.ub_assignments:
+                if isinstance(entry.position, bool) or not isinstance(
+                    entry.position, int
+                ):
+                    raise ValueError(
+                        "scr.ub_assignments: EN 50607 position must be "
+                        "int 0..63"
+                    )
+        return self
+
+
+class LoFrequenciesDTO(DomainModel):
+    """The LNB local-oscillator plan (SPEC-621 §5 ``lo_frequencies``).
+
+    Required on the wire (SPEC-621 §8 lists missing ``lo_frequencies``
+    as a prepare rejection); the spec's "universal default
+    {9750, 10600}" stays a documented reference default for producer
+    tooling, not a DTO default.
+    """
+
+    low_khz: int = Field(ge=1)
+    high_khz: int = Field(ge=1)
+
+
+class LnbConfigDTO(DomainModel):
+    """``lnb`` node config (SPEC-621 §5; ``scr`` structure = SPEC-623)."""
+
+    lnb_kind: Literal["universal", "legacy_cascade"]
+    lo_frequencies: LoFrequenciesDTO
+    scr: ScrConfigDTO | None = None
+
+    @model_validator(mode="after")
+    def _legacy_cascade_carries_no_scr(self) -> "LnbConfigDTO":
+        if self.lnb_kind == "legacy_cascade" and self.scr is not None:
+            raise ValueError(
+                "lnb: legacy_cascade must not carry an scr sub-segment "
+                "(SPEC-621 §8 prepare rejection)"
+            )
+        return self
+
+
+class TuningRequestDTO(DomainModel):
+    """The tuner tuning intent (SPEC-620 §5 ``tuning_request``)."""
+
+    frequency_khz: int = Field(ge=1)
+    polarization: Literal["vertical", "horizontal"]
+
+
+class DiseqcTargetRegisterDTO(DomainModel):
+    """Which command registers the tuner's intent targets (SPEC-622 §5)."""
+
+    committed: bool = False
+    uncommitted: bool = False
+
+
+class DiseqcNibbleWriteDTO(DomainModel):
+    """One nibble write of the DiSEqC command intent (SPEC-622 §5).
+
+    ``nibble`` follows the §5/§7 "high nibble clears first, low nibble
+    sets" semantics; ``value`` is one 4-bit nibble payload.  The wire key
+    is ``register`` (SPEC-622 §5 verbatim); the Python attribute is
+    ``register_id`` because the wire name shadows ``ABCMeta.register``
+    on the pydantic model base (field alias, wire shape unchanged).
+    """
+
+    register_id: Literal["committed", "uncommitted"] = Field(alias="register")
+    nibble: Literal["high", "low"]
+    value: int = Field(ge=0, le=15)
+
+
+class DiseqcCommandsDTO(DomainModel):
+    """The tuner-side structured DiSEqC command intent (SPEC-622 §5)."""
+
+    target_register: DiseqcTargetRegisterDTO
+    nibble_writes: list[DiseqcNibbleWriteDTO] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _writes_reference_declared_registers(self) -> "DiseqcCommandsDTO":
+        for index, write in enumerate(self.nibble_writes):
+            declared = (
+                write.register_id == "committed"
+                and self.target_register.committed
+            ) or (
+                write.register_id == "uncommitted"
+                and self.target_register.uncommitted
+            )
+            if not declared:
+                raise ValueError(
+                    f"diseqc_commands: nibble_writes[{index}] references "
+                    f"register {write.register_id!r} which target_register "
+                    "does not declare (SPEC-622 §8)"
+                )
+        return self
+
+
+class TunerConfigDTO(DomainModel):
+    """``tuner`` node config (SPEC-620 §5 / SPEC-622 §5 / SPEC-623 §5)."""
+
+    tuning_request: TuningRequestDTO
+    ub_slot: int | None = Field(default=None, ge=0)
+    diseqc_commands: DiseqcCommandsDTO | None = None
+
+
+class SwitchConfigDTO(DomainModel):
+    """``diseqc_switch`` node config (SPEC-622 §5 ``SwitchConfigDTO``).
+
+    ``power_pass`` is config passthrough — the power-domain evaluation
+    belongs to SPEC-621.
+    """
+
+    power_pass: Literal["on", "off"]
 
 
 # --- the registry -------------------------------------------------------------------
@@ -237,8 +462,66 @@ PHASE2_NODE_TYPES: tuple[NodeTypeSpec, ...] = (
     ),
 )
 
+#: The Phase 3 node types (SPEC-003 §Phase3 / ADR-0012, ticket #160; the
+#: port templates follow the SC-10 lab-pack draft and SPEC-401 §Phase3 —
+#: the frontend mirror is #169's territory):
+#:
+#: - ``lnb``: a single ``coax_out`` (SEC_CONTROL) with
+#:   ``max_connections=2`` — the existing per-port cardinality carries
+#:   the A1 dual-tuner shared-coax fan-out (1:N, mechanism
+#:   zero-extension);
+#: - ``tuner``: a single ``rf_in`` (SEC_CONTROL) with
+#:   ``max_connections=1``;
+#: - ``diseqc_switch``: the upstream lnb-side ``coax_in`` pins
+#:   ``max_connections=1`` ("at most one DC path", SPEC-622 §7); the
+#:   downstream ``coax_out`` fans out to tuners (template budget 4,
+#:   aligned with the 4-bit committed register space, SPEC-622 §5).
+PHASE3_NODE_TYPES: tuple[NodeTypeSpec, ...] = (
+    NodeTypeSpec(
+        node_type=NODE_TYPE_LNB,
+        id_prefix="lnb",
+        label="LNB",
+        ports=(
+            NodeTypePortSpec(
+                "coax_out", PortDirection.OUTPUT, SignalPlane.SEC_CONTROL, 2
+            ),
+        ),
+        config_model=LnbConfigDTO,
+        config_schema_name="LnbConfigDTO",
+    ),
+    NodeTypeSpec(
+        node_type=NODE_TYPE_TUNER,
+        id_prefix="tuner",
+        label="卫星调谐器",
+        ports=(
+            NodeTypePortSpec(
+                "rf_in", PortDirection.INPUT, SignalPlane.SEC_CONTROL, 1
+            ),
+        ),
+        config_model=TunerConfigDTO,
+        config_schema_name="TunerConfigDTO",
+    ),
+    NodeTypeSpec(
+        node_type=NODE_TYPE_DISEQC_SWITCH,
+        id_prefix="sw",
+        label="DiSEqC 开关",
+        ports=(
+            NodeTypePortSpec(
+                "coax_in", PortDirection.INPUT, SignalPlane.SEC_CONTROL, 1
+            ),
+            NodeTypePortSpec(
+                "coax_out", PortDirection.OUTPUT, SignalPlane.SEC_CONTROL, 4
+            ),
+        ),
+        config_model=SwitchConfigDTO,
+        config_schema_name="SwitchConfigDTO",
+    ),
+)
+
 #: The full backend registry (additive union; MVP baseline untouched).
-ALL_NODE_TYPES: tuple[NodeTypeSpec, ...] = MVP_NODE_TYPES + PHASE2_NODE_TYPES
+ALL_NODE_TYPES: tuple[NodeTypeSpec, ...] = (
+    MVP_NODE_TYPES + PHASE2_NODE_TYPES + PHASE3_NODE_TYPES
+)
 
 
 def get_node_type(node_type: str) -> NodeTypeSpec | None:
