@@ -13,13 +13,22 @@ the job is running the result fields are ``None`` / empty. ``RunContext``
 discipline (SPEC-500 §5): ``run_id`` is server-generated; request DTOs carry
 no ``journal_seq`` and no ``RunContext`` (ADR-0006 item 2 — producers never
 fill it).
+
+Two run forms (ticket #165, ADR-0012 decision 2 — 诚实区分): the submit
+request declares ``fidelity`` — ``SIM_TS`` (default, the SPEC-203 TS
+generation form; ``config`` required) or ``SIM_STATE`` (the state-domain
+L0 evaluation form; **no generator config** — a state run carries no TS
+artifact, no packet counts and no ``gen.*`` events, and its status face
+carries the L0 evaluation products ``graph_health`` / ``node_health``
+instead).  All extensions are additive: existing keys keep their names,
+order and types; ``RunAcceptedDTO`` (the 202 body) is untouched.
 """
 
 from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from api.dto.faults import FaultDefinitionDTO
 from api.dto.generator import GeneratorConfigDTO
@@ -32,6 +41,11 @@ __all__ = [
     "RunSubmitRequest",
 ]
 
+#: The run-form discriminator values (ADR-0012 decision 2's two run
+#: forms; the state-domain wire value mirrors
+#: ``simulation.state.run.STATE_RUN_FIDELITY``).
+FIDELITY_VALUES = Literal["SIM_TS", "SIM_STATE"]
+
 
 class _StrictDTO(BaseModel):
     """snake_case wire contract: extra keys are a schema violation (400)."""
@@ -42,13 +56,37 @@ class _StrictDTO(BaseModel):
 class RunSubmitRequest(_StrictDTO):
     """``POST /sessions/{session_id}/runs`` request body (SPEC-500 §4.3).
 
-    ``config`` = the SPEC-108 §4 ``TSGeneratorConfig`` wire shape;
-    ``fault_plan`` = SPEC-204 §3 ``FaultDefinition`` list bound at prepare
-    (ADR-0007 item 2). An empty list is a valid plan (no tee legs).
+    ``config`` = the SPEC-108 §4 ``TSGeneratorConfig`` wire shape (SIM_TS
+    runs only); ``fault_plan`` = SPEC-204 §3 ``FaultDefinition`` list bound
+    at prepare (ADR-0007 item 2). An empty list is a valid plan.
+
+    The fidelity contract (ticket #165): ``SIM_TS`` requires ``config``;
+    ``SIM_STATE`` refuses one (a state run has no generator — carrying a
+    dummy config would be the dishonest form). The discriminator rides
+    the same 202 job face; the plan's layer routing is enforced by the
+    per-form prepare gate (``SIM_TS_PLAN_INVALID`` /
+    ``SIM_STATE_PLAN_INVALID``).
     """
 
-    config: GeneratorConfigDTO
+    config: GeneratorConfigDTO | None = None
     fault_plan: list[FaultDefinitionDTO] = Field(default_factory=list)
+    fidelity: FIDELITY_VALUES = "SIM_TS"
+
+    @model_validator(mode="after")
+    def _fidelity_config_contract(self) -> "RunSubmitRequest":
+        if self.fidelity == "SIM_TS" and self.config is None:
+            raise ValueError(
+                "fidelity SIM_TS requires the generator config (SPEC-108 "
+                "§4 wire shape) — a TS generation run has no configless form"
+            )
+        if self.fidelity == "SIM_STATE" and self.config is not None:
+            raise ValueError(
+                "fidelity SIM_STATE refuses a generator config (ADR-0012 "
+                "decision 2: a SIM_STATE run evaluates the L0 state domain "
+                "— it generates no TS stream, so a TSGeneratorConfig has "
+                "nothing to configure)"
+            )
+        return self
 
 
 class RunAcceptedDTO(_StrictDTO):
@@ -67,6 +105,11 @@ class RunListItemDTO(_StrictDTO):
     ``fault_plan_present`` are recorded by the composition layer at
     submission; ``packet_count`` passes through from the completed result
     face (``None`` while running / on failure — the honest null face).
+
+    Additive (ticket #165): ``fidelity`` declares the run form (``SIM_TS``
+    default keeps every pre-#165 row shape); ``graph_health`` carries the
+    L0 aggregate for SIM_STATE rows (``None`` for SIM_TS — no L0
+    evaluation happens on the TS face).
     """
 
     run_id: str
@@ -74,6 +117,8 @@ class RunListItemDTO(_StrictDTO):
     submitted_at_ms: int
     fault_plan_present: bool
     packet_count: int | None = None
+    fidelity: FIDELITY_VALUES = "SIM_TS"
+    graph_health: str | None = None
 
 
 class RunArtifactDTO(_StrictDTO):
@@ -93,6 +138,13 @@ class RunStatusDTO(_StrictDTO):
     ``status`` is the async-job state: ``running`` while scheduled; the
     terminal values mirror the SPEC-203 result statuses. Result count
     fields are ``None`` while running.
+
+    Additive (ticket #165): ``fidelity`` declares the run form; for
+    SIM_STATE runs the L0 evaluation products ride ``graph_health`` /
+    ``node_health`` (the canvas health-badge data source, ADR-0012
+    decision 5), ``artifacts`` stays honestly empty (a state run lands no
+    TS artifact) and the count/version faces stay ``None``. SIM_TS runs
+    keep the exact pre-#165 body plus the default ``fidelity`` value.
     """
 
     run_id: str
@@ -104,3 +156,8 @@ class RunStatusDTO(_StrictDTO):
     virtual_duration_ns: int | None = None
     artifacts: list[RunArtifactDTO] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+    fidelity: FIDELITY_VALUES = "SIM_TS"
+    #: The final evaluation's whole-graph aggregate (SIM_STATE only).
+    graph_health: str | None = None
+    #: The final evaluation's per-node health (SIM_STATE only).
+    node_health: dict[str, str] | None = None

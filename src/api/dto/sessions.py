@@ -128,6 +128,11 @@ class SessionViewDTO(_StrictDTO):
     node_states: dict[str, NodeStateDTO] = Field(default_factory=dict)
     active_faults: list[FaultRefDTO] = Field(default_factory=list)
     latest_artifact_refs: list[ArtifactRefDTO] = Field(default_factory=list)
+    #: The initial L0 evaluation's whole-graph aggregate (ticket #165,
+    #: ADR-0012 decision 5 — the snapshot health-display data source is
+    #: the TopologyEvalResult product; ``None`` when the composition
+    #: layer has no evaluation record).
+    graph_health: str | None = None
 
 
 class SessionListItemDTO(_StrictDTO):

@@ -35,17 +35,23 @@ prepared output frame when the length is budgetable at prepare).
 
 from __future__ import annotations
 
+from typing import Sequence
+
 from faults.definition import FaultActivation, FaultDefinition
 from faults.registry import (
     FAULT_TYPE_CC_DISCONTINUITY,
     FAULT_TYPE_PAT_MISSING,
     FAULT_TYPE_PMT_INVALID_CRC,
     FAULT_TYPE_PMT_PID_MISMATCH,
+    LAYER_BY_FAULT_TYPE,
     MVP_FAULT_TYPES,
     validate_fault_definition,
 )
 
-from simulation.errors import TSPlanInvalidError
+from simulation.errors import (
+    SIM_FAULT_PLAN_LAYER_MISMATCH,
+    TSPlanInvalidError,
+)
 
 __all__ = [
     "FAULT_TYPE_PAT_MISSING",
@@ -53,10 +59,17 @@ __all__ = [
     "FAULT_TYPE_CC_DISCONTINUITY",
     "FAULT_TYPE_PMT_PID_MISMATCH",
     "MVP_FAULT_TYPES",
+    "PACKAGE_PLAN_LAYERS",
     "FaultActivation",
     "FaultDefinition",
     "validate_fault_plan",
 ]
+
+#: The package-level (ADR-0007 filter-chain) layers a SIM_TS prepare
+#: accepts (ticket #165's bidirectional mixed-plan gate; the state layers
+#: RF/SEC route through the pre-evaluation transform path —
+#: ``simulation.state.run`` — and are rejected here for the TS face).
+PACKAGE_PLAN_LAYERS: tuple[str, ...] = ("TS", "BBFRAME", "T2MI", "BISS")
 
 
 def validate_fault_plan(
@@ -64,6 +77,7 @@ def validate_fault_plan(
     *,
     actual_pmt_pid: int | None = None,
     expected_packet_count: int | None = None,
+    allowed_layers: Sequence[str] | None = None,
 ) -> tuple[FaultDefinition, ...]:
     """Validate a fault plan for prepare binding; return it as a tuple.
 
@@ -81,6 +95,18 @@ def validate_fault_plan(
     prepared output frame length when budgetable at prepare; a
     ``packet_index`` activation beyond it is rejected as
     ``SIM_FAULT_ACTIVATION_OUT_OF_RANGE`` (SPEC-204 §11).
+
+    ``allowed_layers`` (ticket #165, additive keyword-only; default
+    ``None`` = the pre-#165 behavior byte-identically) is the consuming
+    run form's layer allowlist — the bidirectional mixed-plan gate
+    (ADR-0012 decisions 2/3): a fault whose effective layer
+    (:data:`faults.registry.LAYER_BY_FAULT_TYPE` declaration, falling back
+    to the definition's own ``layer`` field) is outside the allowlist gets
+    a ``SIM_FAULT_PLAN_LAYER_MISMATCH`` detail.  The TS face
+    (``simulation.ts_runtime.TSRuntime.prepare``) passes
+    :data:`PACKAGE_PLAN_LAYERS`, so an RF/SEC fault is rejected cleanly at
+    prepare instead of crashing ``LayerFaultFilter`` construction at
+    run stage (#163 REPORT note).
     """
     if plan is None:
         return ()
@@ -105,6 +131,19 @@ def validate_fault_plan(
                 expected_packet_count=expected_packet_count,
             )
         )
+        if allowed_layers is not None:
+            effective_layer = LAYER_BY_FAULT_TYPE.get(
+                fault.fault_type, fault.layer
+            )
+            if effective_layer not in allowed_layers:
+                details.append(
+                    f"{SIM_FAULT_PLAN_LAYER_MISMATCH}: fault "
+                    f"{fault.fault_id!r}: fault_type {fault.fault_type!r} "
+                    f"routes to layer {effective_layer!r}, outside this "
+                    f"prepare's allowed layer set {sorted(allowed_layers)} "
+                    "(ADR-0012 decisions 2/3 bidirectional mixed-plan gate"
+                    " — the execution通路 is declared per run form)"
+                )
     if details:
         raise TSPlanInvalidError(
             f"fault plan rejected at prepare with {len(details)} "

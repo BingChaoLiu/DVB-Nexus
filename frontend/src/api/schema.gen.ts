@@ -1605,6 +1605,11 @@ export interface components {
          *     ``fault_plan_present`` are recorded by the composition layer at
          *     submission; ``packet_count`` passes through from the completed result
          *     face (``None`` while running / on failure — the honest null face).
+         *
+         *     Additive (ticket #165): ``fidelity`` declares the run form (``SIM_TS``
+         *     default keeps every pre-#165 row shape); ``graph_health`` carries the
+         *     L0 aggregate for SIM_STATE rows (``None`` for SIM_TS — no L0
+         *     evaluation happens on the TS face).
          */
         RunListItemDTO: {
             /** Run Id */
@@ -1620,6 +1625,14 @@ export interface components {
             fault_plan_present: boolean;
             /** Packet Count */
             packet_count?: number | null;
+            /**
+             * Fidelity
+             * @default SIM_TS
+             * @enum {string}
+             */
+            fidelity: "SIM_TS" | "SIM_STATE";
+            /** Graph Health */
+            graph_health?: string | null;
         };
         /**
          * RunStatusDTO
@@ -1628,6 +1641,13 @@ export interface components {
          *     ``status`` is the async-job state: ``running`` while scheduled; the
          *     terminal values mirror the SPEC-203 result statuses. Result count
          *     fields are ``None`` while running.
+         *
+         *     Additive (ticket #165): ``fidelity`` declares the run form; for
+         *     SIM_STATE runs the L0 evaluation products ride ``graph_health`` /
+         *     ``node_health`` (the canvas health-badge data source, ADR-0012
+         *     decision 5), ``artifacts`` stays honestly empty (a state run lands no
+         *     TS artifact) and the count/version faces stay ``None``. SIM_TS runs
+         *     keep the exact pre-#165 body plus the default ``fidelity`` value.
          */
         RunStatusDTO: {
             /** Run Id */
@@ -1651,19 +1671,44 @@ export interface components {
             artifacts?: components["schemas"]["RunArtifactDTO"][];
             /** Warnings */
             warnings?: string[];
+            /**
+             * Fidelity
+             * @default SIM_TS
+             * @enum {string}
+             */
+            fidelity: "SIM_TS" | "SIM_STATE";
+            /** Graph Health */
+            graph_health?: string | null;
+            /** Node Health */
+            node_health?: {
+                [key: string]: string;
+            } | null;
         };
         /**
          * RunSubmitRequest
          * @description ``POST /sessions/{session_id}/runs`` request body (SPEC-500 §4.3).
          *
-         *     ``config`` = the SPEC-108 §4 ``TSGeneratorConfig`` wire shape;
-         *     ``fault_plan`` = SPEC-204 §3 ``FaultDefinition`` list bound at prepare
-         *     (ADR-0007 item 2). An empty list is a valid plan (no tee legs).
+         *     ``config`` = the SPEC-108 §4 ``TSGeneratorConfig`` wire shape (SIM_TS
+         *     runs only); ``fault_plan`` = SPEC-204 §3 ``FaultDefinition`` list bound
+         *     at prepare (ADR-0007 item 2). An empty list is a valid plan.
+         *
+         *     The fidelity contract (ticket #165): ``SIM_TS`` requires ``config``;
+         *     ``SIM_STATE`` refuses one (a state run has no generator — carrying a
+         *     dummy config would be the dishonest form). The discriminator rides
+         *     the same 202 job face; the plan's layer routing is enforced by the
+         *     per-form prepare gate (``SIM_TS_PLAN_INVALID`` /
+         *     ``SIM_STATE_PLAN_INVALID``).
          */
         RunSubmitRequest: {
-            config: components["schemas"]["GeneratorConfigDTO"];
+            config?: components["schemas"]["GeneratorConfigDTO"] | null;
             /** Fault Plan */
             fault_plan?: components["schemas"]["FaultDefinitionDTO"][];
+            /**
+             * Fidelity
+             * @default SIM_TS
+             * @enum {string}
+             */
+            fidelity: "SIM_TS" | "SIM_STATE";
         };
         /**
          * ScenarioDetailDTO
@@ -1788,6 +1833,8 @@ export interface components {
             active_faults?: components["schemas"]["FaultRefDTO"][];
             /** Latest Artifact Refs */
             latest_artifact_refs?: components["schemas"]["ArtifactRefDTO"][];
+            /** Graph Health */
+            graph_health?: string | null;
             /** Scenario Id */
             scenario_id?: string | null;
             /** Created At Ms */
@@ -1849,6 +1896,8 @@ export interface components {
             active_faults?: components["schemas"]["FaultRefDTO"][];
             /** Latest Artifact Refs */
             latest_artifact_refs?: components["schemas"]["ArtifactRefDTO"][];
+            /** Graph Health */
+            graph_health?: string | null;
         };
         /**
          * SnapshotDTO
@@ -1876,6 +1925,8 @@ export interface components {
             active_faults?: components["schemas"]["FaultRefDTO"][];
             /** Latest Artifact Refs */
             latest_artifact_refs?: components["schemas"]["ArtifactRefDTO"][];
+            /** Graph Health */
+            graph_health?: string | null;
             /** Connection States */
             connection_states?: components["schemas"]["ConnectionDTO"][];
             /** Journal Seq Cursor */

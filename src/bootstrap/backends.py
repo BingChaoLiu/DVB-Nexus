@@ -52,6 +52,7 @@ from simulation.errors import (
     InvalidLifecycleTransitionError,
     SessionNotFoundError,
     SimulationValidationError,
+    StatePlanInvalidError,
 )
 from simulation.runtime import (
     ResourceLimits,
@@ -64,6 +65,12 @@ from simulation.runtime import (
 from simulation.scenario.loader import open_scenario_session
 from simulation.scenario.schema import ScenarioSchemaInvalidError
 from simulation.state import TopologyGraph
+from simulation.state.run import (
+    STATE_RUN_FIDELITY,
+    StateRunResult,
+    prepare_state_run,
+    run_state_run,
+)
 from simulation.ts_runtime import (
     StoreArtifactSink,
     TSConfigInvalidError,
@@ -184,6 +191,11 @@ def _view_to_dto(view: SessionView) -> SessionViewDTO:
             }
             for ref in view.latest_artifact_refs
         ],
+        graph_health=str(
+            getattr(view.graph_health, "value", view.graph_health)
+        )
+        if view.graph_health is not None
+        else None,
     )
 
 
@@ -362,6 +374,7 @@ class SimulationSessionsBackend:
             node_states=binding.snapshot.node_states,
             active_faults=binding.snapshot.active_faults,
             latest_artifact_refs=binding.snapshot.latest_artifact_refs,
+            graph_health=binding.snapshot.graph_health,
         )
         return _view_to_dto(view)
 
@@ -495,6 +508,7 @@ class SimulationSessionsBackend:
                 node_states=snapshot.node_states,
                 active_faults=snapshot.active_faults,
                 latest_artifact_refs=snapshot.latest_artifact_refs,
+                graph_health=snapshot.graph_health,
             )
         )
         return SessionDetailDTO(
@@ -538,7 +552,9 @@ class _JobRecord:
     The SPEC-408 §6.3 read-back pair rides the record (ticket #94):
     ``submitted_at_ms`` is wall clock at submission (injectable clock);
     ``fault_plan_present`` mirrors whether the request carried a non-empty
-    plan.
+    plan.  ``fidelity`` (ticket #165) declares the run form the record
+    executes — the status/list faces render the L0 products for
+    ``SIM_STATE`` rows and keep the pre-#165 TS shape otherwise.
     """
 
     __slots__ = (
@@ -547,6 +563,7 @@ class _JobRecord:
         "config_hash",
         "submitted_at_ms",
         "fault_plan_present",
+        "fidelity",
     )
 
     def __init__(
@@ -556,12 +573,18 @@ class _JobRecord:
         config_hash: str,
         submitted_at_ms: int,
         fault_plan_present: bool,
+        fidelity: str = "SIM_TS",
     ) -> None:
         self.task = task
         self.session_id = session_id
         self.config_hash = config_hash
         self.submitted_at_ms = submitted_at_ms
         self.fault_plan_present = fault_plan_present
+        self.fidelity = fidelity
+
+    @property
+    def is_state_run(self) -> bool:
+        return self.fidelity == STATE_RUN_FIDELITY
 
 
 class IdentityFaultFilter:
@@ -696,7 +719,16 @@ def wire_generator_config(config: GeneratorConfig) -> dict:
 
 
 class SimulationRunsBackend:
-    """``RunsPort`` over the #43 ``TSRuntime`` (prepare-bound async jobs)."""
+    """``RunsPort`` over the #43 ``TSRuntime`` (prepare-bound async jobs).
+
+    Ticket #165: the port dispatches on the submit request's
+    ``fidelity`` — ``SIM_TS`` (default) rides the #43 TSRuntime exactly
+    as before; ``SIM_STATE`` rides the :mod:`simulation.state.run`
+    orchestration (the same 202 job face, the same run-face identity
+    through the allocator shim, no artifact sink — a state run lands no
+    TS artifact).  ADR-0007 item 2's prepare-binding discipline holds on
+    both forms: every knowable rejection happens before scheduling.
+    """
 
     def __init__(
         self,
@@ -745,8 +777,20 @@ class SimulationRunsBackend:
                 "RUNNING session (SPEC-200 run face)",
                 details={"current": lifecycle, "target": "running"},
             )
-        config = _config_from_dto(request.config)
         plan = tuple(_fault_from_dto(fault) for fault in request.fault_plan)
+        if request.fidelity == STATE_RUN_FIDELITY:
+            return await self._submit_state_run(spec, session_id, request, plan)
+        return await self._submit_ts_run(spec, session_id, request, plan)
+
+    async def _submit_ts_run(
+        self,
+        spec: SimulationSessionSpec,
+        session_id: str,
+        request: RunSubmitRequest,
+        plan: tuple,
+    ) -> RunAcceptedDTO:
+        """The SPEC-203 face, byte-identical to the pre-#165 path."""
+        config = _config_from_dto(request.config)
         pipeline = (
             self._pipeline_resolver(session_id)
             if self._pipeline_resolver is not None
@@ -778,13 +822,51 @@ class SimulationRunsBackend:
         )
         return RunAcceptedDTO(run_id=run_id, config_hash=prepared.config_hash)
 
+    async def _submit_state_run(
+        self,
+        spec: SimulationSessionSpec,
+        session_id: str,
+        request: RunSubmitRequest,
+        plan: tuple,
+    ) -> RunAcceptedDTO:
+        """The SIM_STATE face (ticket #165): the state-domain prepare gate
+        binds the plan into the state fingerprint and triggers the L0
+        baseline evaluation BEFORE any scheduling; the scheduled task runs
+        the :mod:`simulation.state.run` orchestration over the allocator
+        shim (no artifact sink — a state run lands no TS artifact)."""
+        try:
+            prepared = prepare_state_run(spec, plan)
+        except StatePlanInvalidError as exc:
+            raise SemanticValidationError(
+                "SIM_STATE_PLAN_INVALID",
+                str(exc),
+                details={"errors": list(exc.details)},
+            ) from exc
+        except SimulationValidationError as exc:
+            raise _translate_simulation_error(exc) from exc
+        run_id = str(uuid.uuid4())
+        self._allocator.stage(session_id, run_id)
+        task = asyncio.create_task(run_state_run(prepared, self._allocator))
+        self._jobs[run_id] = _JobRecord(
+            task=task,
+            session_id=session_id,
+            config_hash=prepared.config_hash,
+            submitted_at_ms=self._now_ms(),
+            fault_plan_present=bool(request.fault_plan),
+            fidelity=STATE_RUN_FIDELITY,
+        )
+        return RunAcceptedDTO(run_id=run_id, config_hash=prepared.config_hash)
+
     async def get_run(self, session_id: str, run_id: str) -> RunStatusDTO | None:
         job = self._jobs.get(run_id)
         if job is None or job.session_id != session_id:
             return None
         if not job.task.done():
             return RunStatusDTO(
-                run_id=run_id, status="running", config_hash=job.config_hash
+                run_id=run_id,
+                status="running",
+                config_hash=job.config_hash,
+                fidelity=job.fidelity,
             )
         exc = job.task.exception()
         if exc is not None:
@@ -795,8 +877,24 @@ class SimulationRunsBackend:
                 status="failed",
                 config_hash=job.config_hash,
                 warnings=[f"{code}: {translated}"],
+                fidelity=job.fidelity,
             )
         result = job.task.result()
+        if isinstance(result, StateRunResult):
+            # The SIM_STATE status face (ticket #165): L0 products in, the
+            # TS count/version faces honestly None, artifacts honestly
+            # empty (no TS artifact — ADR-0012 decision 2).
+            return RunStatusDTO(
+                run_id=result.run_id,
+                status=result.status,
+                config_hash=result.config_hash,
+                warnings=[result.error] if result.error else [],
+                fidelity=STATE_RUN_FIDELITY,
+                graph_health=str(
+                    getattr(result.graph_health, "value", result.graph_health)
+                ),
+                node_health=dict(result.node_health),
+            )
         return RunStatusDTO(
             run_id=result.run_id,
             status=result.status,
@@ -829,6 +927,8 @@ class SimulationRunsBackend:
         ``SIM_SESSION_NOT_FOUND`` (404); a known session without runs
         answers 200 ``[]``. ``packet_count`` passes through from the
         per-job status face (``None`` while running / on failure).
+        Additive (ticket #165): rows declare ``fidelity``; SIM_STATE rows
+        carry the run's L0 ``graph_health`` aggregate.
         """
         if session_id not in self._session_specs:
             raise NotFoundError(
@@ -855,6 +955,8 @@ class SimulationRunsBackend:
                     submitted_at_ms=job.submitted_at_ms,
                     fault_plan_present=job.fault_plan_present,
                     packet_count=packet_count,
+                    fidelity=job.fidelity,
+                    graph_health=status.graph_health if status is not None else None,
                 )
             )
         return items

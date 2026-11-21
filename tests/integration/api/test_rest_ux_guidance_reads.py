@@ -58,6 +58,9 @@ SESSION_LIST_KEYS = {
 SESSION_DETAIL_EXTENSION = {"scenario_id", "created_at_ms"}
 
 #: The §5 SessionViewDTO wire shape the detail extends (dto/sessions.py).
+#: Ticket #165 registers the additive ``graph_health`` key (ADR-0012
+#: decision 5 — the snapshot health-display data source is the L0
+#: evaluation product).
 SESSION_VIEW_KEYS = {
     "session_id",
     "revision",
@@ -67,15 +70,20 @@ SESSION_VIEW_KEYS = {
     "node_states",
     "active_faults",
     "latest_artifact_refs",
+    "graph_health",
 }
 
-#: The §6.3 run-list wire contract, field-for-field.
+#: The §6.3 run-list wire contract, field-for-field.  Ticket #165
+#: registers the additive ``fidelity`` / ``graph_health`` keys (the two
+#: run forms; the L0 aggregate rides SIM_STATE rows, SIM_TS stays null).
 RUN_LIST_KEYS = {
     "run_id",
     "status",
     "submitted_at_ms",
     "fault_plan_present",
     "packet_count",
+    "fidelity",
+    "graph_health",
 }
 
 _POLL_BOUND = 2000  # event-driven yield points; no wall-clock waits

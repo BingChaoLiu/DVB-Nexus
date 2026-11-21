@@ -56,6 +56,8 @@ from simulation.state import (
     evaluate_topology,
     validate_topology,
 )
+from simulation.state.evaluators import DEFAULT_EVALUATORS
+from simulation.state.run import bridge_tuner_diseqc_commands
 
 __all__ = [
     "ArtifactRef",
@@ -230,6 +232,11 @@ class SessionView:
     node_states: Mapping[str, NodeState]
     active_faults: tuple[FaultView, ...] = ()
     latest_artifact_refs: tuple[ArtifactRef, ...] = ()
+    #: The initial L0 evaluation's whole-graph aggregate (ticket #165,
+    #: ADR-0012 decision 5 — the snapshot health display reads the
+    #: TopologyEvalResult product).  ``IDLE`` default reproduces the
+    #: pre-#165 all-idle skeleton for unwired constructions.
+    graph_health: Health = Health.IDLE
 
 
 @dataclass(frozen=True)
@@ -275,6 +282,9 @@ class SimulationSnapshot:
     connection_states: tuple[ConnectionView, ...] = ()
     active_faults: tuple[FaultView, ...] = ()
     latest_artifact_refs: tuple[ArtifactRef, ...] = ()
+    #: The initial L0 evaluation's whole-graph aggregate (ticket #165,
+    #: ADR-0012 decision 5 — see :class:`SessionView`).
+    graph_health: Health = Health.IDLE
     journal_seq_cursor: int | None = None
 
 
@@ -307,6 +317,7 @@ class _Session:
         "lifecycle",
         "revision",
         "node_states",
+        "graph_health",
         "runs",
         "tasks",
         "latest_artifact_refs",
@@ -331,6 +342,8 @@ class _Session:
         self.revision = 0
         eval_result = _safe_initial_eval(self.graph)
         self.node_states: Mapping[str, NodeState] = _node_states(eval_result)
+        # The L0 aggregate rides the snapshot face (ticket #165, decision 5).
+        self.graph_health: Health = eval_result.graph_health
         self.runs: dict[str, RunView] = {}
         self.tasks: set[asyncio.Task] = set()
         self.latest_artifact_refs: tuple[ArtifactRef, ...] = ()
@@ -349,7 +362,17 @@ def _node_states(eval_result: TopologyEvalResult) -> Mapping[str, NodeState]:
 
 
 def _safe_initial_eval(graph: TopologyGraph) -> TopologyEvalResult:
-    """Initial (idle-skeleton) evaluation, tolerant of invalid topologies.
+    """Initial evaluation, tolerant of invalid topologies.
+
+    Health-display data source (ADR-0012 decision 5, ticket #165): the
+    L0_DEFERRED_RATIONALE degraded path is retired — the initial
+    evaluation now runs the REAL L0 evaluators
+    (:data:`simulation.state.evaluators.DEFAULT_EVALUATORS`) over the A15
+    bridged assembly (:func:`simulation.state.run.
+    bridge_tuner_diseqc_commands`), so the snapshot ``node_states`` health
+    is the TopologyEvalResult product.  Topologies without RF/SEC nodes
+    are byte-identical to the pre-#165 skeleton (no registered evaluator
+    for their types → idle, the SPEC-202 §5 isolated-node semantics).
 
     A cyclic (or otherwise structurally un evaluatable) graph must still be
     CREATED so ``validate_session`` can *report* the path-addressed
@@ -357,7 +380,8 @@ def _safe_initial_eval(graph: TopologyGraph) -> TopologyEvalResult:
     for what validation owns (SPEC-202 section 5 非变更可重复报告纪律).
     """
     try:
-        return evaluate_topology(graph)
+        bridged = bridge_tuner_diseqc_commands(graph)
+        return evaluate_topology(bridged, evaluators=DEFAULT_EVALUATORS)
     except TopologyCycleError:
         return TopologyEvalResult(
             topology_id=graph.topology_id,
@@ -571,6 +595,7 @@ class SimulationRuntime:
             ),
             active_faults=view.active_faults,
             latest_artifact_refs=view.latest_artifact_refs,
+            graph_health=view.graph_health,
             journal_seq_cursor=journal_seq_cursor,
         )
 
@@ -746,6 +771,29 @@ class SimulationRuntime:
             severity=severity,
         )
 
+    # --- additive orchestration read faces (ticket #165) -------------------------
+
+    @property
+    def emitter(self) -> SimulationEventEmitter:
+        """The session emitter (additive orchestration read face).
+
+        The #164 observation bridge consumes the ``state_event`` /
+        ``run_event`` faces off this object at the SIM_STATE Run
+        evaluation trigger points (:mod:`simulation.state.run`); the
+        runtime keeps ownership of the sink wiring — consumers never
+        construct their own emitter.
+        """
+        return self._emitter
+
+    def now_ns(self, session_id: str) -> int:
+        """The committed virtual-time reading of one session's clock
+        (additive orchestration read face; unknown sessions raise
+        :class:`SessionNotFoundError`).  Read-only — no command lock
+        (SPEC-200 section 7 item 1 reserves the lock for mutating
+        commands)."""
+        session = self._require(session_id)
+        return session.clock.now_ns()
+
     # --- internals --------------------------------------------------------------
 
     def _require(self, session_id: str) -> _Session:
@@ -788,6 +836,7 @@ class SimulationRuntime:
             node_states=session.node_states,
             active_faults=(),
             latest_artifact_refs=session.latest_artifact_refs,
+            graph_health=session.graph_health,
         )
 
     async def _drain_tasks(self, session: _Session) -> bool:
