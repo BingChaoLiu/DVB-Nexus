@@ -171,6 +171,47 @@ class SimulationEventEmitter:
             tags=["simulation", "fault"],
         )
 
+    def state_event(
+        self,
+        event_type: str,
+        session_id: str,
+        run_id: str,
+        *,
+        virtual_time_ns: int,
+        node_id: str | None,
+        payload: Mapping[str, Any] | None = None,
+        severity: str = "info",
+    ) -> dict[str, Any] | None:
+        """Build one run-scoped, node-addressed state event (ticket #164).
+
+        SPEC-303 §Phase3 state snapshots: ``scope.run_id`` attribution and
+        correlation addressing by ``node_id`` alone (the ADR-0006
+        decision 3 node-level form — the observed node, never a pid and
+        never a fault id).  Everything else follows the shared ``_emit``
+        discipline: parse_envelope is a construction guarantee,
+        ``journal_seq`` stays unassigned (gateway-stamped) and the
+        unregistered-type guard skips before envelope construction.
+        """
+        return self._emit(
+            event_type,
+            session_id=session_id,
+            run_id=run_id,
+            virtual_time_ns=virtual_time_ns,
+            payload=dict(payload or {}),
+            severity=severity,
+            correlation={
+                "trace_id": None,
+                "span_id": None,
+                "parent_event_id": None,
+                "fault_id": None,
+                "node_id": node_id,
+                "port_id": None,
+                "service_id": None,
+                "pid": None,
+            },
+            tags=["simulation", "state"],
+        )
+
     # --- internals ------------------------------------------------------------
 
     def _emit(

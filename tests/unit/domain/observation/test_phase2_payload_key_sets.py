@@ -64,14 +64,20 @@ DISPLAY_ORDER: dict[str, tuple[str, ...]] = {
 }
 
 
-def test_face_covers_exactly_the_nine_phase2_event_types() -> None:
-    phase2_types = (
+def test_face_covers_exactly_the_registered_schema_face_event_types() -> None:
+    # The face began as the nine Phase 2 types (#141) and grew additively
+    # with the Phase 3 state-observation registration (ticket #164): every
+    # registered type that carries a strict payload schema must appear in
+    # the frontend render face — the dump source stays SINGLE.
+    schema_face_types = (
         registry.T2MI_EVENT_TYPES
         | registry.BBFRAME_EVENT_TYPES
         | registry.BISS_EVENT_TYPES
         | registry.GEN_EVENT_TYPES
+        | registry.RF_EVENT_TYPES
+        | registry.SEC_EVENT_TYPES
     )
-    assert set(registry.PHASE2_PAYLOAD_KEY_SETS) == phase2_types
+    assert set(registry.PHASE2_PAYLOAD_KEY_SETS) == schema_face_types
 
 
 def test_every_face_set_equals_the_frozen_validator_keys() -> None:

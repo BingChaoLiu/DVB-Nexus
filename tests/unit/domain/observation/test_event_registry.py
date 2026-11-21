@@ -16,7 +16,9 @@ from domain.observation.registry import (
     DELIVERY_PROTECTED_EVENT_TYPES,
     FAULT_EVENT_TYPES,
     GEN_EVENT_TYPES,
+    RF_EVENT_TYPES,
     REGISTERED_EVENT_TYPES,
+    SEC_EVENT_TYPES,
     T2MI_EVENT_TYPES,
     WITHDRAWN_EVENT_TYPES,
     is_coalescable,
@@ -92,6 +94,10 @@ GEN_EVENTS = frozenset(
     {"gen.stage_started", "gen.stage_completed", "gen.packet_sampled"}
 )
 
+# Phase 3 state-observation namespaces (SPEC-303 §Phase3, ticket #164).
+RF_EVENTS = frozenset({"rf.state_observed"})
+SEC_EVENTS = frozenset({"sec.state_observed"})
+
 EXPECTED_REGISTERED = (
     SIMULATION_SESSION_EVENTS
     | SIMULATION_RUN_EVENTS
@@ -106,6 +112,8 @@ EXPECTED_REGISTERED = (
     | BBFRAME_EVENTS
     | BISS_EVENTS
     | GEN_EVENTS
+    | RF_EVENTS
+    | SEC_EVENTS
 )
 
 
@@ -298,3 +306,281 @@ class TestTsPayloadContract:
     def test_payload_must_be_a_mapping(self):
         with pytest.raises(EnvelopeError):
             validate_payload("simulation.run_progress", "not-an-object")
+
+
+# --- Phase 3 state-observation namespaces (SPEC-303 §Phase3, ticket #164) ----
+
+
+def _rf_tuner_payload(**overrides: object) -> dict:
+    payload = {
+        "node_id": "tuner-a",
+        "health": "ok",
+        "causes": [],
+        "source": "state_evaluator",
+        "confidence": "simulated",
+        "lock_state": "locked",
+        "if_frequency_khz": 1_230_000,
+        "ber_state": "normal",
+        "locked_transponder_id": "tp-1",
+        "stale": False,
+    }
+    payload.update(overrides)
+    return payload
+
+
+def _sec_lnb_payload(**overrides: object) -> dict:
+    payload = {
+        "node_id": "lnb-0",
+        "health": "ok",
+        "causes": [],
+        "source": "state_evaluator",
+        "confidence": "simulated",
+        "voltage": "13V",
+        "tone_commanded": "none",
+        "tone_actual": "none",
+        "tone_composite": "none",
+        "band_selected": "low",
+        "lo_frequency_khz": 9_750_000,
+        "polarization_delivered": "vertical",
+        "short_circuit_state": "normal",
+        "ub_assignments": [],
+    }
+    payload.update(overrides)
+    return payload
+
+
+def _sec_switch_payload(**overrides: object) -> dict:
+    payload = {
+        "node_id": "sw-0",
+        "health": "ok",
+        "causes": [],
+        "source": "state_evaluator",
+        "confidence": "simulated",
+        "committed_switch_state": 3,
+        "uncommitted_switch_state": 0,
+        "port_selected": 3,
+        "power_pass": "on",
+    }
+    payload.update(overrides)
+    return payload
+
+
+class TestPhase3StateObservedRegistry:
+    """``rf.state_observed`` / ``sec.state_observed`` (SPEC-303 §Phase3).
+
+    Payload = the NodeEvalResult-shape JSON-safe projection (#161 metric
+    key sets + health + causes + node_id, ticket #164 REPORT): strict key
+    sets per shape (unknown keys refused — ``tuning_message`` stays out of
+    the Phase 3 payload registration, ruling A16), vocabulary checks on
+    every closed-set value, and the constant observation-axes pairing
+    (``state_evaluator`` + ``simulated`` — 恒定配对, the honesty axis).
+    """
+
+    def test_state_observed_types_are_registered(self):
+        assert is_registered("rf.state_observed")
+        assert is_registered("sec.state_observed")
+        assert not is_withdrawn("rf.state_observed")
+        assert not is_withdrawn("sec.state_observed")
+        validate_event_type("rf.state_observed")
+        validate_event_type("sec.state_observed")
+
+    def test_state_observed_delivery_policy_is_neutral(self):
+        # Per-node snapshots are magnitude-bounded (O(nodes) per
+        # evaluation, ADR-0012 decision 6) — not high-fanout coalescable
+        # material, and not fault/session/terminal delivery-protected
+        # either: the MVP policy faces stay exactly as they were.
+        assert not is_coalescable("rf.state_observed")
+        assert not is_coalescable("sec.state_observed")
+        assert not is_delivery_protected("rf.state_observed")
+        assert not is_delivery_protected("sec.state_observed")
+
+    def test_rf_tuner_shape_is_accepted(self):
+        validate_payload("rf.state_observed", _rf_tuner_payload())
+
+    def test_rf_tuner_accepts_nullable_lock_facts(self):
+        # unlocked snapshot: no IF target hit, no ber grade retained
+        # (SPEC-620 §8), no transponder — nulls are honest absence.
+        validate_payload(
+            "rf.state_observed",
+            _rf_tuner_payload(
+                lock_state="unlocked",
+                if_frequency_khz=None,
+                ber_state=None,
+                locked_transponder_id=None,
+                stale=True,
+            ),
+        )
+
+    def test_sec_lnb_shape_is_accepted(self):
+        validate_payload("sec.state_observed", _sec_lnb_payload())
+
+    def test_sec_lnb_legacy_cascade_adds_sat_selected(self):
+        # legacy_cascade 追加 sat_selected（#161）：universal 无此键。
+        legacy = _sec_lnb_payload(sat_selected="A")
+        validate_payload("sec.state_observed", legacy)
+        with pytest.raises(EnvelopeError):
+            validate_payload("sec.state_observed", _sec_lnb_payload(sat_selected="C"))
+
+    def test_sec_switch_shape_is_accepted(self):
+        validate_payload("sec.state_observed", _sec_switch_payload())
+
+    def test_sec_switch_port_selected_null_is_accepted(self):
+        # idle switch: register states at reset, no port derived.
+        validate_payload(
+            "sec.state_observed",
+            _sec_switch_payload(
+                committed_switch_state=0,
+                uncommitted_switch_state=0,
+                port_selected=None,
+                power_pass=None,
+            ),
+        )
+
+    def test_unknown_keys_are_refused(self):
+        for event_type, payload in (
+            ("rf.state_observed", _rf_tuner_payload(tuning_message={})),
+            ("rf.state_observed", _rf_tuner_payload(node_type="tuner")),
+            ("sec.state_observed", _sec_lnb_payload(tuning_message={})),
+            ("sec.state_observed", _sec_switch_payload(voltage="13V")),
+        ):
+            with pytest.raises(EnvelopeError):
+                validate_payload(event_type, payload)
+
+    def test_missing_keys_are_refused(self):
+        incomplete = _rf_tuner_payload()
+        del incomplete["stale"]
+        with pytest.raises(EnvelopeError):
+            validate_payload("rf.state_observed", incomplete)
+        incomplete_lnb = _sec_lnb_payload()
+        del incomplete_lnb["ub_assignments"]
+        with pytest.raises(EnvelopeError):
+            validate_payload("sec.state_observed", incomplete_lnb)
+
+    def test_metric_vocabularies_are_enforced(self):
+        with pytest.raises(EnvelopeError):
+            validate_payload(
+                "rf.state_observed", _rf_tuner_payload(lock_state="acquiring")
+            )
+        with pytest.raises(EnvelopeError):
+            validate_payload(
+                "rf.state_observed", _rf_tuner_payload(ber_state="catastrophic")
+            )
+        with pytest.raises(EnvelopeError):
+            validate_payload("sec.state_observed", _sec_lnb_payload(voltage="12V"))
+        with pytest.raises(EnvelopeError):
+            validate_payload(
+                "sec.state_observed",
+                _sec_lnb_payload(short_circuit_state="warming_up"),
+            )
+        with pytest.raises(EnvelopeError):
+            validate_payload(
+                "sec.state_observed", _sec_switch_payload(port_selected=7)
+            )
+        with pytest.raises(EnvelopeError):
+            validate_payload(
+                "sec.state_observed", _sec_switch_payload(committed_switch_state=300)
+            )
+
+    def test_if_frequency_rejects_negative_and_non_integer(self):
+        with pytest.raises(EnvelopeError):
+            validate_payload(
+                "rf.state_observed", _rf_tuner_payload(if_frequency_khz=-1)
+            )
+        with pytest.raises(EnvelopeError):
+            validate_payload(
+                "rf.state_observed", _rf_tuner_payload(if_frequency_khz=True)
+            )
+
+    def test_stale_must_be_a_boolean(self):
+        with pytest.raises(EnvelopeError):
+            validate_payload("rf.state_observed", _rf_tuner_payload(stale=1))
+
+    def test_health_vocabulary_is_enforced(self):
+        with pytest.raises(EnvelopeError):
+            validate_payload("rf.state_observed", _rf_tuner_payload(health="degraded"))
+
+    def test_observation_axes_pairing_is_constant(self):
+        # 恒定配对 (SPEC-303 §Phase3): state_evaluator + simulated —
+        # any other provenance axis is refused at the payload face.
+        with pytest.raises(EnvelopeError):
+            validate_payload(
+                "rf.state_observed", _rf_tuner_payload(source="tsduck")
+            )
+        with pytest.raises(EnvelopeError):
+            validate_payload(
+                "rf.state_observed", _rf_tuner_payload(confidence="parsed")
+            )
+        with pytest.raises(EnvelopeError):
+            validate_payload(
+                "sec.state_observed", _sec_lnb_payload(confidence="measured")
+            )
+
+    def test_cause_ref_projection_shape(self):
+        validate_payload(
+            "rf.state_observed",
+            _rf_tuner_payload(causes=[{"node_id": "lnb-0", "port_id": "coax_out"}]),
+        )
+        validate_payload(
+            "rf.state_observed",
+            _rf_tuner_payload(causes=[{"node_id": "lnb-0", "port_id": None}]),
+        )
+        validate_payload(
+            "rf.state_observed",
+            _rf_tuner_payload(causes=[{"node_id": "lnb-0"}]),
+        )
+        with pytest.raises(EnvelopeError):
+            validate_payload(
+                "rf.state_observed", _rf_tuner_payload(causes=[{"port_id": "coax_out"}])
+            )
+        with pytest.raises(EnvelopeError):
+            validate_payload(
+                "rf.state_observed",
+                _rf_tuner_payload(causes=[{"node_id": "lnb-0", "fault_id": "f-1"}]),
+            )
+        with pytest.raises(EnvelopeError):
+            validate_payload(
+                "rf.state_observed", _rf_tuner_payload(causes=[{"node_id": ""}])
+            )
+
+    def test_ub_assignments_snapshot_is_a_list_of_objects(self):
+        validate_payload(
+            "sec.state_observed",
+            _sec_lnb_payload(
+                ub_assignments=[
+                    {
+                        "tuner_node": "tuner-a",
+                        "ub_slot": 0,
+                        "ub_center_freq_mhz": 1210,
+                        "position": "A",
+                    }
+                ]
+            ),
+        )
+        with pytest.raises(EnvelopeError):
+            validate_payload(
+                "sec.state_observed", _sec_lnb_payload(ub_assignments=["tuner-a"])
+            )
+        with pytest.raises(EnvelopeError):
+            validate_payload(
+                "sec.state_observed", _sec_lnb_payload(ub_assignments={"tuner-a": 0})
+            )
+
+    def test_sec_shape_must_be_lnb_or_switch_not_a_mix(self):
+        # The two sec.* shapes (lnb / switch) are exact key sets; a payload
+        # carrying neither shape's metric keys (or both) is refused.
+        with pytest.raises(EnvelopeError):
+            validate_payload(
+                "sec.state_observed",
+                {
+                    "node_id": "x-0",
+                    "health": "ok",
+                    "causes": [],
+                    "source": "state_evaluator",
+                    "confidence": "simulated",
+                },
+            )
+        mixed = _sec_lnb_payload()
+        mixed.update(_sec_switch_payload(node_id="lnb-0", health="ok"))
+        mixed["node_id"] = "lnb-0"
+        with pytest.raises(EnvelopeError):
+            validate_payload("sec.state_observed", mixed)
