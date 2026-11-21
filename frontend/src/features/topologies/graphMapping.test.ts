@@ -5,6 +5,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { TopologyDTO, TopologyNodeDTO } from "../../api/endpoints/topologies";
+import type { TopologyFlowEdge } from "./graphMapping";
 import {
   canConnect,
   defaultPortsFor,
@@ -320,7 +321,7 @@ describe("explainConnection — the §7.6 reason lines (parallel to canConnect)"
     expect(explain("mux-0", "ts_out", "mux-0", "ts_in_1")).toBe("“ts_in_1”连接数已满（上限 1）");
   });
 
-  it("plane failure → 「平面不符（当前支持 MPEG_TS / T2MI）」 (SPEC-401 §Phase2 扩容文案)", () => {
+  it("plane failure → 「平面不符（当前支持 MPEG_TS / T2MI / RF / SEC_CONTROL）」 (SPEC-401 §Phase3 扩容文案)", () => {
     const rfNode = {
       id: "rf-0",
       type: "topology" as const,
@@ -344,7 +345,7 @@ describe("explainConnection — the §7.6 reason lines (parallel to canConnect)"
         targetHandle: "ts_in",
         connections: [],
       }),
-    ).toBe("平面不符（当前支持 MPEG_TS / T2MI）");
+    ).toBe("平面不符（当前支持 MPEG_TS / T2MI / RF / SEC_CONTROL）");
   });
 
   it("unknown/missing handles stay silent (defensive; no spec enumeration for them)", () => {
@@ -399,7 +400,7 @@ describe("plane precheck on the Phase 2 enabled set (T2MI links admitted)", () =
       connections: t2miDraft.connections,
     };
     expect(canConnect(mismatch)).toBe(false);
-    expect(explainConnection(mismatch)).toBe("平面不符（当前支持 MPEG_TS / T2MI）");
+    expect(explainConnection(mismatch)).toBe("平面不符（当前支持 MPEG_TS / T2MI / RF / SEC_CONTROL）");
   });
 
   it("a non-enabled plane stays rejected (RF defensive posture unchanged)", () => {
@@ -439,5 +440,94 @@ describe("layoutGraph — deterministic topo-order columns (ADR-0009 decision 5)
     ]);
     expect(layout.get("a-0")).toEqual({ x: 40, y: 40 });
     expect(layout.get("b-0")).toEqual({ x: 280, y: 40 });
+  });
+});
+
+// SPEC-401 §Phase3 (ticket #169): the Phase 3 plane set admits SEC_CONTROL
+// links through the SAME four prechecks (constant = the only plane authority);
+// the 1:N shared-coax fan-out renders as plain multiple edges with zero
+// special-case edge logic (per-port cardinality carries it).
+describe("plane precheck on the Phase 3 enabled set (SEC_CONTROL links + 1:N fan-out)", () => {
+  const rfDraft = fromWire({
+    topology_id: "t",
+    revision: 1,
+    nodes: [node("lnb-0", "lnb"), node("tuner-a", "tuner"), node("tuner-b", "tuner"), node("sw-0", "diseqc_switch")],
+    connections: [],
+  });
+
+  const verdictOf = (sourceId: string, sourceHandle: string, targetId: string, targetHandle: string, extra = rfDraft.connections) => {
+    const nodes = rfDraft.nodes;
+    const input = {
+      source: nodes.find((n) => n.id === sourceId)!,
+      target: nodes.find((n) => n.id === targetId)!,
+      sourceHandle,
+      targetHandle,
+      connections: extra,
+    };
+    return { can: canConnect(input), reason: explainConnection(input) };
+  };
+
+  it("an SEC_CONTROL lnb→tuner link passes all four prechecks (RF/SEC planes enabled)", () => {
+    expect(verdictOf("lnb-0", "coax_out", "tuner-a", "rf_in")).toEqual({ can: true, reason: null });
+  });
+
+  it("the 1:N shared-coax fan-out admits the second tuner (coax_out max=2) and saturates at the limit", () => {
+    const conn0: TopologyFlowEdge = {
+      id: "conn-0",
+      source: "lnb-0",
+      sourceHandle: "coax_out",
+      target: "tuner-a",
+      targetHandle: "rf_in",
+      data: { connection: { connection_id: "conn-0", from_node: "lnb-0", from_port: "coax_out", to_node: "tuner-a", to_port: "rf_in", plane: "SEC_CONTROL" }, violation: false },
+    };
+    expect(verdictOf("lnb-0", "coax_out", "tuner-b", "rf_in", [conn0]).can).toBe(true); // 1:N shared coax
+    const conn1: TopologyFlowEdge = {
+      id: "conn-1",
+      source: "lnb-0",
+      sourceHandle: "coax_out",
+      target: "tuner-b",
+      targetHandle: "rf_in",
+      data: { connection: { connection_id: "conn-1", from_node: "lnb-0", from_port: "coax_out", to_node: "tuner-b", to_port: "rf_in", plane: "SEC_CONTROL" }, violation: false },
+    };
+    expect(verdictOf("lnb-0", "coax_out", "tuner-a", "rf_in", [conn0, conn1]).reason).toBe(
+      "“coax_out”连接数已满（上限 2）",
+    );
+  });
+
+  it("an SEC_CONTROL→MPEG_TS mix still fails with the §Phase3 reason line", () => {
+    expect(verdictOf("lnb-0", "coax_out", "tuner-a", "ts_out", []).reason).toBeNull(); // unknown handle → silent
+    const nodes = rfDraft.nodes;
+    const lnb = nodes.find((n) => n.id === "lnb-0")!;
+    const mon = {
+      id: "mon-0",
+      type: "topology" as const,
+      position: { x: 0, y: 0 },
+      data: {
+        node: {
+          node_id: "mon-0",
+          node_type: "ts_monitor",
+          config: {},
+          ports: [{ port_id: "ts_in", direction: "input", plane: "MPEG_TS", max_connections: 1 }],
+        },
+        violationCodes: [],
+        violationPorts: [],
+      },
+    };
+    const mismatch = {
+      source: lnb,
+      target: mon as unknown as typeof lnb,
+      sourceHandle: "coax_out",
+      targetHandle: "ts_in",
+      connections: [],
+    };
+    expect(canConnect(mismatch as unknown as Parameters<typeof canConnect>[0])).toBe(false);
+    expect(explainConnection(mismatch as unknown as Parameters<typeof explainConnection>[0])).toBe(
+      "平面不符（当前支持 MPEG_TS / T2MI / RF / SEC_CONTROL）",
+    );
+  });
+
+  it("the switch upstream/downstream faces stay cardinality-pinned (coax_in=1 至多一条 DC 通路, coax_out=4)", () => {
+    expect(verdictOf("sw-0", "coax_out", "tuner-a", "rf_in")).toEqual({ can: true, reason: null });
+    expect(defaultPortsFor("diseqc_switch").map((p) => p.max_connections)).toEqual([1, 4]);
   });
 });

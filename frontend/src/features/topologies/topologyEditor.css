@@ -354,3 +354,50 @@
   font-size: 12px;
   color: #334;
 }
+
+/* --- §Phase3 card status summary (ticket #169, SPEC-401 §Phase3) ------------
+   health badge + registry-declared key metrics; wire values verbatim. */
+.dvb-topo-node-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  margin-top: 4px;
+  font-size: 11px;
+}
+
+.dvb-topo-node-health {
+  padding: 1px 6px;
+  border-radius: 8px;
+  border: 1px solid currentColor;
+  font-weight: 600;
+}
+
+.dvb-topo-node-health[data-health="ok"] {
+  color: #1a7f37;
+}
+
+.dvb-topo-node-health[data-health="warn"] {
+  color: #9a6700;
+}
+
+.dvb-topo-node-health[data-health="error"] {
+  color: #cf222e;
+}
+
+.dvb-topo-node-health[data-health="idle"] {
+  color: #57606a;
+}
+
+.dvb-topo-node-metric {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.dvb-topo-node-metric-key {
+  color: #57606a;
+}
+
+.dvb-topo-node-metric-value {
+  font-weight: 600;
+}

@@ -275,3 +275,103 @@ describe("TopologyEditorPage — §4.5 guidance faces", () => {
     await waitFor(() => expect(screen.getByTestId("dvb-topo-save-note")).toHaveTextContent("已保存为 revision 2。"));
   });
 });
+
+// SPEC-401 §Phase3 card summary + SPEC-404 §Phase3 detail panel (ticket #169):
+// the ?session=<id> deep link wires the page-level state faces — the
+// registry-derived SPEC-305 §Phase3 query (namespace rf/sec + the three
+// state-domain node types), the card status summary from the merged snapshot
+// stream, and the always-present detail panel (honest no-session face when
+// absent). The stream module is stubbed (no WS in jsdom; the journal tail
+// rides the cache the stream would update).
+vi.mock("../monitor/stream/useSessionStream", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../monitor/stream/useSessionStream")>();
+  return {
+    ...actual,
+    useSessionStream: () => ({ status: "idle" as const, closeCode: null }),
+  };
+});
+
+vi.mock("../../api/endpoints/observation", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../api/endpoints/observation")>();
+  return {
+    ...actual,
+    queryStateObservedEvents: vi.fn(),
+  };
+});
+
+import { queryStateObservedEvents } from "../../api/endpoints/observation";
+
+const queryStateObservedEventsMock = vi.mocked(queryStateObservedEvents);
+
+/** A tuner snapshot for the palette-dropped node id (tuner-0) — rf.state_observed
+ * envelope, NodeEvalResult-shaped JSON-safe payload (SPEC-303 §Phase3). */
+const TUNER_ENVELOPE = {
+  event_type: "rf.state_observed",
+  journal_seq: 10,
+  severity: "info",
+  correlation: { node_id: "tuner-0" },
+  payload: {
+    node_id: "tuner-0",
+    health: "error",
+    causes: [{ node_id: "lnb-0" }],
+    source: "state_evaluator",
+    confidence: "simulated",
+    lock_state: "unlocked",
+    ber_state: "severe",
+  },
+};
+
+describe("TopologyEditorPage — §Phase3 session state faces (ticket #169)", () => {
+  function renderPageAt(search: string) {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    return render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={[`/topologies${search}`]}>
+          <TopologyEditorPage />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+  }
+
+  it("without a tracked session the detail panel renders the honest no-session note", async () => {
+    renderPageAt("");
+    expect(await screen.findByTestId("dvb-state-panel")).toBeInTheDocument();
+    expect(screen.getByTestId("dvb-state-panel-empty")).toHaveTextContent("未携带 session 深链");
+    expect(queryStateObservedEventsMock).not.toHaveBeenCalled();
+  });
+
+  it("with ?session the state_observed read path fires with the registry-derived filter face", async () => {
+    queryStateObservedEventsMock.mockResolvedValue({
+      request_id: "r",
+      scope: { tenant_id: "local", session_id: "s-9" },
+      data: { sort: "journal_desc", items: [TUNER_ENVELOPE] },
+    } as never);
+    renderPageAt("?session=s-9");
+    await waitFor(() => expect(queryStateObservedEventsMock).toHaveBeenCalled());
+    expect(queryStateObservedEventsMock.mock.calls[0]![0]).toBe("s-9");
+    expect(queryStateObservedEventsMock.mock.calls[0]![1]).toMatchObject({
+      namespace: ["rf", "sec"],
+      node_type: ["lnb", "tuner", "diseqc_switch"],
+    });
+  });
+
+  it("the tuner card renders the health badge + registry status_metrics from the merged snapshot stream", async () => {
+    const user = userEvent.setup();
+    queryStateObservedEventsMock.mockResolvedValue({
+      request_id: "r",
+      scope: { tenant_id: "local", session_id: "s-9" },
+      data: { sort: "journal_desc", items: [TUNER_ENVELOPE] },
+    } as never);
+    renderPageAt("?session=s-9");
+    // let the snapshot query settle first (the immediate re-render churn can
+    // otherwise detach the palette button mid-click)
+    await waitFor(() => expect(queryStateObservedEventsMock).toHaveBeenCalled());
+    await user.click(screen.getByRole("button", { name: /卫星调谐器/ }));
+    await screen.findByText("tuner", { selector: ".dvb-topo-node-type" }); // wire node_type verbatim (id rides data-node-id)
+    // card status summary: health badge (wire value verbatim) + the two
+    // registry-declared keys only (ber_state yes, causes no)
+    expect(await screen.findByTestId("dvb-topo-node-health")).toHaveTextContent("error");
+    expect(screen.getByTestId("dvb-topo-node-metric-lock_state")).toHaveTextContent("unlocked");
+    expect(screen.getByTestId("dvb-topo-node-metric-ber_state")).toHaveTextContent("severe");
+  });
+});

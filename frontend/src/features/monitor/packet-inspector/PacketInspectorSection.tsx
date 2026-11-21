@@ -16,6 +16,7 @@ import { ThreeQuestionState } from "../ThreeQuestionState";
 import { BissAnnotation } from "./BissAnnotation";
 import { BBFrameStructureView } from "./BBFrameStructureView";
 import { type HexRow, TS_SYNC_BYTE } from "./decode";
+import { SimStateEmptyState } from "./SimStateEmptyState";
 import { T2miStructureView } from "./T2miStructureView";
 import { usePacketDrillDown } from "./usePacketDrillDown";
 import {
@@ -77,17 +78,29 @@ export function PacketInspectorSection({
   onClose,
   view = DEFAULT_PACKET_INSPECTOR_VIEW,
   bissEvidence = null,
+  simStateRun = null,
 }: {
   locator: DiagnosisEvidenceDTO | null;
   onClose: () => void;
   /** SPEC-404 §Phase2 view param (deep-link `view=t2mi|bbframe|ts`; default
-   * `ts` = the MVP face below, zero regression). */
+   * `ts` = the MVP face below, zero regression). NOT extended by #169. */
   view?: PacketInspectorView;
   /** Optional BISS evidence references (#134 journal face / #136 wiring;
    * key material never crosses — fingerprint reference only). */
   bissEvidence?: BissEvidenceAnnotation | null;
+  /** SPEC-404 §Phase3 (ticket #169): presence declares the tracked run is a
+   * SIM_STATE run (fidelity SIM_STATE / artifacts == [] — the #165 trigger
+   * condition; the caller derives it). The section then renders the 空态三问
+   * with the jump button to the node detail panel, taking precedence over both
+   * the generic locator-null row and any stale locator (a state-domain run has
+   * no artifact to drill). Absent → the pre-#169 faces, byte-identical. */
+  simStateRun?: { sessionId: string } | null;
 }) {
   const state = usePacketDrillDown(locator, view);
+
+  if (simStateRun !== null) {
+    return <SimStateEmptyState sessionId={simStateRun.sessionId} />;
+  }
 
   if (locator === null || state.phase === "idle") {
     // §4.6 Monitor 组行 7(文案逐字):未进入下钻时的显式指路面;不渲染

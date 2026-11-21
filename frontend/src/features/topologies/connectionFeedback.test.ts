@@ -148,14 +148,14 @@ describe("connectionAttempted — the §7.6 one-line reason, mapped from the fou
     const standing = {
       connectingFrom: "source" as const,
       connecting: attempt("gen-0", "ts_out", "source"),
-      rejection: "平面不符（当前支持 MPEG_TS / T2MI）",
+      rejection: "平面不符（当前支持 MPEG_TS / T2MI / RF / SEC_CONTROL）",
       attempt: 1,
     };
     const feedback = connectionAttempted(standing, attempt("gen-0", "ts_out", "source"), null, graph);
     expect(feedback).toEqual({
       connectingFrom: null,
       connecting: null,
-      rejection: "平面不符（当前支持 MPEG_TS / T2MI）",
+      rejection: "平面不符（当前支持 MPEG_TS / T2MI / RF / SEC_CONTROL）",
       attempt: 1,
     });
   });

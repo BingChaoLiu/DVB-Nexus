@@ -10,6 +10,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { ConnectionMode, ReactFlow, ReactFlowProvider, useReactFlow } from "@xyflow/react";
 import type { Connection, Edge, EdgeChange, NodeChange } from "@xyflow/react";
+import { useSearchParams } from "react-router";
 
 import {
   createTopology,
@@ -33,10 +34,14 @@ import {
   type ConnectionFeedback,
 } from "./connectionFeedback";
 import { CanvasEmptyOverlay, ConnectionHint, SaveGateNote, SaveSuccessNote, TopologyGuidanceBanner } from "./guidance";
-import { nodeTypeSpec } from "./nodeTypes";
+import { isStateDomainNodeType, nodeTypeSpec } from "./nodeTypes";
 import { NODE_TYPE_MIME, NodePalette } from "./NodePalette";
 import { TopologyNode } from "./TopologyNode";
 import { ViolationPanel } from "./ViolationPanel";
+import { useSessionStream } from "../monitor/stream/useSessionStream";
+import { buildNodeStatusMap } from "./inspector/nodeStateSummary";
+import { useNodeStateSnapshots } from "./inspector/useNodeStateSnapshots";
+import { NodeStateDetailPanel } from "./inspector/NodeStateDetailPanel";
 import { computeInspectorGate } from "./inspector/inspectorGate";
 import { mapLocChain, type FieldError } from "./inspector/locChain";
 import { NodeInspector } from "./inspector/NodeInspector";
@@ -99,6 +104,17 @@ function TopologyEditor() {
   // §4.5 item 5: the per-save declaration (已保存为 revision N) — cleared when
   // the editing context changes (load / new draft), never by mere edits.
   const [savedNoteRevision, setSavedNoteRevision] = useState<number | null>(null);
+  // §Phase3 state faces (ticket #169): the ?session=<id> deep link tracks a
+  // session on this page — the single page-level WS subscription (journal
+  // frames → canonical cache, hint bridge → throttled refetch) + the merged
+  // state_observed snapshot stream (SPEC-305 §Phase3 query face + journal
+  // tail; zero new data channels). No session tracked → no stream, empty
+  // snapshots, and the detail panel renders its honest no-session note.
+  const [searchParams] = useSearchParams();
+  const sessionId = searchParams.get("session");
+  useSessionStream(sessionId);
+  const snapshots = useNodeStateSnapshots(sessionId);
+  const statusMap = useMemo(() => buildNodeStatusMap(snapshots), [snapshots]);
 
   // Server facts via the query cache (§7.6 load flow).
   const listQuery = useQuery({ queryKey: qk.topologies(), queryFn: () => listTopologies() });
@@ -336,6 +352,31 @@ function TopologyEditor() {
   }, [gate, state.validation, fieldErrors]);
   const selected = state.nodes.find((n) => n.selected) ?? null;
 
+  // §Phase3 card data (ticket #169): the display nodes carry the merged
+  // status summary (health + latest metrics) into each card — the registry
+  // entry decides what renders (TopologyNode consumes status_metrics). Nodes
+  // without a status entry pass through unchanged (idle canvas identical).
+  const displayNodes = useMemo(
+    () =>
+      state.nodes.map((node) => {
+        const status = statusMap.get(node.id);
+        return status === undefined
+          ? node
+          : { ...node, data: { ...node.data, health: status.health, statusMetrics: status.metrics } };
+      }),
+    [state.nodes, statusMap],
+  );
+  // SPEC-404 §Phase3: the detail panel targets the selected node when it is a
+  // state-domain node (registry-derived; TS/T2MI nodes render the honest
+  // 非状态域 note through the panel itself).
+  const selectedStateNode = useMemo(
+    () =>
+      selected === null || !isStateDomainNodeType(selected.data.node.node_type)
+        ? null
+        : { node_id: selected.id, node_type: selected.data.node.node_type },
+    [selected],
+  );
+
   return (
     <div className="dvb-topo-editor">
       <h2 className="dvb-topo-region-title">Topologies</h2>
@@ -410,7 +451,7 @@ function TopologyEditor() {
         >
           <IllegalEndHandlesContext.Provider value={illegalEnds}>
             <ReactFlow
-              nodes={state.nodes}
+              nodes={displayNodes}
               edges={state.connections}
               nodeTypes={nodeTypes}
               onNodesChange={onNodesChange}
@@ -431,13 +472,22 @@ function TopologyEditor() {
           {state.nodes.length === 0 && <CanvasEmptyOverlay />}
         </div>
         {/* #63: inspector + violations share the third grid column (inline
-            flex wrapper keeps the approved additive face to this file only). */}
+            flex wrapper keeps the approved additive face to this file only).
+            #169: the node state detail panel joins the column — presentational
+            consumer of the merged snapshot stream; CauseRef jumps reuse the
+            locate() canvas centering. */}
         <div style={{ display: "flex", flexDirection: "column", gap: 8, minWidth: 0 }}>
           <NodeInspector
             key={selected?.id ?? "none"}
             node={selected}
             fieldErrors={fieldErrors}
             onApply={(nodeId, config) => dispatch({ type: "configApplied", nodeId, config })}
+          />
+          <NodeStateDetailPanel
+            sessionId={sessionId}
+            node={selectedStateNode}
+            snapshots={snapshots}
+            onLocate={locate}
           />
           <ViolationPanel
             entries={state.validation.entries}

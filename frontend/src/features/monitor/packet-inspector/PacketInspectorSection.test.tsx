@@ -7,6 +7,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { type ReactNode } from "react";
+import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../../../api", async (importOriginal) => {
@@ -30,11 +31,11 @@ const REPO_ROOT = resolve(import.meta.dirname, "../../../../..");
 const GOLDEN = resolve(REPO_ROOT, "docs/test-vectors/golden/packet-header-set/packet-header-set.ts");
 
 /** packet 0 of the golden header set: 47 40 00 10 10 (afc=1 → payload at 4). */
-const GOLDEN_PACKET_0 = new Uint8Array(
-  readFileSync(GOLDEN).buffer,
-  readFileSync(GOLDEN).byteOffset,
-  188,
-);
+// Snapshot copy (NOT a live view over the read buffer): readFileSync may hand
+// back a pooled Buffer, and a Uint8Array built on buffer.buffer aliases the
+// shared 8KB pool — pool reuse during the run corrupted the bytes (#169: the
+// added modules perturbed transform timing and exposed this latent bug).
+const GOLDEN_PACKET_0 = new Uint8Array(readFileSync(GOLDEN).subarray(0, 188));
 
 const LOCATOR = { artifact_id: "art-g", pid: 16, packet_index: 3 };
 
@@ -76,6 +77,7 @@ describe("PacketInspectorSection — ready (golden packet 0 bytes)", () => {
     // wire evidence verbatim (SPEC-404 §4.3) — findBy waits through meta+content loads
     expect(await screen.findByTestId("inspect-content-range")).toHaveTextContent("bytes 564-751/18800");
     expect(screen.getByTestId("inspect-content-range")).toHaveTextContent("Accept-Ranges: bytes");
+    console.log("DEBUG hex row 0:", screen.getByTestId("inspect-hex-row-0").textContent);
 
     // hex: 12 rows, row 0 starts with offset 0 and the golden header bytes
     for (let r = 0; r < 12; r++) {
@@ -95,8 +97,7 @@ describe("PacketInspectorSection — ready (golden packet 0 bytes)", () => {
 
   it("renders the AF face when present and the close action calls onClose", async () => {
     // packet-header-set packet 6 (index 6): afc=3 with PCR base 12345.
-    const golden6 = new Uint8Array(readFileSync(GOLDEN).buffer, readFileSync(GOLDEN).byteOffset, 188 * 10)
-      .subarray(188 * 6, 188 * 6 + 188);
+    const golden6 = new Uint8Array(readFileSync(GOLDEN).subarray(188 * 6, 188 * 6 + 188));
     mockedMeta.mockResolvedValue({
       artifact_id: "art-g", run_id: "r", session_id: "s", kind: "faulted_ts",
       relative_path: "x", byte_size: 18800, sha256: "sha", packet_size: 188,
@@ -192,5 +193,45 @@ describe("PacketInspectorSection — explicit non-success branches (§8)", () =>
     renderSection(LOCATOR);
     expect(await screen.findByTestId("inspect-sync-warning")).toBeInTheDocument();
     expect(screen.getByTestId("inspect-field-pid")).toBeInTheDocument();
+  });
+});
+
+// SPEC-404 §Phase3 (ticket #169): the SIM_STATE Run face — view param NOT
+// extended; a state-domain run (artifacts == []) renders the 空态三问 with the
+// jump button to the node detail panel, taking precedence over both the
+// generic locator-null row and any stale locator.
+describe("PacketInspectorSection — SIM_STATE Run 空态三问 (view 不扩)", () => {
+  function renderSimState(locator: typeof LOCATOR | null) {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={["/monitor"]}>{children}</MemoryRouter>
+      </QueryClientProvider>
+    );
+    return render(<PacketInspectorSection locator={locator} onClose={() => {}} simStateRun={{ sessionId: "s-9" }} />, { wrapper });
+  }
+
+  it("renders the SIM_STATE three-question face (not the generic locator-null row)", () => {
+    renderSimState(null);
+    expect(screen.getByTestId("dvb-pi-simstate-empty")).toHaveTextContent("空 ≠ 干净");
+    expect(screen.queryByText("尚未从诊断候选点")).toBeNull();
+    expect(screen.queryByTestId("packet-inspector")).toBeNull();
+  });
+
+  it("takes precedence over a stale locator (SIM_STATE runs have no artifacts to drill)", () => {
+    renderSimState(LOCATOR);
+    expect(screen.getByTestId("dvb-pi-simstate-empty")).toBeInTheDocument();
+    expect(screen.queryByTestId("packet-inspector")).toBeNull();
+  });
+
+  it("the jump button deep-links the tracked session onto the topology canvas", () => {
+    renderSimState(null);
+    expect(screen.getByTestId("dvb-pi-simstate-jump")).toHaveAttribute("href", "/topologies?session=s-9");
+  });
+
+  it("without the simStateRun prop the pre-#169 face is byte-identical (generic empty row)", () => {
+    renderSection(null);
+    expect(screen.getByText(/尚未从诊断候选点/)).toBeInTheDocument();
+    expect(screen.queryByTestId("dvb-pi-simstate-empty")).toBeNull();
   });
 });

@@ -45,6 +45,30 @@ export function queryEvents(
   );
 }
 
+// #169 (SPEC-305 §Phase3 / SPEC-404 §Phase3): the state_observed snapshot read
+// path — a DISTINCT export beside queryEvents (A19 parallel discipline: two
+// tickets each add their own functions to this shared file; the existing
+// exports stay untouched). The endpoint's flat scalar repeated parameters
+// namespace/node_type ride the generated query type (schema.gen.ts, #167
+// sync); node_id narrowing is CLIENT-side (the §5 whitelist does not grow).
+export function queryStateObservedEvents(
+  sessionId: string,
+  query: {
+    namespace?: string[];
+    node_type?: string[];
+    limit?: number;
+    cursor?: string | null;
+    sort?: string;
+    run_id?: string | null;
+  } = {},
+) {
+  return unwrap(
+    client.GET("/api/v1/sessions/{session_id}/events", {
+      params: { path: { session_id: sessionId }, query },
+    }),
+  );
+}
+
 export function queryTimeline(
   sessionId: string,
   query: {

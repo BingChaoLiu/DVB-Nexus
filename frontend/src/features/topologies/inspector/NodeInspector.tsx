@@ -106,6 +106,24 @@ function serializeScalar(descriptor: FieldDescriptor & { kind: ScalarKind }, raw
   return descriptor.required ? undefined : (descriptor.wireDefault ?? "");
 }
 
+/** Write `value` at a group-RELATIVE dot path (e.g. "target_register.committed"
+ * under the diseqc_commands group), creating intermediate objects. For
+ * single-segment paths this is exactly the old last-segment placement. */
+function nestSet(target: Record<string, unknown>, relativePath: string, value: unknown): void {
+  const segments = relativePath.split(".");
+  let current = target;
+  for (let index = 0; index < segments.length - 1; index++) {
+    const segment = segments[index]!;
+    let next = current[segment];
+    if (typeof next !== "object" || next === null || Array.isArray(next)) {
+      next = {};
+      current[segment] = next;
+    }
+    current = next as Record<string, unknown>;
+  }
+  current[segments[segments.length - 1]!] = value;
+}
+
 function serializeRow(row: Record<string, string>, fields: FieldDescriptor[]): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const field of fields) {
@@ -121,15 +139,31 @@ function serializeForm(state: FormState, inventory: FieldDescriptor[]): Record<s
   for (const descriptor of inventory) {
     if (descriptor.kind === "group") {
       const group: Record<string, unknown> = {};
+      let hasContent = false;
       for (const child of descriptor.children ?? []) {
         if (isScalar(child)) {
           const value = serializeScalar(child, state.scalars[child.path]);
-          if (value !== undefined) group[child.path.split(".").pop()!] = value;
+          if (value !== undefined) {
+            // #169: dotted child paths nest (two-level wire objects like
+            // diseqc_commands.target_register); single-segment children land
+            // exactly where the old last-segment placement put them.
+            nestSet(group, child.path.slice(descriptor.path.length + 1), value);
+            // an unchecked checkbox is "no intent declared", not content — it
+            // must not single-handedly materialize an optional group.
+            if (!(child.kind === "checkbox" && value === false)) hasContent = true;
+          }
         } else if (isRows(child)) {
-          group[child.path.split(".").pop()!] = state.rows.map((row) => serializeRow(row, child.rowFields ?? []));
+          const rows = state.rows.map((row) => serializeRow(row, child.rowFields ?? []));
+          if (rows.length > 0 || descriptor.required) {
+            nestSet(group, child.path.slice(descriptor.path.length + 1), rows);
+            hasContent = true;
+          }
         }
       }
-      out[descriptor.path] = group;
+      // #169: a required group always materializes (pre-#169 behavior); an
+      // OPTIONAL group the user left content-empty serializes to ABSENT — an
+      // empty {} (e.g. lnb.scr without protocol) would be backend-rejected.
+      if (descriptor.required || hasContent) out[descriptor.path] = group;
     } else if (isScalar(descriptor)) {
       const value = serializeScalar(descriptor, state.scalars[descriptor.path]);
       if (value !== undefined) out[descriptor.path] = value;

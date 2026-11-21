@@ -261,3 +261,97 @@ describe("NodeInspector — Phase 2 schemas (T2miEncapsulator/T2miDemux via fiel
     });
   });
 });
+
+// --- Phase 3 #169: the #160 config DTO faces through the SAME mechanism -------
+//
+// The Phase 3 inventories (nodeTypes.ts) introduce two wire shapes the earlier
+// inventories never carried: two-level nesting (diseqc_commands.target_register
+// — dotted child paths must serialize NESTED, not flat) and OPTIONAL groups
+// (lnb.scr / tuner.diseqc_commands — a content-empty optional group serializes
+// to ABSENT, never to an empty {} that the backend would reject). The mechanism
+// core (kinds set, switch renderer, single rows, G1 semantics) is untouched.
+describe("NodeInspector — Phase 3 config serialization (ticket #169)", () => {
+  const numberInput = (path: string) =>
+    within(screen.getByText(path).parentElement!).getByRole("spinbutton") as HTMLInputElement;
+  const selectOf = (path: string) =>
+    within(screen.getByText(path).parentElement!).getByRole("combobox") as HTMLSelectElement;
+  const checkboxOf = (path: string) =>
+    within(screen.getByText(path).parentElement!).getByRole("checkbox") as HTMLInputElement;
+
+  it("lnb apply with scr untouched → lnb_kind + lo_frequencies present, scr ABSENT (optional empty group omitted)", async () => {
+    const user = userEvent.setup();
+    const onApply = vi.fn();
+    render(<NodeInspector node={flowNode("lnb", {}, "lnb-0")} fieldErrors={[]} onApply={onApply} />);
+    await user.selectOptions(selectOf("lnb_kind"), "universal");
+    await user.type(numberInput("lo_frequencies.low_khz"), "9750");
+    await user.type(numberInput("lo_frequencies.high_khz"), "10600");
+    await user.click(screen.getByRole("button", { name: "应用到草稿" }));
+    expect(onApply).toHaveBeenCalledWith("lnb-0", {
+      lnb_kind: "universal",
+      lo_frequencies: { low_khz: 9750, high_khz: 10600 },
+    });
+  });
+
+  it("lnb apply with scr filled → nested scr object with protocol + ub_assignments rows (wire keys per UbAssignmentDTO)", async () => {
+    const user = userEvent.setup();
+    const onApply = vi.fn();
+    render(<NodeInspector node={flowNode("lnb", {}, "lnb-0")} fieldErrors={[]} onApply={onApply} />);
+    await user.selectOptions(selectOf("lnb_kind"), "universal");
+    await user.type(numberInput("lo_frequencies.low_khz"), "9750");
+    await user.type(numberInput("lo_frequencies.high_khz"), "10600");
+    await user.selectOptions(selectOf("scr.protocol"), "EN50494");
+    await user.click(screen.getByRole("button", { name: "增行" }));
+    await user.type(numberInput("scr.ub_assignments[].ub_slot"), "0");
+    await user.type(numberInput("scr.ub_assignments[].ub_center_freq_mhz"), "1210");
+    await user.type(screen.getByLabelText("scr.ub_assignments[].tuner_node"), "tuner-a");
+    await user.type(screen.getByLabelText("scr.ub_assignments[].position"), "A");
+    await user.click(screen.getByRole("button", { name: "应用到草稿" }));
+    const config = onApply.mock.calls[0]![1] as Record<string, unknown>;
+    expect(config.scr).toEqual({
+      protocol: "EN50494",
+      ub_assignments: [
+        { tuner_node: "tuner-a", ub_slot: 0, ub_center_freq_mhz: 1210, position: "A", ub_bandwidth_mhz: 46 },
+      ],
+    });
+  });
+
+  it("tuner apply with diseqc_commands untouched → tuning_request only; ub_slot/diseqc_commands ABSENT", async () => {
+    const user = userEvent.setup();
+    const onApply = vi.fn();
+    render(<NodeInspector node={flowNode("tuner", {}, "tuner-0")} fieldErrors={[]} onApply={onApply} />);
+    await user.type(numberInput("tuning_request.frequency_khz"), "11095000");
+    await user.selectOptions(selectOf("tuning_request.polarization"), "vertical");
+    await user.click(screen.getByRole("button", { name: "应用到草稿" }));
+    expect(onApply).toHaveBeenCalledWith("tuner-0", {
+      tuning_request: { frequency_khz: 11095000, polarization: "vertical" },
+    });
+  });
+
+  it("tuner apply with intent → dotted target_register paths serialize NESTED (DiseqcCommandsDTO wire shape)", async () => {
+    const user = userEvent.setup();
+    const onApply = vi.fn();
+    render(<NodeInspector node={flowNode("tuner", {}, "tuner-0")} fieldErrors={[]} onApply={onApply} />);
+    await user.type(numberInput("tuning_request.frequency_khz"), "11095000");
+    await user.selectOptions(selectOf("tuning_request.polarization"), "vertical");
+    await user.click(checkboxOf("diseqc_commands.target_register.committed"));
+    await user.click(screen.getByRole("button", { name: "增行" }));
+    await user.selectOptions(selectOf("diseqc_commands.nibble_writes[].register"), "committed");
+    await user.selectOptions(selectOf("diseqc_commands.nibble_writes[].nibble"), "high");
+    await user.type(numberInput("diseqc_commands.nibble_writes[].value"), "1");
+    await user.click(screen.getByRole("button", { name: "应用到草稿" }));
+    const config = onApply.mock.calls[0]![1] as Record<string, unknown>;
+    expect(config.diseqc_commands).toEqual({
+      target_register: { committed: true, uncommitted: false },
+      nibble_writes: [{ register: "committed", nibble: "high", value: 1 }],
+    });
+  });
+
+  it("switch apply → power_pass verbatim (SwitchConfigDTO single field)", async () => {
+    const user = userEvent.setup();
+    const onApply = vi.fn();
+    render(<NodeInspector node={flowNode("diseqc_switch", {}, "sw-0")} fieldErrors={[]} onApply={onApply} />);
+    await user.selectOptions(selectOf("power_pass"), "on");
+    await user.click(screen.getByRole("button", { name: "应用到草稿" }));
+    expect(onApply).toHaveBeenCalledWith("sw-0", { power_pass: "on" });
+  });
+});
