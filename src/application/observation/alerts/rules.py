@@ -378,7 +378,8 @@ def _invalid(field: str, value, reason: str) -> AlertError:
 
 
 def default_rule_set() -> HealthRuleSet:
-    """The six SPEC-304 §8 default rules, ``mvp-sandbox`` profile.
+    """The six SPEC-304 §8 default rules + the two Phase 3 alert
+    registrations (SPEC-304 §Phase3, ticket #166), ``mvp-sandbox`` profile.
 
     The thresholds are sandbox-profile values chosen for the MVP teaching
     loop — explicitly NOT DVB compliance limits (REQ-OBS-304-001). Input
@@ -388,6 +389,16 @@ def default_rule_set() -> HealthRuleSet:
     producer yet (GatewayMetrics.failures is not a catalog metric — #50 face
     is NOT-TOUCH for #52): until that input exists the rule honestly
     contributes ``unknown`` (no false firing, SPEC-304 §11).
+
+    The Phase 3 rules (``TUNER_UNLOCKED``/``BER_SEVERE``) read the
+    state_evaluator tuner-state gauges (``tuner.lock_state``/
+    ``tuner.ber_state`` — the discrete codes are frozen on the catalog face)
+    through the UNCHANGED metric input face (ruling A6): the AlertEngine
+    lifecycle machine is untouched.  They group per ``node_id`` (the
+    observed tuner, SPEC-304 §6) and declare ``required=False`` — a session
+    without tuner snapshots is not an unhealthy session.  The ``elevated``
+    BER tier deliberately has NO rule (SPEC-304 §Phase3: elevated 不告警 —
+    the SPEC-307 combination judgement owns that tier).
     """
     return HealthRuleSet(
         ruleset_id="mvp-default-health-rules",
@@ -547,6 +558,72 @@ def default_rule_set() -> HealthRuleSet:
                 close_condition=Condition(
                     operator=ComparisonOperator.LTE, threshold=0, unit="failures"
                 ),
+            ),
+            # --- Phase 3 registrations (SPEC-304 §Phase3, ticket #166) -------
+            # Input = the state_evaluator tuner-state gauges (rf.state_observed
+            # snapshots ingested through the metrics engine, ruling A6).  The
+            # discrete codes are frozen on the catalog face: lock_state
+            # locked=0/unlocked=1, ber_state normal=0/elevated=1/severe=2.
+            # LAST over a short window = the newest snapshot per node;
+            # freshness follows the TOPOLOGY_PATH_DOWN gauge precedent (30 s
+            # sandbox profile).  required=False: no tuner snapshots ⇒ no
+            # verdict, never an unhealthy one (§7).
+            HealthRule(
+                rule_id="TUNER_UNLOCKED",
+                version="1.0.0",
+                name="Tuner unlocked",
+                description=(
+                    "RF signal: the tuner snapshot reports lock_state=unlocked "
+                    "(SPEC-304 §Phase3 registration; sandbox profile: any "
+                    "unlocked snapshot opens)"
+                ),
+                dimension=HealthDimension.TOPOLOGY,
+                severity=AlertSeverity.WARNING,
+                input_metric="tuner.lock_state",
+                aggregation=RuleAggregation.LAST,
+                window_ns=10_000_000_000,
+                min_samples=1,
+                freshness_ns=30_000_000_000,
+                for_duration_ns=0,
+                resolve_duration_ns=5_000_000_000,
+                reopen_window_ns=60_000_000_000,
+                open_condition=Condition(
+                    operator=ComparisonOperator.GT, threshold=0, unit="1"
+                ),
+                close_condition=Condition(
+                    operator=ComparisonOperator.LTE, threshold=0, unit="1"
+                ),
+                group_dimensions=("node_id",),
+                required=False,
+            ),
+            HealthRule(
+                rule_id="BER_SEVERE",
+                version="1.0.0",
+                name="BER state severe",
+                description=(
+                    "RF signal: the tuner snapshot reports ber_state=severe "
+                    "(code 2; SPEC-304 §Phase3 registration; the elevated "
+                    "tier (code 1) deliberately alerts nowhere — the "
+                    "SPEC-307 combination judgement owns it"
+                ),
+                dimension=HealthDimension.TOPOLOGY,
+                severity=AlertSeverity.ERROR,
+                input_metric="tuner.ber_state",
+                aggregation=RuleAggregation.LAST,
+                window_ns=10_000_000_000,
+                min_samples=1,
+                freshness_ns=30_000_000_000,
+                for_duration_ns=0,
+                resolve_duration_ns=5_000_000_000,
+                reopen_window_ns=60_000_000_000,
+                open_condition=Condition(
+                    operator=ComparisonOperator.GTE, threshold=2, unit="1"
+                ),
+                close_condition=Condition(
+                    operator=ComparisonOperator.LTE, threshold=1, unit="1"
+                ),
+                group_dimensions=("node_id",),
+                required=False,
             ),
         ),
     )

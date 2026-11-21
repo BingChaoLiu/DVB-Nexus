@@ -1,4 +1,6 @@
-"""Initial metric catalog — the 15 SPEC-302 §4 metrics (ticket #50).
+"""Initial metric catalog — the 15 SPEC-302 §4 metrics (ticket #50) plus
+the two Phase 3 alert-input gauges (``tuner.lock_state``/``tuner.ber_state``,
+SPEC-304 §Phase3, ticket #166).
 
 Every catalog metric registers with: explicit unit (§3), provenance
 declaration (§3: source_event_types 和/或快照来源), legal aggregation ops
@@ -60,7 +62,9 @@ _SIMULATION_FAMILIES = (
     | SIMULATION_CLOCK_EVENT_TYPES
 )
 
-#: The 15 catalog names (SPEC-302 §4 table order).
+#: The 15 catalog names (SPEC-302 §4 table order) + the two Phase 3 alert
+#: inputs (SPEC-304 §Phase3, ticket #166): the state_evaluator tuner-state
+#: gauges derived from ``rf.state_observed`` snapshots.
 CATALOG_METRIC_NAMES: tuple[str, ...] = (
     "ts.packet_rate",
     "ts.bitrate",
@@ -77,6 +81,8 @@ CATALOG_METRIC_NAMES: tuple[str, ...] = (
     "observation.duplicate_events_total",
     "observation.consumer_lag_events",
     "observation.alerts_active",
+    "tuner.lock_state",
+    "tuner.ber_state",
 )
 
 _DEFINITIONS: tuple[MetricDefinition, ...] = (
@@ -270,6 +276,41 @@ _DEFINITIONS: tuple[MetricDefinition, ...] = (
         description="active alert records (SPEC-304 store; producer lands with #52)",
         allowed_dimensions=("session_id",),
         snapshot_source="alert records (SPEC-304)",
+        aggregation=(AggregationOperation.LAST, AggregationOperation.MAX),
+        temporality=MetricTemporality.INSTANT,
+    ),
+    # --- Phase 3 alert inputs (SPEC-304 §Phase3, ticket #166) ---------------
+    # Discrete tuner-state gauges derived from ``rf.state_observed``
+    # (state_evaluator source, simulated confidence — the constant pairing,
+    # SPEC-303 §Phase3).  Comparison semantics (frozen, ticket #166 REPORT):
+    # lock_state locked=0.0 / unlocked=1.0 (alarm=1 boolean-style gauge);
+    # ber_state normal=0.0 / elevated=1.0 / severe=2.0 (ordinal ladder —
+    # elevated=1 satisfies no alert open condition, SPEC-304 §Phase3
+    # elevated 不告警).  ``ber_state=null`` (unlocked keeps no grade) and
+    # out-of-vocabulary strings yield no sample (缺失 ≠ 零).
+    MetricDefinition(
+        metric_name="tuner.lock_state",
+        value_type=MetricValueType.GAUGE,
+        unit="1",
+        description=(
+            "tuner lock state as a numeric code (locked=0, unlocked=1) "
+            "derived from rf.state_observed snapshots"
+        ),
+        allowed_dimensions=("session_id", "node_id"),
+        source_event_types=("rf.state_observed",),
+        aggregation=(AggregationOperation.LAST, AggregationOperation.MAX),
+        temporality=MetricTemporality.INSTANT,
+    ),
+    MetricDefinition(
+        metric_name="tuner.ber_state",
+        value_type=MetricValueType.GAUGE,
+        unit="1",
+        description=(
+            "tuner BER state as a numeric code (normal=0, elevated=1, "
+            "severe=2) derived from rf.state_observed snapshots"
+        ),
+        allowed_dimensions=("session_id", "node_id"),
+        source_event_types=("rf.state_observed",),
         aggregation=(AggregationOperation.LAST, AggregationOperation.MAX),
         temporality=MetricTemporality.INSTANT,
     ),

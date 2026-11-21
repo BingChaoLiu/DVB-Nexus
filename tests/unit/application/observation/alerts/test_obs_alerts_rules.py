@@ -259,18 +259,21 @@ class TestRuleSet:
 
 
 class TestDefaultRuleSet:
-    """SPEC-304 §8: the six default rules ship declaratively."""
+    """SPEC-304 §8: the six default rules ship declaratively, plus the two
+    Phase 3 alert registrations (SPEC-304 §Phase3, ticket #166)."""
 
     def test_default_set_has_exactly_the_six_spec_rules(self) -> None:
         rule_set = default_rule_set()
         assert rule_set.profile == "mvp-sandbox"
         assert tuple(sorted(rule.rule_id for rule in rule_set.rules)) == (
+            "BER_SEVERE",
             "OBS_CONSUMER_LAG_HIGH",
             "OBS_STORAGE_WRITE_FAILURE",
             "PCR_JITTER_HIGH",
             "PSI_STALE",
             "TOPOLOGY_PATH_DOWN",
             "TS_CC_ERROR_RATE_HIGH",
+            "TUNER_UNLOCKED",
         )
 
     def test_every_default_rule_covers_one_dimension(self) -> None:
@@ -283,6 +286,8 @@ class TestDefaultRuleSet:
             "TOPOLOGY_PATH_DOWN": HealthDimension.TOPOLOGY,
             "OBS_CONSUMER_LAG_HIGH": HealthDimension.OBSERVATION,
             "OBS_STORAGE_WRITE_FAILURE": HealthDimension.OBSERVATION,
+            "TUNER_UNLOCKED": HealthDimension.TOPOLOGY,
+            "BER_SEVERE": HealthDimension.TOPOLOGY,
         }
 
     def test_every_default_rule_validates(self) -> None:
@@ -294,3 +299,72 @@ class TestDefaultRuleSet:
             assert rule.open_condition.unit, rule.rule_id
             if rule.close_condition is not None:
                 assert rule.close_condition.unit, rule.rule_id
+
+
+class TestPhase3AlertRules:
+    """SPEC-304 §Phase3 registrations (ticket #166): TUNER_UNLOCKED (warning)
+    and BER_SEVERE (error) read the state_evaluator tuner-state gauges
+    (``tuner.lock_state``/``tuner.ber_state``) through the unchanged metric
+    input face — the ``elevated`` tier deliberately declares NO rule (the
+    SPEC-307 combination judgement owns it, SPEC-304 §Phase3 elevated 不告警).
+
+    Comparison semantics ride the frozen discrete-state codes (catalog
+    Phase 3 note): lock_state locked=0/unlocked=1, ber_state
+    normal=0/elevated=1/severe=2.  Per-node grouping (SPEC-304 §6) — the
+    fingerprint dedups per (rule, node).
+    """
+
+    def test_tuner_unlocked_registration_is_pinned(self) -> None:
+        rule = default_rule_set().rule("TUNER_UNLOCKED")
+        assert rule is not None
+        assert rule.version == "1.0.0"
+        assert rule.severity is AlertSeverity.WARNING
+        assert rule.input_metric == "tuner.lock_state"
+        assert rule.aggregation is RuleAggregation.LAST
+        assert rule.group_dimensions == ("node_id",)
+        # Alarm=1 code: unlocked (1) opens, locked (0) closes.
+        assert rule.open_condition == Condition(
+            operator=ComparisonOperator.GT, threshold=0, unit="1"
+        )
+        assert rule.close_condition == Condition(
+            operator=ComparisonOperator.LTE, threshold=0, unit="1"
+        )
+
+    def test_ber_severe_registration_is_pinned(self) -> None:
+        rule = default_rule_set().rule("BER_SEVERE")
+        assert rule is not None
+        assert rule.version == "1.0.0"
+        assert rule.severity is AlertSeverity.ERROR
+        assert rule.input_metric == "tuner.ber_state"
+        assert rule.aggregation is RuleAggregation.LAST
+        assert rule.group_dimensions == ("node_id",)
+        # Ordinal ladder: severe (2) opens, elevated (1) closes — elevated
+        # (1) therefore satisfies NEITHER condition (不告警) and a measured
+        # close rides the same band.
+        assert rule.open_condition == Condition(
+            operator=ComparisonOperator.GTE, threshold=2, unit="1"
+        )
+        assert rule.close_condition == Condition(
+            operator=ComparisonOperator.LTE, threshold=1, unit="1"
+        )
+
+    def test_state_rules_are_additive_observations_not_required_inputs(self) -> None:
+        # A TS-only session has no tuner snapshots: the state rules must not
+        # force the roll-up unknown (§7 required-input semantics).
+        for rule_id in ("TUNER_UNLOCKED", "BER_SEVERE"):
+            assert default_rule_set().rule(rule_id).required is False
+
+    def test_no_rule_declares_the_elevated_tier(self) -> None:
+        # SPEC-304 §Phase3: elevated 不告警 — the tier stays an honest gap
+        # until the SPEC-307 combination judgement lands.
+        assert default_rule_set().rule("BER_ELEVATED") is None
+
+    def test_state_rules_target_registered_catalog_metrics(self) -> None:
+        from application.observation.metrics.catalog import CATALOG_METRIC_NAMES
+
+        for rule_id in ("TUNER_UNLOCKED", "BER_SEVERE"):
+            assert default_rule_set().rule(rule_id).input_metric in CATALOG_METRIC_NAMES
+
+    def test_state_rules_validate_and_stay_declarative(self) -> None:
+        for rule_id in ("TUNER_UNLOCKED", "BER_SEVERE"):
+            validate_health_rule(default_rule_set().rule(rule_id))

@@ -2,7 +2,8 @@
 
 Seam: ``MetricRegistry`` / ``default_catalog()``. These tests pin:
 
-- catalog completeness: all 15 SPEC-302 section 4 catalog metrics register
+- catalog completeness: all 15 SPEC-302 section 4 catalog metrics plus the
+  two Phase 3 alert-input gauges (ticket #166) register
   and validate (catalog integrity IS REQ-OBS-302-001);
 - unknown metrics are refused with the SPEC-300 §13 code
   ``OBS_METRIC_NOT_FOUND`` unless ``allow_unknown=True``;
@@ -35,6 +36,8 @@ from domain.observation import (
 
 
 def test_catalog_declares_exactly_the_fifteen_spec_metrics() -> None:
+    # The 15 SPEC-302 §4 names + the two Phase 3 alert inputs (ticket #166,
+    # SPEC-304 §Phase3 — the additive registration is pinned here verbatim).
     assert set(CATALOG_METRIC_NAMES) == {
         "ts.packet_rate",
         "ts.bitrate",
@@ -51,8 +54,10 @@ def test_catalog_declares_exactly_the_fifteen_spec_metrics() -> None:
         "observation.duplicate_events_total",
         "observation.consumer_lag_events",
         "observation.alerts_active",
+        "tuner.lock_state",
+        "tuner.ber_state",
     }
-    assert len(CATALOG_METRIC_NAMES) == 15
+    assert len(CATALOG_METRIC_NAMES) == 17
 
 
 def test_default_catalog_registers_and_validates_all_fifteen() -> None:
@@ -78,6 +83,8 @@ def test_default_catalog_registers_and_validates_all_fifteen() -> None:
         ("observation.duplicate_events_total", MetricValueType.COUNTER, "events"),
         ("observation.consumer_lag_events", MetricValueType.GAUGE, "events"),
         ("observation.alerts_active", MetricValueType.GAUGE, "alerts"),
+        ("tuner.lock_state", MetricValueType.GAUGE, "1"),
+        ("tuner.ber_state", MetricValueType.GAUGE, "1"),
     ],
 )
 def test_every_catalog_metric_has_type_and_explicit_unit(
