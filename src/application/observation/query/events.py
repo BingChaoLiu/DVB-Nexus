@@ -32,6 +32,8 @@ from application.errors import (
     SemanticValidationError,
 )
 from application.observation.query.errors import OBS_INVALID_TIME_DOMAIN
+from domain.observation.registry import REGISTERED_EVENT_TYPES
+from domain.topology.node_types import ALL_NODE_TYPES
 
 #: The four SPEC-305 §5 sort values.
 SORT_JOURNAL_ASC = "journal_asc"
@@ -39,6 +41,18 @@ SORT_JOURNAL_DESC = "journal_desc"
 SORT_TIME_ASC = "time_asc"
 SORT_TIME_DESC = "time_desc"
 VALID_SORTS = (SORT_JOURNAL_ASC, SORT_JOURNAL_DESC, SORT_TIME_ASC, SORT_TIME_DESC)
+
+#: The registered namespace prefixes (SPEC-303 §Phase3 adds ``rf``/``sec``;
+#: derived from the event registry so the whitelist can never drift from
+#: what actually exists). Query values outside the set are the 400 row.
+VALID_QUERY_NAMESPACES = tuple(
+    sorted({event_type.split(".", 1)[0] for event_type in REGISTERED_EVENT_TYPES})
+)
+
+#: The registered node-type vocabulary (the domain topology registry is the
+#: single node_type declaration point). Query values outside the set are
+#: the 400 row — a typo is refused, not silently an empty page.
+VALID_QUERY_NODE_TYPES = tuple(sorted({spec.node_type for spec in ALL_NODE_TYPES}))
 
 WALL_CLOCK_DOMAIN = "wall:utc"
 
@@ -64,6 +78,12 @@ class EventsQueryRequest:
     event_types: tuple[str, ...] = ()
     severities: tuple[str, ...] = ()
     producer_ids: tuple[str, ...] = ()
+    #: SPEC-305 §Phase3 namespace dimension (rf.*/sec.* snapshot queries;
+    #: registry-derived whitelist ``VALID_QUERY_NAMESPACES``).
+    namespaces: tuple[str, ...] = ()
+    #: SPEC-305 §Phase3 node_type dimension (whitelist
+    #: ``VALID_QUERY_NODE_TYPES``; resolved from the snapshot payload shape).
+    node_types: tuple[str, ...] = ()
     run_id: Optional[str] = None
     clock_domain: Optional[str] = None
     clock_epoch: Optional[int] = None

@@ -3001,6 +3001,8 @@ export interface operations {
                 event_type?: string[];
                 severity?: string[];
                 producer_id?: string[];
+                namespace?: string[];
+                node_type?: string[];
                 run_id?: string | null;
                 clock_domain?: string | null;
                 clock_epoch?: number | null;

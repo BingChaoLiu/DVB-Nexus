@@ -155,6 +155,8 @@ class ServiceObservationQueryPort:
             event_types=tuple(params.get("event_type") or ()),
             severities=tuple(params.get("severity") or ()),
             producer_ids=tuple(params.get("producer_id") or ()),
+            namespaces=tuple(params.get("namespace") or ()),
+            node_types=tuple(params.get("node_type") or ()),
             run_id=params.get("run_id"),
             clock_domain=params.get("clock_domain"),
             clock_epoch=params.get("clock_epoch"),
@@ -343,6 +345,8 @@ def build_observation_router(
         event_type: list[str] = Query(default=()),
         severity: list[str] = Query(default=()),
         producer_id: list[str] = Query(default=()),
+        namespace: list[str] = Query(default=()),
+        node_type: list[str] = Query(default=()),
         run_id: Optional[str] = Query(default=None),
         clock_domain: Optional[str] = Query(default=None),
         clock_epoch: Optional[int] = Query(default=None, ge=0),
@@ -359,6 +363,10 @@ def build_observation_router(
             event_type=event_type,
             severity=severity,
             producer_id=producer_id,
+            # SPEC-305 §Phase3 snapshot-query dimensions (ticket #167) —
+            # flat scalar list parameters (§5 禁嵌套对象参数).
+            namespace=namespace,
+            node_type=node_type,
             run_id=run_id,
             clock_domain=clock_domain,
             clock_epoch=clock_epoch,
