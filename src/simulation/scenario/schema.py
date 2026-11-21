@@ -120,6 +120,13 @@ SIM_SCENARIO_SOLUTION_LEAK = "SIM_SCENARIO_SOLUTION_LEAK"
 #: the string form, SPEC-301 §8 additive-compat vocabulary).
 SCENARIO_SCHEMA_VERSION = "1"
 
+#: The Phase 3 scenario container version (Lab Pack v3, ticket #157's
+#: approved draft; ticket #171 lands the additive parse branch per
+#: orchestrator ruling A3).  The wire accepts ``3`` or ``"3"`` — both
+#: normalize to the string form; a v3 document is **never** rewritten to
+#: ``"1"`` (禁止降级改写, ruling A3).
+SCENARIO_SCHEMA_VERSION_V3 = "3"
+
 #: MVP 判据 kind 闭集（SPEC-206 §7 冻结；新增 kind 走 spec 修订）.
 SCENARIO_CRITERION_KINDS = frozenset(
     {
@@ -134,6 +141,11 @@ SCENARIO_CRITERION_KINDS = frozenset(
 
 _ACTIVATION_KINDS = frozenset({"packet_index", "session_start"})
 _SIMULATION_MODES = frozenset({"deterministic", "realtime"})
+
+#: The v3 ``simulation_config.fidelity`` value domain (ruling A3; the
+#: Phase 3 Run form — ADR-0012 decision 2's SIM_STATE first-class face).
+#: ``mode`` / ``clock`` stay the v1 branch's exclusive keys.
+_SIMULATION_FIDELITIES = frozenset({"SIM_STATE"})
 
 #: BISS Mode 1 session word wire shape (SPEC-610 §5: 12 hex = 48 bit).
 _BISS_SW_WIRE_PATTERN = re.compile(r"^[0-9A-Fa-f]{12}$")
@@ -331,6 +343,10 @@ class ScenarioDocument:
     JSON serialization — the version-pinning identity (SPEC-205 §5: 加载
     即钉扎 scenario 版本与内容哈希). Key order and ``1`` vs ``"1"`` do
     not change the hash; any content change does.
+
+    ``fidelity`` (ticket #171, ruling A3) is the v3 ``simulation_config``
+    Run-form declaration (``"SIM_STATE"``); v1 documents carry ``None`` —
+    the additive field never participates in the v1 parse path.
     """
 
     schema_version: str
@@ -351,6 +367,7 @@ class ScenarioDocument:
     raw: Mapping[str, Any] = field(repr=False, compare=False)
     biss: "BissMode1Config | BissModeEConfig | None" = None
     content_hash: str = ""
+    fidelity: str | None = None
 
     def fault_ids(self) -> tuple[str, ...]:
         """The declared fault ids of this scenario's plan (plan order)."""
@@ -975,14 +992,27 @@ def parse_scenario_document(data: Mapping[str, Any]) -> ScenarioDocument:
     root = "$"
 
     schema_version_raw = data.get("schema_version")
+    # Ruling A3 (ticket #171): the accepted set is {1, "1", 3, "3"} — the
+    # v1 face unchanged, the Phase 3 container additive.  A v3 document
+    # keeps its own version in the normalized wire (禁止降级改写为 v1).
+    resolved_schema_version: str | None = None
     if schema_version_raw is None:
         schema_errors.append(f"{root}.schema_version: required field is missing")
-    elif isinstance(schema_version_raw, bool) or not (
-        schema_version_raw == 1 or schema_version_raw == SCENARIO_SCHEMA_VERSION
-    ):
+    elif isinstance(schema_version_raw, bool):
         schema_errors.append(
             f"{root}.schema_version: unsupported scenario format version "
-            "(this spec corresponds to \"1\", SPEC-205 §3)"
+            "(this spec corresponds to \"1\" (SPEC-205 §3) and \"3\" "
+            "(Lab Pack v3, ruling A3))"
+        )
+    elif schema_version_raw in (1, "1"):
+        resolved_schema_version = SCENARIO_SCHEMA_VERSION
+    elif schema_version_raw in (3, SCENARIO_SCHEMA_VERSION_V3):
+        resolved_schema_version = SCENARIO_SCHEMA_VERSION_V3
+    else:
+        schema_errors.append(
+            f"{root}.schema_version: unsupported scenario format version "
+            "(this spec corresponds to \"1\" (SPEC-205 §3) and \"3\" "
+            "(Lab Pack v3, ruling A3))"
         )
 
     scenario_id = _require_uuid4(data, "scenario_id", root, schema_errors)
@@ -1016,10 +1046,38 @@ def parse_scenario_document(data: Mapping[str, Any]) -> ScenarioDocument:
     seed: int | None = None
     deterministic = False
     clock_config: SimulationClockConfig | None = None
+    fidelity: str | None = None
     raw_sim_config = _require_mapping(
         data, "simulation_config", root, schema_errors
     )
-    if raw_sim_config is not None:
+    if raw_sim_config is not None and resolved_schema_version == (
+        SCENARIO_SCHEMA_VERSION_V3
+    ):
+        # Ruling A3's v3 branch (ticket #171): fidelity ∈ {SIM_STATE} +
+        # seed; ``mode`` / ``clock`` are the v1 branch's exclusive keys
+        # (a v3 document carrying them rides ``raw`` verbatim, semantics
+        # stay the v3 face — accepted-and-ignored, REPORT-frozen).  The
+        # synthesized clock is the deterministic epoch-zero default: the
+        # session spec contract requires a clock config and the SIM_STATE
+        # Run form is deterministic (ADR-0012 decision 6).
+        seed = _require_int_value(
+            raw_sim_config, "seed", f"{root}.simulation_config", schema_errors,
+            minimum=0,
+            maximum=2**64 - 1,
+        )
+        fidelity = _require_non_empty_str(
+            raw_sim_config, "fidelity", f"{root}.simulation_config",
+            schema_errors,
+        )
+        if fidelity is not None and fidelity not in _SIMULATION_FIDELITIES:
+            schema_errors.append(
+                f"{root}.simulation_config.fidelity: must be one of "
+                f"{sorted(_SIMULATION_FIDELITIES)} (the Phase 3 Run form, "
+                "ruling A3)"
+            )
+        deterministic = True
+        clock_config = SimulationClockConfig(mode="deterministic")
+    elif raw_sim_config is not None:
         seed = _require_int_value(
             raw_sim_config, "seed", f"{root}.simulation_config", schema_errors,
             minimum=0,
@@ -1094,13 +1152,15 @@ def parse_scenario_document(data: Mapping[str, Any]) -> ScenarioDocument:
             details=tuple(schema_errors),
         )
 
-    # Normalized wire mapping (schema_version normalized to the string form)
-    # — the pinning-hash source and the export round-trip base.
+    # Normalized wire mapping (schema_version normalized to the string
+    # form of the *document's own* container version — v3 stays "3",
+    # ruling A3's no-downgrade face) — the pinning-hash source and the
+    # export round-trip base.
     normalized = copy.deepcopy(dict(data))
-    normalized["schema_version"] = SCENARIO_SCHEMA_VERSION
+    normalized["schema_version"] = resolved_schema_version
 
     return ScenarioDocument(
-        schema_version=SCENARIO_SCHEMA_VERSION,
+        schema_version=resolved_schema_version,
         scenario_id=str(scenario_id),
         version=str(version),
         title=str(title),
@@ -1120,6 +1180,7 @@ def parse_scenario_document(data: Mapping[str, Any]) -> ScenarioDocument:
         biss=biss_config,
         raw=MappingProxyType(normalized),
         content_hash=scenario_content_hash(normalized),
+        fidelity=fidelity,
     )
 
 

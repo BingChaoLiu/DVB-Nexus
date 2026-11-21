@@ -94,14 +94,70 @@ class TestLnbConfigKeys:
         assert set(_vocab.SCR_PROTOCOLS) == set(UNICABLE_PROTOCOLS)
 
     def test_drive_keys_are_evaluation_time_conventions(self) -> None:
-        # The drive keys (voltage/tone/short-circuit) are NOT DTO fields:
-        # they arrive via fault transforms (#163) or scenario calibration
-        # (#171) after config validation.  Pinned as literals.
+        # The drive keys (voltage/tone/short-circuit) are pinned as
+        # literals (the evaluator's parse face never renames under us).
         assert _vocab.VOLTAGE_CONFIG_KEY == "voltage"
         assert _vocab.TONE_COMMANDED_CONFIG_KEY == "tone_commanded"
         assert _vocab.TONE_ACTUAL_CONFIG_KEY == "tone_actual"
         assert _vocab.TONE_COMPOSITE_CONFIG_KEY == "tone_composite"
         assert _vocab.SHORT_CIRCUIT_STATE_CONFIG_KEY == "short_circuit_state"
+
+    def test_drive_keys_are_first_class_optional_dto_fields(self) -> None:
+        # Ruling A20 (ticket #171): the five lnb drive keys are declared
+        # optional ``LnbConfigDTO`` fields — the scenario-calibration and
+        # TONE_RESIDUE-transform face is part of the schema authority, no
+        # longer an undeclared post-validation bypass.  ``tone_actual``
+        # keeps the follow-commanded fallback (default ``None``); the
+        # other four default to the evaluator's unconfigured semantics.
+        from domain.topology.node_types import LnbConfigDTO
+
+        drive_fields = (
+            _vocab.VOLTAGE_CONFIG_KEY,
+            _vocab.TONE_COMMANDED_CONFIG_KEY,
+            _vocab.TONE_ACTUAL_CONFIG_KEY,
+            _vocab.TONE_COMPOSITE_CONFIG_KEY,
+            _vocab.SHORT_CIRCUIT_STATE_CONFIG_KEY,
+        )
+        for field_name in drive_fields:
+            assert field_name in LnbConfigDTO.model_fields
+        assert LnbConfigDTO.model_fields[_vocab.TONE_ACTUAL_CONFIG_KEY].default is None
+        assert LnbConfigDTO.model_fields[_vocab.VOLTAGE_CONFIG_KEY].default == "off"
+        assert (
+            LnbConfigDTO.model_fields[_vocab.TONE_COMMANDED_CONFIG_KEY].default
+            == "none"
+        )
+        assert (
+            LnbConfigDTO.model_fields[_vocab.TONE_COMPOSITE_CONFIG_KEY].default
+            == "none"
+        )
+        assert (
+            LnbConfigDTO.model_fields[
+                _vocab.SHORT_CIRCUIT_STATE_CONFIG_KEY
+            ].default
+            == "normal"
+        )
+
+    def test_drive_key_vocabularies_match_dto_literals(self) -> None:
+        # The evaluator-side vocabulary tuples agree field-for-field with
+        # the DTO Literals (the same A20 registration face).
+        from domain.topology.node_types import LnbConfigDTO
+
+        lnb_fields = LnbConfigDTO.model_fields
+        assert set(_vocab.VOLTAGES) == set(
+            lnb_fields[_vocab.VOLTAGE_CONFIG_KEY].annotation.__args__
+        )
+        assert set(_vocab.TONES) == set(
+            lnb_fields[_vocab.TONE_COMMANDED_CONFIG_KEY].annotation.__args__
+        )
+        assert set(_vocab.TONES) == set(
+            lnb_fields[_vocab.TONE_ACTUAL_CONFIG_KEY].annotation.__args__[0].__args__
+        )
+        assert set(_vocab.TONE_COMPOSITES) == set(
+            lnb_fields[_vocab.TONE_COMPOSITE_CONFIG_KEY].annotation.__args__
+        )
+        assert set(_vocab.SHORT_CIRCUIT_STATES) == set(
+            lnb_fields[_vocab.SHORT_CIRCUIT_STATE_CONFIG_KEY].annotation.__args__
+        )
 
     def test_drive_vocabularies_are_spec_literals(self) -> None:
         assert _vocab.VOLTAGES == ("off", "13V", "18V")

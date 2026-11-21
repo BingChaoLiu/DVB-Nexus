@@ -897,3 +897,20 @@ class TestPhase3VocabularyDriftLock:
             TUNER_NODE_TYPE,
             DISEQC_SWITCH_NODE_TYPE,
         }
+
+    def test_lnb_drive_keys_are_first_class_dto_fields(self) -> None:
+        # Ruling A20 (ticket #171): the five lnb evaluation-time drive keys
+        # are declared optional ``LnbConfigDTO`` fields — the
+        # scenario-calibration / TONE_RESIDUE-transform face joins the
+        # schema authority (registration face; the evaluator-side
+        # vocabulary lock lives in test_evaluator_vocab_drift_lock.py).
+        from domain.topology.node_types import LnbConfigDTO
+
+        for key in (
+            "voltage",
+            "tone_commanded",
+            "tone_actual",
+            "tone_composite",
+            "short_circuit_state",
+        ):
+            assert key in LnbConfigDTO.model_fields
