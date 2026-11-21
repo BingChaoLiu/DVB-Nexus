@@ -1,0 +1,84 @@
+{
+  "rule_id": "DIA-TONE-RESIDUE-SUSPECT",
+  "rule_version": "1.0.0",
+  "code": "DIAG_TONE_RESIDUE_SUSPECT",
+  "priority": 90,
+  "severity": "error",
+  "confidence": "medium",
+  "title": "LNB tone residue / power anomaly suspected from the tuner state",
+  "summary_template": "Tuner {node_id} graded ber_state={ber_state} against the commanded tone plan; the cause chain references the feeder — suspected LNB tone residue / power-supply anomaly",
+  "match": {
+    "event_type": "rf.state_observed",
+    "predicates": [
+      {
+        "field": "payload.node_id",
+        "op": "exists",
+        "value": null
+      },
+      {
+        "field": "payload.health",
+        "op": "exists",
+        "value": null
+      },
+      {
+        "field": "payload.causes",
+        "op": "exists",
+        "value": null
+      },
+      {
+        "field": "payload.source",
+        "op": "eq",
+        "value": "state_evaluator"
+      },
+      {
+        "field": "payload.confidence",
+        "op": "eq",
+        "value": "simulated"
+      },
+      {
+        "field": "payload.lock_state",
+        "op": "exists",
+        "value": null
+      },
+      {
+        "field": "payload.if_frequency_khz",
+        "op": "exists",
+        "value": null
+      },
+      {
+        "field": "payload.ber_state",
+        "op": "eq",
+        "value": "severe"
+      },
+      {
+        "field": "payload.locked_transponder_id",
+        "op": "exists",
+        "value": null
+      },
+      {
+        "field": "payload.stale",
+        "op": "exists",
+        "value": null
+      }
+    ],
+    "group_by": [
+      "node_id"
+    ],
+    "window": null
+  },
+  "suppression": {
+    "key": [
+      "code",
+      "node_id"
+    ],
+    "window": "per_run"
+  },
+  "suggested_actions": [
+    "Check the cause-referenced lnb tone_commanded/tone_actual pair and its supply path (tone residue / power anomaly)"
+  ],
+  "expected_evidence": [
+    "rf.state_observed",
+    "sec.state_observed"
+  ],
+  "enabled": true
+}

@@ -21,6 +21,24 @@ diagnosis anchor triple (SPEC-306 §6), so those rules stay
 loadable-but-unfired under the frozen engine until a Phase 2
 evidence-anchor path lands — the declaration pins WHICH event and WHICH
 locator keys constitute the candidate, never a verified fact.
+
+The Phase 3 two (ticket #168, SPEC-307 §Phase3 revision chapter) extend
+the same pairing to the state-layer primitives (#163): both consume the
+tuner snapshot ``rf.state_observed`` (#164's NodeEvalResult-shape
+projection) and mirror the primitives' ``expected_observations`` symbol
+set {``rf.state_observed``, ``sec.state_observed``}. The same mechanical
+honesty applies: the registered tuner snapshot carries no SPEC-306 §6
+anchor state (exact-key shape, not the Phase 2 evidence family), so the
+rules stay loadable-but-unfired under the frozen engine until a Phase 3
+evidence-anchor path lands (the #130 → #138 precedent posture). Within
+the frozen §4 op set ({eq, gt, lt, exists}) the declarable faces are the
+constant observation axes (``state_evaluator``/``simulated`` — the
+SPEC-303 §Phase3 恒定配对), the unlocked discriminator and the graded
+BER face (the #161 frozen producer semantics put every fault-chain
+tuner snapshot at ``severe``; the SPEC-307 §Phase3 "elevated/severe"
+OR-face and the CauseRef-array / cross-event ``sec.state_observed``
+faces are outside the finite predicate set — ticket #168 REPORT
+deviation, no mechanism extension under the 零改 discipline).
 """
 
 from __future__ import annotations
@@ -297,5 +315,124 @@ def python_builtin_rules() -> tuple[DiagnosticRule, ...]:
                 " version",
             ),
             expected_evidence=("ts.psi_section_observed", "fault.applied"),
+        ),
+        # --- Phase 3 two (ticket #168, SPEC-307 §Phase3) --------------------
+        # Both consume the tuner snapshot rf.state_observed (#164's
+        # NodeEvalResult-shape projection) and interlock with the #163
+        # state-layer primitives' expected_observations symbol set
+        # {sec.state_observed, rf.state_observed}.  The predicate set pins
+        # exactly the registered tuner snapshot keys (the interlock
+        # posture): the eq faces are the scenario-invariant facts — the
+        # SPEC-303 §Phase3 恒定配对 and the graded/unlocked discriminators
+        # — the remaining keys ride the exists key-face pin.  The
+        # CauseRef-array face (causes[*].node_id → lnb / conflict peer)
+        # and the cross-event sec.state_observed faces (tone 双字段 /
+        # ub_assignments 表) are outside the frozen finite predicate set:
+        # they ride the expected_evidence 互证 and the #171 判据互锁, not
+        # the match predicates (ticket #168 REPORT deviation).
+        # 1. TONE_RESIDUE → 「LNB tone 残留 / 供电异常」: the tuner grades
+        #    severe against the commanded tone plan (the #161 frozen
+        #    producer semantics: any anomaly field ⇒ severe; the elevated
+        #    arm of the SPEC-307 §Phase3 "elevated/severe" OR-face is the
+        #    no-fault protection-band grade — unreachable for the chain,
+        #    and a string-valued OR is inexpressible in the frozen op
+        #    set).  失锁与错锁 both qualify (SPEC-620 §7: 失锁或错锁) —
+        #    lock_state stays an exists key-face pin.
+        DiagnosticRule(
+            rule_id="DIA-TONE-RESIDUE-SUSPECT",
+            rule_version="1.0.0",
+            code="DIAG_TONE_RESIDUE_SUSPECT",
+            priority=90,
+            severity="error",
+            confidence="medium",
+            title="LNB tone residue / power anomaly suspected from the tuner state",
+            summary_template=(
+                "Tuner {node_id} graded ber_state={ber_state} against the"
+                " commanded tone plan; the cause chain references the"
+                " feeder — suspected LNB tone residue / power-supply"
+                " anomaly"
+            ),
+            match=MatchSpec(
+                event_type="rf.state_observed",
+                predicates=(
+                    FieldPredicate(field="payload.node_id", op="exists"),
+                    FieldPredicate(field="payload.health", op="exists"),
+                    FieldPredicate(field="payload.causes", op="exists"),
+                    FieldPredicate(
+                        field="payload.source", op="eq", value="state_evaluator"
+                    ),
+                    FieldPredicate(
+                        field="payload.confidence", op="eq", value="simulated"
+                    ),
+                    FieldPredicate(field="payload.lock_state", op="exists"),
+                    FieldPredicate(field="payload.if_frequency_khz", op="exists"),
+                    FieldPredicate(
+                        field="payload.ber_state", op="eq", value="severe"
+                    ),
+                    FieldPredicate(
+                        field="payload.locked_transponder_id", op="exists"
+                    ),
+                    FieldPredicate(field="payload.stale", op="exists"),
+                ),
+                group_by=("node_id",),
+            ),
+            suppression=SuppressionSpec(),
+            suggested_actions=(
+                "Check the cause-referenced lnb tone_commanded/tone_actual"
+                " pair and its supply path (tone residue / power anomaly)",
+            ),
+            expected_evidence=("rf.state_observed", "sec.state_observed"),
+        ),
+        # 2. UB_SLOT_CONFLICT → 「UB 槽位冲突 / SCR 堆叠互扰」: the
+        #    conflict-claimed tuner sits unlocked (the SPEC-307 §Phase3
+        #    discriminator) on a graded face — the runtime conflict branch
+        #    is anomaly ⇒ severe (#161), so a plain ungraded unlocked face
+        #    (e.g. the polarization-mismatch unlock, SPEC-620 §8) is NOT a
+        #    conflict candidate (缺失 ≠ 候选).
+        DiagnosticRule(
+            rule_id="DIA-UB-CONFLICT-SUSPECT",
+            rule_version="1.0.0",
+            code="DIAG_UB_CONFLICT_SUSPECT",
+            priority=100,
+            severity="error",
+            confidence="high",
+            title="UB slot conflict / SCR stacking interference suspected on the tuner",
+            summary_template=(
+                "Tuner {node_id} unlocked on a {ber_state}-graded face with"
+                " conflict references in the cause chain — suspected UB"
+                " slot conflict / SCR stacking interference"
+            ),
+            match=MatchSpec(
+                event_type="rf.state_observed",
+                predicates=(
+                    FieldPredicate(field="payload.node_id", op="exists"),
+                    FieldPredicate(field="payload.health", op="exists"),
+                    FieldPredicate(field="payload.causes", op="exists"),
+                    FieldPredicate(
+                        field="payload.source", op="eq", value="state_evaluator"
+                    ),
+                    FieldPredicate(
+                        field="payload.confidence", op="eq", value="simulated"
+                    ),
+                    FieldPredicate(
+                        field="payload.lock_state", op="eq", value="unlocked"
+                    ),
+                    FieldPredicate(field="payload.if_frequency_khz", op="exists"),
+                    FieldPredicate(
+                        field="payload.ber_state", op="eq", value="severe"
+                    ),
+                    FieldPredicate(
+                        field="payload.locked_transponder_id", op="exists"
+                    ),
+                    FieldPredicate(field="payload.stale", op="exists"),
+                ),
+                group_by=("node_id",),
+            ),
+            suppression=SuppressionSpec(),
+            suggested_actions=(
+                "Re-assign the tuner ub_slot claim against the SCR"
+                " ub_assignments table (conflict peer in the cause chain)",
+            ),
+            expected_evidence=("rf.state_observed", "sec.state_observed"),
         ),
     )
