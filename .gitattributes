@@ -2,3 +2,9 @@
 # 避免 cmd 批处理在 LF-only 下 goto/label 解析的边缘问题
 *.cmd text eol=crlf
 *.ps1 text eol=crlf
+
+# Golden vector identity directory (SPEC-506 §6: sha256 即身份): byte-exact
+# across checkouts — no EOL smudge/clean, no normalization. Data files carry
+# canonical JSON whose manifest records the committed bytes; conversion here
+# would forge identity drift (seen 2026-11-21, ticket #172 integration gate).
+docs/test-vectors/golden/** -text
