@@ -3,9 +3,15 @@
 // (AlertsDataDTO); freshness = the observation.alert_changed hint invalidating
 // qk.alerts via the shared bridge. The empty state is explicit: "no alert
 // records" is NOT "clean" (SPEC-206 §6 absence-vs-clean duality).
+//
+// #170 Phase 3 (SPEC-304 §Phase3): the TUNER_UNLOCKED/BER_SEVERE
+// registrations enter REGISTRY-DRIVEN (rule_id + severity render verbatim;
+// the REST alerts face shape is unchanged). The rule_id→文案 map adds only
+// the two wire-faithful copy lines — an unmapped rule_id renders bare (no
+// invented copy, zero render side effects, the EVENT_HONESTY_COPY posture).
 import type { AlertRecordDTO } from "../types";
 import { Badge } from "../../../components/ui";
-import { MONITOR_EMPTY_STATE_COPY } from "../copy";
+import { ALERT_RULE_COPY, MONITOR_EMPTY_STATE_COPY } from "../copy";
 import { ThreeQuestionState } from "../ThreeQuestionState";
 
 const SEVERITY_TONE: Record<string, "bad" | "warn" | "info" | "neutral"> = {
@@ -33,6 +39,11 @@ export function AlertsPanel({ alerts, total }: { alerts: readonly AlertRecordDTO
                 {a.suppressed && <Badge tone="neutral">suppressed</Badge>}
               </div>
               {a.summary !== null && a.summary !== undefined && <div className="dvb-mon-line">{a.summary}</div>}
+              {ALERT_RULE_COPY[a.rule_id] !== undefined && (
+                <div className="dvb-mon-line dvb-mon-note" data-testid={`alert-copy-${a.alert_id}`}>
+                  {ALERT_RULE_COPY[a.rule_id]}
+                </div>
+              )}
               <div className="dvb-mon-line dvb-mon-note">fingerprint {a.fingerprint}</div>
             </li>
           ))}

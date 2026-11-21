@@ -1,8 +1,11 @@
-// Pin: PHASE2_EVENT_RENDER_TABLE must carry exactly the nine registered
+// Pin: PHASE2_EVENT_RENDER_TABLE must carry exactly the eleven registered
 // Phase 2 event types with the #129 REPORT §2 payload key sets (the registry
 // validate_payload strict key sets — triple-pinned: #128 REPORT / #129
-// registry / brief §2bis). The expected values below are the independent
-// #129 extraction, not a copy of the implementation table.
+// registry / brief §2bis) plus the #164 Phase 3 state-observation key sets
+// (SPEC-303 §Phase3 — rf./sec. state_observed, extracted verbatim from
+// domain/observation/registry.py RF_TUNER_SNAPSHOT_KEYS / the sec union).
+// The expected values below are the independent extractions, not a copy of
+// the implementation table.
 import { describe, expect, it } from "vitest";
 import { PHASE2_EVENT_TYPES } from "../types";
 import { PHASE2_PAYLOAD_KEYS } from "./payloadKeys.gen";
@@ -23,16 +26,57 @@ const REPORT_129_KEY_SETS: Record<string, readonly string[]> = {
   "gen.packet_sampled": ["layer", "packet_index", "byte_size", "sha256"],
 };
 
+// #164 Phase 3 state-observation key-set extraction (SPEC-303 §Phase3; the
+// registered sec shape = lnb ∪ legacy sat_selected ∪ switch union — one
+// per-node snapshot face). Keys extracted from the backend registry
+// constants, NOT from payloadKeys.gen.ts (the same-source gen module is
+// pinned separately by the drift-lock test below).
+const REPORT_164_KEY_SETS: Record<string, readonly string[]> = {
+  "rf.state_observed": [
+    "node_id",
+    "health",
+    "causes",
+    "source",
+    "confidence",
+    "lock_state",
+    "if_frequency_khz",
+    "ber_state",
+    "locked_transponder_id",
+    "stale",
+  ],
+  "sec.state_observed": [
+    "node_id",
+    "health",
+    "causes",
+    "source",
+    "confidence",
+    "voltage",
+    "tone_commanded",
+    "tone_actual",
+    "tone_composite",
+    "band_selected",
+    "lo_frequency_khz",
+    "polarization_delivered",
+    "short_circuit_state",
+    "ub_assignments",
+    "sat_selected",
+    "committed_switch_state",
+    "uncommitted_switch_state",
+    "port_selected",
+    "power_pass",
+  ],
+};
+
 // The optional #127 derivation face (base + these = legal on mode "E"/"2").
 const BISS_DERIVATION_FACE = ["derivation_ref", "mismatch_variants"] as const;
 
 describe("PHASE2_EVENT_RENDER_TABLE — registry-driven rendering surface", () => {
-  it("covers exactly the nine registered Phase 2 event types (no extra, no missing)", () => {
+  it("covers exactly the eleven registered Phase 2/Phase 3 event types (no extra, no missing)", () => {
     expect(Object.keys(PHASE2_EVENT_RENDER_TABLE).sort()).toEqual([...PHASE2_EVENT_TYPES].sort());
   });
 
-  it("every table entry carries the full #129 base key set (display order)", () => {
-    for (const [eventType, keys] of Object.entries(REPORT_129_KEY_SETS)) {
+  it("every table entry carries the full #129/#164 base key set (display order)", () => {
+    for (const [eventType, keys] of Object.entries({ ...REPORT_129_KEY_SETS, ...REPORT_164_KEY_SETS })) {
       const spec = PHASE2_EVENT_RENDER_TABLE[eventType as keyof typeof PHASE2_EVENT_RENDER_TABLE];
       expect(spec, eventType).toBeDefined();
       for (const key of keys) {
@@ -48,9 +92,10 @@ describe("PHASE2_EVENT_RENDER_TABLE — registry-driven rendering surface", () =
     }
   });
 
-  it("no table entry invents keys outside the #129 key sets + derivation face", () => {
+  it("no table entry invents keys outside the #129/#164 key sets + derivation face", () => {
     const legal = new Set([
       ...Object.values(REPORT_129_KEY_SETS).flat(),
+      ...Object.values(REPORT_164_KEY_SETS).flat(),
       ...BISS_DERIVATION_FACE,
     ]);
     for (const [eventType, spec] of Object.entries(PHASE2_EVENT_RENDER_TABLE)) {

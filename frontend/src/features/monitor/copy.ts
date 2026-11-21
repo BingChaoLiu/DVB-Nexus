@@ -95,3 +95,16 @@ export const EVENT_HONESTY_COPY: Partial<Record<Phase2EventType, string>> = {
   "biss.descramble_failed": "解扰失败 ≠ 码流损坏",
   "t2mi.plp_mismatch": "缺失 ≠ 零",
 };
+
+/**
+ * AlertsPanel 的 rule_id→文案映射(#170;SPEC-304 §Phase3 两条告警注册)。
+ * 键 = rule_id wire 名原样(TUNER_UNLOCKED warning / BER_SEVERE error,#166
+ * default_rule_set 注册);文案 = 诚实 wire 事实句(照 EVENT_HONESTY_COPY
+ * 先例:键未命中 = 无文案,零渲染副作用——未映射规则原样呈现 rule_id,不为
+ * 规格外规则发明文案)。BER_SEVERE 行内携带「elevated 档不告警」两轴纪律
+ * (304 阈值告警与 307 根因候选不混)。
+ */
+export const ALERT_RULE_COPY: Partial<Record<string, string>> = {
+  TUNER_UNLOCKED: "RF 信号：tuner 快照 lock_state=unlocked（失锁）",
+  BER_SEVERE: "RF 信号：tuner 快照 ber_state=severe；elevated 档不告警（组合判定归诊断规则）",
+};

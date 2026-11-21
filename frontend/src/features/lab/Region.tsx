@@ -22,8 +22,7 @@ import { useSearchParams } from "react-router";
 import { createSession, getScenario, isApiError, startSession, submitRun } from "../../api";
 import { qk } from "../../query/keys";
 import { useQueryClient } from "@tanstack/react-query";
-import { LAB_RUN_CONFIG } from "./labGeometry";
-import { buildCreateSessionBody } from "./labBodies";
+import { buildCreateSessionBody, buildRunSubmitBody, readScenarioFidelity } from "./labBodies";
 import { ScenarioDetail } from "./ScenarioDetail";
 import { ScenarioLibrary } from "./ScenarioLibrary";
 import { ExperimentConsole, type AcceptedRunCarrier } from "./ExperimentConsole";
@@ -95,19 +94,22 @@ export default function LabRegion() {
           throw new Error(`开局异常：start 应答 lifecycle=${started.lifecycle}（期望 running）`);
         }
         // §7.3 THIRD hop — best-effort auto baseline: an empty-plan run with
-        // the FROZEN golden geometry. Any failure here is a SILENT fallback:
-        // the console still opens, nothing fakes success (the §4.6
-        // empty-registry copy states the fallback), and the manual buttons
-        // remain. The hop MUST NOT block the console navigation.
+        // the FROZEN golden geometry (SIM_TS) — or, on a v3 SIM_STATE
+        // document (#170 承载), the fidelity=SIM_STATE configless form
+        // (buildRunSubmitBody owns the #165 双向钉 contract). Any failure
+        // here is a SILENT fallback: the console still opens, nothing fakes
+        // success (the §4.6 empty-registry copy states the fallback), and the
+        // manual buttons remain. The hop MUST NOT block the console
+        // navigation.
         let autoRun: AcceptedRunCarrier | null = null;
         try {
-          const accepted = await submitRun(created.session_id, {
-            config: LAB_RUN_CONFIG as unknown as Parameters<typeof submitRun>[1]["config"],
-            fault_plan: [] as Parameters<typeof submitRun>[1]["fault_plan"],
-          });
+          const fidelity = readScenarioFidelity(detail);
+          const accepted = await submitRun(created.session_id, buildRunSubmitBody(fidelity, []));
           // Honest at-accept carrier (F6): no `as RunStatusDTO` claim, no
-          // fabricated empty artifacts face — just the two held facts.
-          autoRun = { run_id: accepted.run_id, status: "running" };
+          // fabricated empty artifacts face — the held facts only (run id +
+          // status + the form the page itself submitted, so the eight-step
+          // facts stay honest for artifact-less SIM_STATE rows too).
+          autoRun = { run_id: accepted.run_id, status: "running", fidelity, faultPlanPresent: false };
         } catch {
           autoRun = null;
         }

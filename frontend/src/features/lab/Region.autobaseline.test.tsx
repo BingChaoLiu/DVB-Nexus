@@ -136,6 +136,7 @@ function setupApiMocks() {
     return {
       run_id: runId,
       status: "completed",
+      fidelity: "SIM_TS",
       artifacts: [
         {
           artifact_id: `${runId}-ts`,
@@ -225,5 +226,51 @@ describe("LabRegion — opening auto-baseline third hop (SPEC-408 §7.3)", () =>
 
     // The pointer stays honest: Generate is still 待办 (no fake progress).
     expect(screen.getByTestId("lab-step-generate")).toHaveTextContent("待办");
+  });
+});
+
+// --- #170 SIM_STATE 场景自动基线承载(SPEC-406 §Phase3; #165 fidelity 契约) --
+// A v3 SIM_STATE document rides the SAME §7.3 orchestration (自动基线自动
+// 获得, 零特制) — but the hop-3 submit is the configless fidelity form
+// (buildRunSubmitBody owns the 双向钉 contract) and the run face stays
+// honestly artifact-less while Generate still lights (the carrier's plan
+// fact + the §6.3 facts, never a fabricated artifact).
+describe("LabRegion — SIM_STATE 场景 hop-3 (#170)", () => {
+  const SCENARIO_STATE: ScenarioDetailDTO = {
+    ...SCENARIO,
+    schema_version: "3",
+    simulation_config: { fidelity: "SIM_STATE", seed: 1234567 },
+  };
+
+  it("a v3 SIM_STATE scenario auto-baseline submits fidelity=SIM_STATE with the config key ABSENT; the console opens and Generate lights with no artifact face", async () => {
+    mocked.getScenario.mockResolvedValue(SCENARIO_STATE);
+    mocked.getRun.mockImplementation(async (_sessionId, runId) =>
+      ({
+        run_id: runId,
+        status: "completed",
+        fidelity: "SIM_STATE",
+        artifacts: [],
+      }) satisfies RunStatusDTO,
+    );
+    const user = userEvent.setup();
+    await openViaStart(user);
+
+    // The hop-3 body is the configless SIM_STATE form.
+    expect(mocked.submitRun).toHaveBeenCalledTimes(1);
+    const [, submitBody] = mocked.submitRun.mock.calls[0] ?? [];
+    expect(submitBody?.fidelity).toBe("SIM_STATE");
+    expect("config" in (submitBody ?? {})).toBe(false);
+    expect(submitBody?.fault_plan).toEqual([]);
+
+    // The console opens carrying the auto run; the poller completes it.
+    await waitFor(() => expect(screen.getByTestId("lab-run-row-run-1")).toHaveTextContent("completed"), {
+      timeout: 3_000,
+    });
+    // Generate lights by itself — via the honest plan fact, not an artifact.
+    expect(screen.getByTestId("lab-step-generate")).toHaveTextContent("基线完成");
+    // The run row honestly carries NO artifact chips (SIM_STATE 无 artifact).
+    expect(screen.getByTestId("lab-run-row-run-1").textContent).not.toContain("generated_ts");
+    // The standing declaration note renders as usual (same orchestration).
+    expect(screen.getByTestId("lab-autorun-note")).toHaveTextContent("开局已自动提交基线 Run");
   });
 });

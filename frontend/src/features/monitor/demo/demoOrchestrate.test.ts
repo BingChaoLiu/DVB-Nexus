@@ -102,6 +102,7 @@ function completedRun(runId: string, artifacts: RunStatusDTO["artifacts"] = []):
   return {
     run_id: runId,
     status: "completed",
+    fidelity: "SIM_TS",
     config_hash: "abc",
     generator_version: "v1",
     packet_count: 600,
@@ -356,7 +357,7 @@ describe("runAndWait — the rerun-button building block", () => {
 
     const status = await runAndWait(SESSION, []);
     expect(status.run_id).toBe("run-r");
-    expect(submitRunMock).toHaveBeenCalledWith(SESSION, { config: expect.objectContaining({ seed: 1234567 }), fault_plan: [] });
+    expect(submitRunMock).toHaveBeenCalledWith(SESSION, { config: expect.objectContaining({ seed: 1234567 }), fault_plan: [], fidelity: "SIM_TS" });
     expect(getRunMock).toHaveBeenCalledWith(SESSION, "run-r");
   });
 

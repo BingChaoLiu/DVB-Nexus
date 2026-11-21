@@ -95,6 +95,7 @@ function setupApiMocks() {
     return {
       run_id: runId,
       status: "completed",
+      fidelity: "SIM_TS",
       artifacts: [
         {
           artifact_id: `${runId}-ts`,

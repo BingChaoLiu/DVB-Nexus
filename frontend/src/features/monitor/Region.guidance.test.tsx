@@ -275,8 +275,8 @@ describe("MonitorRegion — verify prefill wiring (three sources)", () => {
       content_hash: "b".repeat(64),
     } as ScenarioDetailDTO);
     const RUNS: RunListItemDTO[] = [
-      { run_id: "r-server-2", status: "completed", submitted_at_ms: 2, fault_plan_present: false, packet_count: 600 },
-      { run_id: "r-server-1", status: "completed", submitted_at_ms: 1, fault_plan_present: false, packet_count: null },
+      { run_id: "r-server-2", status: "completed", submitted_at_ms: 2, fault_plan_present: false, fidelity: "SIM_TS", packet_count: 600 },
+      { run_id: "r-server-1", status: "completed", submitted_at_ms: 1, fault_plan_present: false, fidelity: "SIM_TS", packet_count: null },
     ];
     listSessionRunsMock.mockResolvedValue(RUNS);
 

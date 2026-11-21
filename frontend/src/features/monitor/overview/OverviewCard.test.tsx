@@ -128,11 +128,12 @@ describe("RunTrigger — empty-plan run submission face", () => {
           {
             run_id: "r-1",
             status: "completed",
+            fidelity: "SIM_TS",
             packet_count: 600,
             byte_count: 112_800,
             artifacts: [{ artifact_id: "art-1", kind: "generated_ts", sha256: "deadbeef", byte_size: 112800, partial: false }],
           },
-          { run_id: "r-2", status: "running", packet_count: null, byte_count: null, artifacts: [] },
+          { run_id: "r-2", status: "running", fidelity: "SIM_TS", packet_count: null, byte_count: null, artifacts: [] },
         ]}
       />,
     );

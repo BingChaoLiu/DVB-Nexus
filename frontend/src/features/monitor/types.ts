@@ -31,7 +31,9 @@ export type VerifyRunRequest = Schemas["VerifyRunRequest"];
 // 简报 §2bis)。wire 枚串(layer/mode/self_check_kind/payload_kind)一律
 // 原样渲染(SPEC-403 L315 禁改写)。
 
-/** The nine registered Phase 2 event types (#129 REPORT §1 registry constants). */
+/** The registered Phase 2/Phase 3 event types (#129 REPORT §1 registry
+ * constants + the #164 rf./sec. state-observation additions, SPEC-303
+ * §Phase3). Wire names verbatim — the render table keys ride these. */
 export const PHASE2_EVENT_TYPES = [
   "t2mi.stage_summary",
   "t2mi.plp_mismatch",
@@ -42,6 +44,8 @@ export const PHASE2_EVENT_TYPES = [
   "gen.stage_started",
   "gen.stage_completed",
   "gen.packet_sampled",
+  "rf.state_observed",
+  "sec.state_observed",
 ] as const;
 
 export type Phase2EventType = (typeof PHASE2_EVENT_TYPES)[number];
@@ -135,6 +139,58 @@ export interface GenPacketSampledPayload {
   sha256: string;
 }
 
+/** The shared per-node state-snapshot projection base (#164 registry
+ * `_STATE_NODE_BASE_KEYS`; SPEC-303 §Phase3): NodeEvalResult-shape identity +
+ * health + the JSON-safe CauseRef list + the CONSTANT observation axes.
+ * 诚实口径: source is always the wire string `state_evaluator` and confidence
+ * always `simulated` on these payloads — rendered verbatim, never re-labeled
+ * (SPEC-403 §Phase3: 呈现层不得混标 parsed/measured). */
+export interface StateObservedBase {
+  node_id: string;
+  /** Wire Health value verbatim (ok/warn/error/idle). */
+  health: string;
+  /** CauseRef projection `[{node_id, port_id?}]` — the root-cause chain. */
+  causes: Array<{ node_id: string; port_id?: string }>;
+  source: string;
+  confidence: string;
+}
+
+/** `rf.state_observed` payload (tuner snapshot; #164 registry
+ * RF_TUNER_SNAPSHOT_KEYS). `stale` rides every snapshot (true iff unlocked,
+ * SPEC-620 §8 — the retained ber_state 档位 with unlocked lock is marked,
+ * 不静默); `locked_transponder_id` honestly `null` while unlocked. */
+export interface RfStateObservedPayload extends StateObservedBase {
+  lock_state: string;
+  if_frequency_khz: number | null;
+  ber_state: string;
+  locked_transponder_id: string | null;
+  stale?: boolean;
+}
+
+/** `sec.state_observed` payload (lnb / legacy_cascade lnb / diseqc_switch
+ * per-node snapshots; #164 registry shape = the lnb ∪ sat_selected ∪ switch
+ * key union — a concrete payload carries exactly one node's face, so every
+ * metric key is optional on the consumption type). Wire enum strings render
+ * verbatim (SPEC-403 L315 禁改写). */
+export interface SecStateObservedPayload extends StateObservedBase {
+  voltage?: string;
+  tone_commanded?: string;
+  tone_actual?: string;
+  tone_composite?: string;
+  band_selected?: string;
+  lo_frequency_khz?: number | null;
+  polarization_delivered?: string;
+  short_circuit_state?: string;
+  ub_assignments?: Array<Record<string, unknown>>;
+  /** legacy_cascade satellite-select fact only (never on universal LNBs or
+   * switches). */
+  sat_selected?: string;
+  committed_switch_state?: number;
+  uncommitted_switch_state?: number;
+  port_selected?: string | null;
+  power_pass?: string;
+}
+
 /** Event type → payload consumption type (the #129 key sets, typed). */
 export type Phase2EventPayloadMap = {
   "t2mi.stage_summary": T2miStageSummaryPayload;
@@ -146,6 +202,8 @@ export type Phase2EventPayloadMap = {
   "gen.stage_started": GenStageStartedPayload;
   "gen.stage_completed": GenStageCompletedPayload;
   "gen.packet_sampled": GenPacketSampledPayload;
+  "rf.state_observed": RfStateObservedPayload;
+  "sec.state_observed": SecStateObservedPayload;
 };
 
 /** A journal envelope carrying a registered Phase 2 event type. The payload

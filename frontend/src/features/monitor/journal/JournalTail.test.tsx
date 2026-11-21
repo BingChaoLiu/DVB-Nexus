@@ -200,4 +200,65 @@ describe("JournalTail — Phase 2 事件注册表驱动渲染(#134,SPEC-403 §Ph
     expect(screen.queryByTestId("journal-payload-1")).not.toBeInTheDocument();
     expect(screen.queryByTestId("journal-discipline-1")).not.toBeInTheDocument();
   });
+
+  // --- #170: rf./sec. state_observed 走同一注册表渲染面(零特制) -------------
+  it("renders rf.state_observed registry-driven with the honesty axes verbatim (state_evaluator + simulated 不混标)", () => {
+    renderTail([
+      phase2Envelope(20, "rf.state_observed", {
+        node_id: "tuner-b",
+        health: "error",
+        causes: [{ node_id: "lnb-0" }],
+        source: "state_evaluator",
+        confidence: "simulated",
+        lock_state: "unlocked",
+        if_frequency_khz: 11234500,
+        ber_state: "severe",
+        locked_transponder_id: null,
+        stale: true,
+      }),
+    ]);
+    const row = screen.getByTestId("journal-row-20");
+    expect(row).toHaveClass("dvb-mon-journal-row-phase2");
+    // wire keys/values verbatim — lock_state/ber_state enum strings unchanged.
+    expect(screen.getByTestId("journal-payload-20-lock_state")).toHaveTextContent("unlocked");
+    expect(screen.getByTestId("journal-payload-20-ber_state")).toHaveTextContent("severe");
+    expect(screen.getByTestId("journal-payload-20-source")).toHaveTextContent("state_evaluator");
+    expect(screen.getByTestId("journal-payload-20-confidence")).toHaveTextContent("simulated");
+    expect(screen.getByTestId("journal-payload-20-stale")).toHaveTextContent("true");
+    // unlocked → locked_transponder_id honestly null (缺失 ≠ 零).
+    expect(screen.getByTestId("journal-payload-20-locked_transponder_id")).toHaveTextContent("null");
+    // CauseRef list renders as the wire array shape.
+    expect(screen.getByTestId("journal-payload-20-causes")).toHaveTextContent("node_id=lnb-0");
+    // 无规格锚定纪律句 — 零渲染副作用 (诚实禁令: 规格外不落句).
+    expect(screen.queryByTestId("journal-discipline-20")).not.toBeInTheDocument();
+  });
+
+  it("renders sec.state_observed (lnb snapshot) with unpowered nulls verbatim", () => {
+    renderTail([
+      phase2Envelope(21, "sec.state_observed", {
+        node_id: "lnb-0",
+        health: "ok",
+        causes: [],
+        source: "state_evaluator",
+        confidence: "simulated",
+        voltage: "off",
+        tone_commanded: "none",
+        tone_actual: "none",
+        tone_composite: "none",
+        band_selected: "none",
+        lo_frequency_khz: null,
+        polarization_delivered: "none",
+        short_circuit_state: "normal",
+        ub_assignments: [],
+      }),
+    ]);
+    const row = screen.getByTestId("journal-row-21");
+    expect(row).toHaveClass("dvb-mon-journal-row-phase2");
+    expect(screen.getByTestId("journal-payload-21-voltage")).toHaveTextContent("off");
+    expect(screen.getByTestId("journal-payload-21-band_selected")).toHaveTextContent("none");
+    // 未供电 lo_frequency_khz = null — never coerced to 0.
+    expect(screen.getByTestId("journal-payload-21-lo_frequency_khz")).toHaveTextContent("null");
+    expect(screen.getByTestId("journal-payload-21-source")).toHaveTextContent("state_evaluator");
+    expect(screen.queryByTestId("journal-discipline-21")).not.toBeInTheDocument();
+  });
 });

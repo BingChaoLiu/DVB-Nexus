@@ -88,6 +88,7 @@ const LAYERED_STREAM = [
 const LAYERED_RUN: RunStatusDTO = {
   run_id: RUN,
   status: "completed",
+  fidelity: "SIM_TS",
   artifacts: [
     { artifact_id: "art-faulted-1", kind: "faulted_ts", sha256: "ab", byte_size: 1000, partial: false },
     { artifact_id: "art-log-1", kind: "log", sha256: "cd", byte_size: 10, partial: false },
@@ -111,6 +112,7 @@ function setupApiMocks(events: ReadonlyArray<unknown>) {
       status: "completed",
       submitted_at_ms: 1,
       fault_plan_present: true,
+      fidelity: "SIM_TS",
     } satisfies RunListItemDTO,
   ]);
   mocked.getRun.mockResolvedValue(LAYERED_RUN);
@@ -138,7 +140,7 @@ function renderConsole() {
             // posture) — the poller then pulls the REAL artifacts face from
             // getRun into page memory (derived §6.3 rows honestly carry no
             // artifact face — review-fix F1).
-            initialRuns={[{ run_id: RUN, status: "running" }]}
+            initialRuns={[{ run_id: RUN, status: "running", fidelity: "SIM_TS", faultPlanPresent: false }]}
           />
         ),
       },
