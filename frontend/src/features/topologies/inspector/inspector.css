@@ -116,3 +116,127 @@
 .dvb-inspector-apply {
   align-self: flex-start;
 }
+
+/* --- §Phase3 node state detail panel (ticket #169, SPEC-404 §Phase3) ---------
+   full metrics generic list + CauseRef chain; wire values verbatim. */
+.dvb-state-panel {
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.dvb-state-title {
+  margin: 0 0 6px;
+}
+
+.dvb-state-note {
+  margin: 0;
+  color: #57606a;
+}
+
+.dvb-state-head {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 0 0 4px;
+}
+
+.dvb-state-node-id {
+  font-weight: 700;
+}
+
+.dvb-state-node-type {
+  color: #57606a;
+}
+
+.dvb-state-health {
+  padding: 1px 6px;
+  border-radius: 8px;
+  border: 1px solid currentColor;
+  font-weight: 600;
+}
+
+.dvb-state-health[data-health="ok"] {
+  color: #1a7f37;
+}
+
+.dvb-state-health[data-health="warn"] {
+  color: #9a6700;
+}
+
+.dvb-state-health[data-health="error"] {
+  color: #cf222e;
+}
+
+.dvb-state-health[data-health="idle"] {
+  color: #57606a;
+}
+
+.dvb-state-honesty {
+  display: flex;
+  gap: 12px;
+  margin: 0 0 6px;
+  color: #57606a;
+}
+
+.dvb-state-metrics {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dvb-state-metric {
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  border-bottom: 1px dashed #eaeef2;
+}
+
+.dvb-state-metric-key {
+  color: #57606a;
+  word-break: break-all;
+}
+
+.dvb-state-metric-value {
+  font-weight: 600;
+  word-break: break-all;
+  text-align: right;
+}
+
+.dvb-state-causes-title {
+  margin: 0 0 4px;
+  font-size: 12px;
+}
+
+.dvb-state-cause-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dvb-state-cause {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.dvb-state-cause-node {
+  font-weight: 600;
+}
+
+.dvb-state-cause-port {
+  color: #57606a;
+}
+
+.dvb-state-locate {
+  font-size: 11px;
+  padding: 1px 8px;
+  cursor: pointer;
+}

@@ -16,6 +16,7 @@ import type { TopologyPortDTO } from "../../api";
 import { IllegalEndHandlesContext, illegalHandleKey } from "./connectionFeedback";
 import type { TopologyFlowNode } from "./graphMapping";
 import { nodeTypeSpec } from "./nodeTypes";
+import { renderMetricValue } from "./inspector/nodeStateSummary";
 
 export interface RenderedHandle {
   port_id: string;
@@ -46,12 +47,39 @@ export function TopologyNode({ data }: NodeProps<TopologyFlowNode>) {
   // §7.6 illegal-end preview (review-fix F2): empty outside a drag — the
   // idle canvas never dims a handle through this path.
   const illegalEnds = useContext(IllegalEndHandlesContext);
+  // §Phase3 card status summary (ticket #169): registry-driven — the rendered
+  // keys are exactly the entry's status_metrics list, sourced from the merged
+  // state_observed fact set the page hands down. Types without the registry
+  // list (and any node without status data) render nothing here.
+  const statusMetrics = data.statusMetrics;
+  const summaryEntries =
+    spec?.status_metrics !== undefined && statusMetrics !== undefined
+      ? spec.status_metrics
+          .filter((key) => key in statusMetrics)
+          .map((key) => [key, statusMetrics[key]] as const)
+      : [];
+  const hasStatus = spec?.status_metrics !== undefined && (data.health !== undefined || summaryEntries.length > 0);
   return (
     <div className={violated ? "dvb-topo-node dvb-topo-node-violation" : "dvb-topo-node"} data-node-id={data.node.node_id}>
       <div className="dvb-topo-node-title">{spec?.label ?? data.node.node_type}</div>
       <div className="dvb-topo-node-type">{data.node.node_type}</div>
       {spec !== undefined && spec.config_schema !== null && (
         <div className="dvb-topo-node-config-hint">{spec.config_schema}</div>
+      )}
+      {hasStatus && (
+        <div className="dvb-topo-node-status">
+          {data.health !== undefined && (
+            <span className="dvb-topo-node-health" data-testid="dvb-topo-node-health" data-health={data.health}>
+              {data.health}
+            </span>
+          )}
+          {summaryEntries.map(([key, value]) => (
+            <span key={key} className="dvb-topo-node-metric" data-testid={`dvb-topo-node-metric-${key}`}>
+              <span className="dvb-topo-node-metric-key">{key}</span>
+              <span className="dvb-topo-node-metric-value">{renderMetricValue(value)}</span>
+            </span>
+          ))}
+        </div>
       )}
       {handlesForNode(data.node.ports).map((handle) => {
         const portViolated = data.violationPorts.includes(handle.port_id);

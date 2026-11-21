@@ -30,6 +30,15 @@ export interface TopologyNodeData extends Record<string, unknown> {
   violationCodes: string[];
   /** port_ids carrying port-addressed violations (Handle highlight). */
   violationPorts: string[];
+  /** SPEC-401 §Phase3 card status summary (ticket #169): the node's health
+   * from the L0 evaluation products (latest state_observed snapshot health —
+   * wire enum value verbatim: ok/warn/error/idle). Absent/undefined = no
+   * session face wired → no badge renders (idle canvas unchanged). */
+  health?: string;
+  /** The node's latest state_observed metrics (NodeEvalResult-shaped payload,
+   * JSON-safe). The card renders ONLY the registry entry's status_metrics keys
+   * out of this map — registry-driven, zero per-type card logic. */
+  statusMetrics?: Record<string, unknown>;
 }
 
 /** TopologyNodeDTO with ports normalized to a present array (the wire type
@@ -163,9 +172,10 @@ export function canConnect({ source, target, sourceHandle, targetHandle, connect
 
 const DIRECTION_REASON = "方向不符（需 输出/双向 → 输入/双向）";
 const SELF_LOOP_REASON = "不能连回同一端口";
-// SPEC-401 §Phase2: the enabled-plane line mirrors MVP_ENABLED_PLANES
-// (readonly ["MPEG_TS","T2MI"] — the #121 domain frozenset, §10-10 同源纪律).
-const PLANE_REASON = "平面不符（当前支持 MPEG_TS / T2MI）";
+// SPEC-401 §Phase3: the enabled-plane line mirrors MVP_ENABLED_PLANES
+// (readonly ["MPEG_TS","T2MI","RF","SEC_CONTROL"] — the #160 domain frozenset,
+// 同源纪律).
+const PLANE_REASON = "平面不符（当前支持 MPEG_TS / T2MI / RF / SEC_CONTROL）";
 
 /** The one-line reason for the first failed precheck (§7.6 verbatim), or null
  * when the connection passes all four. Cardinality names the FULL port and

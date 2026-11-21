@@ -144,3 +144,18 @@
   border-top: 1px dashed var(--dvb-border, #d0d4dc);
   padding-top: 4px;
 }
+
+/* --- §Phase3 SIM_STATE empty state (ticket #169): jump button face ----------- */
+.dvb-pi-simstate-jump {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 3px 10px;
+  border: 1px solid #0969da;
+  border-radius: 6px;
+  color: #0969da;
+  text-decoration: none;
+}
+
+.dvb-pi-simstate-jump:hover {
+  background: #ddf4ff;
+}

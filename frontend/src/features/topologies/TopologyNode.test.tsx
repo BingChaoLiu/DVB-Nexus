@@ -117,3 +117,115 @@ describe("TopologyNode — §7.6 illegal-end preview class (context consumption)
     expect(idle.container.querySelector(".dvb-topo-handle-illegal-end")).toBeNull();
   });
 });
+
+// SPEC-401 §Phase3 card status summary (ticket #169): health badge + key
+// metrics — REGISTRY-driven (the card renders exactly the entry's
+// status_metrics keys out of data.statusMetrics; no per-type card logic).
+// Absent status data (idle canvas, no session face) renders nothing — the
+// pre-Phase3 card face is byte-identical.
+describe("TopologyNode — §Phase3 card status summary (health badge + key metrics)", () => {
+  function tunerFixture(data: Partial<TopologyFlowNode["data"]> = {}): TopologyFlowNode {
+    return {
+      id: "tuner-a",
+      type: "topology",
+      position: { x: 0, y: 0 },
+      data: {
+        node: {
+          node_id: "tuner-a",
+          node_type: "tuner",
+          config: {},
+          ports: [{ port_id: "rf_in", direction: "input", plane: "SEC_CONTROL", max_connections: 1 }],
+        },
+        violationCodes: [],
+        violationPorts: [],
+        ...data,
+      },
+    };
+  }
+
+  it("renders the health badge with the wire enum value verbatim (ok/warn/error/idle)", () => {
+    renderNode(tunerFixture({ health: "error" }));
+    const badge = screen.getByTestId("dvb-topo-node-health");
+    expect(badge).toHaveTextContent("error");
+    expect(badge).toHaveAttribute("data-health", "error");
+  });
+
+  it("renders the registry status_metrics keys from the snapshot data (tuner: lock_state/ber_state)", () => {
+    renderNode(
+      tunerFixture({
+        health: "ok",
+        statusMetrics: { lock_state: "locked", ber_state: "normal", if_frequency_khz: 1250000 },
+      }),
+    );
+    // only the registry-declared keys render (if_frequency_khz is NOT a card key)
+    expect(screen.getByTestId("dvb-topo-node-metric-lock_state")).toHaveTextContent("locked");
+    expect(screen.getByTestId("dvb-topo-node-metric-ber_state")).toHaveTextContent("normal");
+    expect(screen.queryByTestId("dvb-topo-node-metric-if_frequency_khz")).toBeNull();
+  });
+
+  it("renders the lnb card keys (voltage/tone_actual/band_selected) from the same registry mechanism", () => {
+    const lnb: TopologyFlowNode = {
+      id: "lnb-0",
+      type: "topology",
+      position: { x: 0, y: 0 },
+      data: {
+        node: {
+          node_id: "lnb-0",
+          node_type: "lnb",
+          config: {},
+          ports: [{ port_id: "coax_out", direction: "output", plane: "SEC_CONTROL", max_connections: 2 }],
+        },
+        violationCodes: [],
+        violationPorts: [],
+        health: "warn",
+        statusMetrics: { voltage: "13V", tone_actual: "continuous", band_selected: "high", tone_commanded: "none" },
+      },
+    };
+    renderNode(lnb);
+    expect(screen.getByTestId("dvb-topo-node-metric-voltage")).toHaveTextContent("13V");
+    expect(screen.getByTestId("dvb-topo-node-metric-tone_actual")).toHaveTextContent("continuous");
+    expect(screen.getByTestId("dvb-topo-node-metric-band_selected")).toHaveTextContent("high");
+    expect(screen.queryByTestId("dvb-topo-node-metric-tone_commanded")).toBeNull();
+  });
+
+  it("renders the switch card key (port_selected) with a structured value as canonical JSON", () => {
+    const sw: TopologyFlowNode = {
+      id: "sw-0",
+      type: "topology",
+      position: { x: 0, y: 0 },
+      data: {
+        node: {
+          node_id: "sw-0",
+          node_type: "diseqc_switch",
+          config: {},
+          ports: [{ port_id: "coax_in", direction: "input", plane: "SEC_CONTROL", max_connections: 1 }],
+        },
+        violationCodes: [],
+        violationPorts: [],
+        health: "idle",
+        statusMetrics: { port_selected: 2 },
+      },
+    };
+    renderNode(sw);
+    expect(screen.getByTestId("dvb-topo-node-metric-port_selected")).toHaveTextContent("2");
+  });
+
+  it("omits a metric row whose key is absent from the snapshot (missing ≠ zero, no invented value)", () => {
+    renderNode(tunerFixture({ health: "idle", statusMetrics: {} }));
+    expect(screen.queryByTestId("dvb-topo-node-metric-lock_state")).toBeNull();
+    expect(screen.queryByTestId("dvb-topo-node-metric-ber_state")).toBeNull();
+    expect(screen.getByTestId("dvb-topo-node-health")).toHaveTextContent("idle");
+  });
+
+  it("renders no status section without status data (idle canvas face unchanged)", () => {
+    const { container } = renderNode(tunerFixture());
+    expect(container.querySelector(".dvb-topo-node-status")).toBeNull();
+    expect(screen.queryByTestId("dvb-topo-node-health")).toBeNull();
+  });
+
+  it("renders no status section for types without registry status_metrics (MVP/Phase 2 cards unchanged)", () => {
+    const gen = nodeFixture({ health: "ok", statusMetrics: { lock_state: "locked" } });
+    const { container } = renderNode(gen);
+    expect(container.querySelector(".dvb-topo-node-status")).toBeNull();
+  });
+});

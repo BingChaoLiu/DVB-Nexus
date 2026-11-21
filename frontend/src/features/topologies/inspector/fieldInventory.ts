@@ -18,7 +18,15 @@
 // This is NOT a JSON Schema engine (SPEC-402 §2.2): no schema parser, no
 // runtime introspection, no control derivation — the renderer (NodeInspector)
 // switches on the frozen ControlKinds and nothing else.
-import { T2MI_DEMUX_FIELD_INVENTORY, T2MI_ENCAPSULATOR_FIELD_INVENTORY, nodeTypeSpec, type NodeTypeSpec } from "../nodeTypes";
+import {
+  LNB_FIELD_INVENTORY,
+  SWITCH_FIELD_INVENTORY,
+  T2MI_DEMUX_FIELD_INVENTORY,
+  T2MI_ENCAPSULATOR_FIELD_INVENTORY,
+  TUNER_FIELD_INVENTORY,
+  nodeTypeSpec,
+  type NodeTypeSpec,
+} from "../nodeTypes";
 
 /** The closed control-kind set (SPEC-402 §5.2 six MVP kinds + the Phase 2
  * additive "checkbox" — the #121 demux/encapsulator schemas carry free
@@ -168,6 +176,15 @@ export function fieldInventoryFor(configSchema: NodeTypeSpec["config_schema"]): 
       return T2MI_ENCAPSULATOR_FIELD_INVENTORY;
     case "T2miDemuxConfigDTO":
       return T2MI_DEMUX_FIELD_INVENTORY;
+    // #169 (SPEC-401 §Phase3): the #160 backend config DTO pointers — the
+    // lists live in nodeTypes.ts beside the Phase 2 lists (same hand-written
+    // to-the-backend-schema discipline).
+    case "LnbConfigDTO":
+      return LNB_FIELD_INVENTORY;
+    case "TunerConfigDTO":
+      return TUNER_FIELD_INVENTORY;
+    case "SwitchConfigDTO":
+      return SWITCH_FIELD_INVENTORY;
     default:
       return undefined;
   }
