@@ -53,13 +53,24 @@ def fault_event(
     run_id: str = BASELINE,
     expected_observations: tuple[str, ...] = ("ts.continuity_error",),
     applied: tuple[int, ...] | None = None,
+    layer: str | None = None,
+    node_id: str | None = None,
+    pid: int | None = None,
 ) -> FaultEventRecord:
-    """One fault.* lifecycle record as the journal read face returns it."""
+    """One fault.* lifecycle record as the journal read face returns it.
+
+    ``layer`` (ticket #172): the SPEC-204 §9 declared layer rides the
+    ``fault.injected`` payload on BOTH execution faces; ``None`` keeps
+    the pre-#172 payload shape (no layer key — the package-layer
+    default).  ``node_id``/``pid`` overrides let the state-layer shape
+    use node-level addressing (pid always ``None`` there)."""
     payload: dict[str, Any] = {
         "fault_id": fault_id,
         "fault_type": "CC_DISCONTINUITY",
         "injection_index": 50,
     }
+    if layer is not None:
+        payload["layer"] = layer
     if event_type == "fault.injected":
         payload["expected_observations"] = list(expected_observations)
     if event_type == "fault.applied":
@@ -72,8 +83,8 @@ def fault_event(
         event_type=event_type,
         fault_id=fault_id,
         fault_type=payload["fault_type"],
-        node_id=NODE,
-        pid=CC_PID,
+        node_id=node_id if node_id is not None else NODE,
+        pid=pid if pid is not None else CC_PID,
         run_id=run_id,
         payload=payload,
     )

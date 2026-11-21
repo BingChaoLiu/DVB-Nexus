@@ -1,0 +1,17 @@
+{
+  "vector_id": "unicable-frequency-formula",
+  "kind": "state_eval",
+  "related_specs": [
+    "SPEC-623"
+  ],
+  "generator_version": "hand-transcribed from SPEC-623 section 6 frequency formulas (normative; EN 50494 majority-annotated against the minisatip deviation; no src/ involvement)",
+  "config_hash": null,
+  "sha256": "sha256:671dc63b87702c9c2c7ed5038db3be992e75a269e641a984e9a6ca27d4babc4e",
+  "packet_count": null,
+  "fault_plan_ref": null,
+  "verification": {
+    "path": "bit-level-review",
+    "direction": "spec-section-6-formula-derivation (四实现源码级共识 #145/#162 + 数值手推, 无 src 参与) → self-parse — the t values were hand-computed BEFORE the implementation was vector-pinned to them (#162)",
+    "evidence_ref": "docs/test-vectors/golden/unicable-frequency-formula/unicable-frequency-formula.verification.md"
+  }
+}

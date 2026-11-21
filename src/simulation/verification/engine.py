@@ -83,6 +83,15 @@ _CLEARED = "fault.cleared"
 #: omitted in state-level scenarios — SPEC-204 §8.1).
 _ANCHOR_STATES = (_INJECTED, _ACTIVATED, _CLEARED)
 
+#: The state fault layers (SPEC-204 §Phase3, ticket #172): state-layer
+#: faults enter as a PRE-EVALUATION pure transform — no packet phase
+#: exists, so ``fault.activated``/``fault.applied`` never fire and the
+#: closed lifecycle is injected→cleared (the SC-10/SC-11
+#: hidden_reference_solution 口径).  The layer is declared on the
+#: ``fault.injected`` payload (both execution faces carry it); a payload
+#: without a layer keeps the strict #59 chain (backward compatible).
+_STATE_LAYERS = frozenset({"RF", "SEC"})
+
 _RECURRENCE_STATES = (_ACTIVATED, _APPLIED)
 
 _CC_ERROR_EVENT = "ts.continuity_error"
@@ -372,10 +381,22 @@ def _evaluate_fault_inactive(
     recovery_injected: frozenset[str],
 ) -> tuple[str, str | None, str | None, tuple[Mapping[str, Any], ...]]:
     anchor = baseline_by_fault.get(fault_id, {})
+    injected = anchor.get(_INJECTED)
+    declared_layer = (
+        str((injected.payload or {}).get("layer") or "")
+        if injected is not None
+        else ""
+    )
+    # The anchor chain per declared layer (ticket #172): state-layer
+    # faults (RF/SEC) carry no packet phases — injected→cleared is the
+    # closed lifecycle; package-layer faults keep the full #59 chain.
+    required_anchor_states = (
+        (_INJECTED, _CLEARED) if declared_layer in _STATE_LAYERS else _ANCHOR_STATES
+    )
     anchor_refs = _journal_refs(
         [anchor[state] for state in _ANCHOR_STATES if state in anchor]
     )
-    missing = [state for state in _ANCHOR_STATES if state not in anchor]
+    missing = [state for state in required_anchor_states if state not in anchor]
     if missing:
         # SIM_VERIF_EVIDENCE_MISSING applicability boundary (#59): for this
         # criterion evidence can ONLY be missing on the baseline side.

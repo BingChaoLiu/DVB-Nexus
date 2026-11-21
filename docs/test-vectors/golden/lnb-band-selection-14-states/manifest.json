@@ -1,0 +1,17 @@
+{
+  "vector_id": "lnb-band-selection-14-states",
+  "kind": "state_eval",
+  "related_specs": [
+    "SPEC-621"
+  ],
+  "generator_version": "hand-transcribed from SPEC-621 appendix A (normative 14-state truth table; four-source consistency verified by research ticket #146; no src/ involvement)",
+  "config_hash": null,
+  "sha256": "sha256:0d7aa21aadaa06783f95ea6ecfcda085c328c7dbb52d1e133cd999fab3631dfa",
+  "packet_count": null,
+  "fault_plan_ref": null,
+  "verification": {
+    "path": "bit-level-review",
+    "direction": "spec-appendix-A-table-derivation (四源一致 #146, 无 src 参与) → self-parse — the table is the normative truth table transcribed cell by cell BEFORE the implementation was vector-pinned to it (#161)",
+    "evidence_ref": "docs/test-vectors/golden/lnb-band-selection-14-states/lnb-band-selection-14-states.verification.md"
+  }
+}

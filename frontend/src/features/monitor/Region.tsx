@@ -428,6 +428,23 @@ function MonitorPage({ sessionId, onUntrack }: { sessionId: string; onUntrack: (
     return merged;
   }, [runs, runsListQuery.data]);
 
+  // SPEC-404 §Phase3 (ticket #169 prop, #172 wiring): a tracked SIM_STATE
+  // run (fidelity declared on both tracked faces; a state run lands
+  // honestly empty artifacts — the #165 trigger condition) switches the
+  // packet inspector to the 空态三问 with the node-detail jump. Derived,
+  // never guessed: no SIM_STATE row → the pre-#169 faces byte-identical.
+  const tracksSimStateRun = useMemo(() => {
+    const rows: Array<Pick<RunStatusDTO, "fidelity"> & { artifacts?: unknown[] }> = [
+      ...runs,
+      ...(runsListQuery.data ?? []),
+    ];
+    return rows.some(
+      (row) =>
+        row.fidelity === "SIM_STATE" &&
+        (!("artifacts" in row) || (row.artifacts?.length ?? 0) === 0),
+    );
+  }, [runs, runsListQuery.data]);
+
   if (unknownSession) {
     // 未知会话态(§4.6 row 0,文案逐字):显式态替换面板栈;动作 = 回 Lab 开新
     // 实验;重新选择 = 下方最近列表(SessionGuide)。
@@ -567,6 +584,7 @@ function MonitorPage({ sessionId, onUntrack }: { sessionId: string; onUntrack: (
           locator={drillDown}
           view={drillDownView}
           bissEvidence={bissEvidence}
+          simStateRun={tracksSimStateRun ? { sessionId } : null}
           onClose={() => setDrillDown(null)}
         />
         <DiagnosisList diagnoses={diagnosesQuery.data ?? []} />

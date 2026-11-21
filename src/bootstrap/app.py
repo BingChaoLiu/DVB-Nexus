@@ -397,7 +397,7 @@ def build_production_app(
         rules_provider=builtin_rules_provider,
         inner_ts_resolver=_inner_ts_artifact_resolver,
     )
-    bind_run_completion_trigger(gateway, diagnosis_service.evaluate)
+    bind_run_completion_trigger(gateway, diagnosis_service)
 
     # The 裁定 A analysis bridge (ticket #58): run artifacts → ts.* events
     # over the real ts semantic layer. The 裁定 B in-process Analyze anchor

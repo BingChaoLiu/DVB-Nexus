@@ -35,7 +35,7 @@ from pathlib import Path
 DEFAULT_GOLDEN_ROOT = Path("docs/test-vectors/golden")
 DEFAULT_INDEX = Path("docs/test-vectors/TEST-VECTOR-INDEX.md")
 
-KINDS = ("generated_ts", "faulted_ts", "bit_level")
+KINDS = ("generated_ts", "faulted_ts", "bit_level", "state_eval")
 
 #: SPEC-506 §4 verification schema / §5 three-layer acceptance (#14 Q1,
 #: ticket #38): the sanctioned independent-verification paths.  ``self-roundtrip``
@@ -76,6 +76,10 @@ EVENT_TYPE_REGISTRY: frozenset[str] = frozenset(
         "diagnosis.raised",
         "diagnosis.updated",
         "diagnosis.cleared",
+        # The Phase 3 state-observation namespaces (SPEC-303 §Phase3, #164;
+        # the state_eval golden expectations' family face, ticket #172).
+        "rf.state_observed",
+        "sec.state_observed",
     }
 )
 

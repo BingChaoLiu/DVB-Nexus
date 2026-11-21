@@ -21,12 +21,19 @@ Interpreter contract (mirrors the sanctioned shared-fixture interpreter,
 ``tests._support.diagnosis_fixtures``, so the fixture rules and the real
 rules agree):
 
-- a hit needs a complete evidence anchor in ONE of the two states
-  (SPEC-306 §6 + §Phase2 补丁修订, ticket #138): the MVP payload triple
-  ``artifact_id``/``pid``/``packet_index`` (ticket #54 key contract), or
-  — for the Phase 2 evidence family — the application-resolved
-  ``evidence_artifact_id`` plus the namespace-mapped locator (payload
-  locator fields verbatim); no anchor, no candidate;
+- a hit needs a complete evidence anchor in ONE of the three states
+  (SPEC-306 §6 + §Phase2 补丁修订, ticket #138 + the Phase 3 state-snapshot
+  state, ticket #172 / ruling A21 — rule declarations unchanged): the
+  MVP payload triple ``artifact_id``/``pid``/``packet_index`` (ticket #54
+  key contract); — for the Phase 2 evidence family — the
+  application-resolved ``evidence_artifact_id`` plus the namespace-mapped
+  locator (payload locator fields verbatim); — for the Phase 3
+  ``rf.*``/``sec.*`` state-snapshot family — the application-stamped
+  ``evidence_artifact_id`` (the snapshot event's own journal-row
+  identity: a SIM_STATE run lands no TS artifact, the committed journal
+  row IS the evidence terminus, resolvable via the candidate's
+  ``observation_refs`` journal_seq through the events face) plus the
+  namespace-mapped state-discriminator locator; no anchor, no candidate;
 - correlation predicates resolve the ADR-0006 decision-3 addressing dual
   form (``node_id``/``pid``) — the hops ``ObservationRecord`` carries;
 - window aggregates compute per declared grouping-key group within the
@@ -55,7 +62,12 @@ from domain.diagnosis.engine import ObservationRecord, RuleMatch
 from domain.diagnosis.model import DiagnosisConfidence, DiagnosisSeverity
 from domain.diagnosis.report import EvidenceRef
 from domain.diagnosis.rules.errors import RuleDefinitionError
-from domain.observation.registry import EVIDENCE_EVENT_TYPES, validate_event_type
+from domain.observation.registry import (
+    EVIDENCE_EVENT_TYPES,
+    RF_EVENT_TYPES,
+    SEC_EVENT_TYPES,
+    validate_event_type,
+)
 
 __all__ = [
     "DiagnosticRule",
@@ -355,8 +367,9 @@ def _window_selected(
 
 
 def _evidence_of(record: ObservationRecord) -> Optional[EvidenceRef]:
-    """The artifact anchor — TWO states (SPEC-306 §6 MVP + §Phase2 补丁
-    修订, ticket #138):
+    """The artifact anchor — THREE states (SPEC-306 §6 MVP + §Phase2 补丁
+    修订, ticket #138 + the Phase 3 state-snapshot state, ticket #172 /
+    ruling A21; rule declarations unchanged):
 
     - MVP (ticket #54 payload key contract): the full
       ``artifact_id``/``pid``/``packet_index`` triple in the payload —
@@ -367,6 +380,12 @@ def _evidence_of(record: ObservationRecord) -> Optional[EvidenceRef]:
       chain, the run's received-leg Inner TS artifact for
       ``t2mi.*``/``bbframe.*``) plus the namespace-mapped locator —
       the payload locator fields verbatim (无对应定位字段不虚填).
+    - Phase 3 state-snapshot family (``rf.*``/``sec.*``): the
+      application-STAMPED ``evidence_artifact_id`` (the snapshot event's
+      own ``event_id`` — a SIM_STATE run lands no TS artifact, the
+      committed journal row IS the evidence terminus) plus the
+      state-discriminator locator verbatim; an unstamped state snapshot
+      produces no hit (no anchor, no candidate — the #168 honesty face).
 
     Records without a complete state produce no hit — a candidate cannot
     exist without an evidence anchor (SPEC-306 §6).
@@ -396,7 +415,52 @@ def _evidence_of(record: ObservationRecord) -> Optional[EvidenceRef]:
         if not locator:
             return None
         return EvidenceRef(artifact_id=resolved, locator=locator)
+    if record.event_type in _STATE_SNAPSHOT_EVENT_TYPES:
+        resolved = record.evidence_artifact_id
+        if not (isinstance(resolved, str) and resolved):
+            return None  # unstamped: no anchor, no candidate (A21)
+        locator = {
+            key: payload[key]
+            for key in _STATE_LOCATOR_FIELDS.get(record.event_type, ())
+            if key in payload
+        }
+        if not locator:
+            return None
+        return EvidenceRef(artifact_id=resolved, locator=locator)
     return None
+
+
+#: The Phase 3 state-snapshot family (``rf.*``/``sec.*`` — the #164
+#: registered per-node L0 evaluation snapshots).  Unlike the Phase 2
+#: evidence family these ARE observation events (the constant
+#: ``state_evaluator``/``simulated`` axes); they join the anchor gate as
+#: its THIRD state, not via ``EVIDENCE_EVENT_TYPES`` (whose "NOT
+#: observations" semantics stays untouched — #164 freeze preserved).
+_STATE_SNAPSHOT_EVENT_TYPES = RF_EVENT_TYPES | SEC_EVENT_TYPES
+
+#: The Phase 3 locator-field mapping (ticket #172, ruling A21): each
+#: state snapshot's evidence locator = the state-discriminator face
+#: verbatim — the facts the SPEC-307 §Phase3 root-cause narratives name
+#: (lock/ber grades + the CauseRef chain for tuners — the conflict peer /
+#: lnb reference rides the candidate evidence; the tone 双字段 split and
+#: the SCR ``ub_assignments`` table for lnb/switch faces).
+_STATE_LOCATOR_FIELDS: dict[str, tuple[str, ...]] = {
+    "rf.state_observed": (
+        "node_id",
+        "lock_state",
+        "ber_state",
+        "locked_transponder_id",
+        "causes",
+    ),
+    "sec.state_observed": (
+        "node_id",
+        "voltage",
+        "tone_commanded",
+        "tone_actual",
+        "band_selected",
+        "ub_assignments",
+    ),
+}
 
 
 #: The Phase 2 locator-field mapping (SPEC-306 §Phase2 anchor-chain table):

@@ -39,6 +39,16 @@
 | `biss-mode-e-derive` | bit_level | BISS Mode E：J.96 §9.3 派生链（injected_id 128-bit + ESW 16 hex → SW `A13DBC42908F` → CW `A13DBC9A42908F61` → CISSA roundtrip 一条端到端，SPEC-611）；`CW‖CW` 沙箱组合钉扎；每包重启独立性；零原生依赖（pycryptodome，CI 全测可跑） | L1：标准算法内联重实现脚本（`tools/make_golden_biss_mode_e.py`，pycryptodome 原语，无 src 参与）+ 人工评审 | registered |
 | `inner-ts-roundtrip` | generated_ts | Inner TS 重建 expected 侧基准：research 分支 `expected_inner.ts` 原样入册（2×HEM BBFrame ×3 UP = 6 包 PAT/PMT/null，SPEC-603 §11 正向，#125）；链输入 `tests/data/t2mi/inner_ts_roundtrip_input.bin`（同源 provenance，README 三问登记） | L1：外部独立生成器基线（research/ffmpeg-t2mi-demuxer @ 2935ab68，无 src 参与，`git show` 只读取材）+ L2 TSDuck live cross **NOT TRUSTED**（3.45 多 UP 尾包丢失复现，裁定 §10-9；trusted registry 空直至复测矩阵过） | registered |
 
+## golden 向量——state_eval（Phase 3 state 域，SPEC-506 0.7.0 additive，#172 转正）
+
+kind `state_eval`：数据文件 `<vector_id>.ts` 承载向量表的 canonical JSON 序列化（indent=2 / sort_keys / ensure_ascii=False + 尾随换行，UTF-8；sha256 即身份）。向量事实所属家族面以 `sec.state_observed` 登记（登记校验器的事件类型合法性门）；conformance 消费面 = 生产纯函数对拍（A16：`tuning_message` 能力面已实现 #162、事件面以 SPEC-303 为权威）。
+
+| vector_id | Kind | Purpose | 独立验证路径 | Status |
+|---|---|---|---|---|
+| `lnb-band-selection-14-states` | state_eval | SPEC-621 附录 A 14 态真值表逐格向量（band/LO/polarization 三字段；0V 语义 + 复合态编码 + kHz 单位调和，#161 REPORT 冻结） | L1：规格表权威推导（四源一致 #146，无 src 参与）+ #161 向量常量第二独立转录互证 + conformance 生产 `select_band` 对拍（`test_state_eval_golden_vectors.py`） | registered |
+| `unicable-tuning-message-bit-layout` | state_eval | SPEC-623 §6 调谐消息位布局逐位向量（EN 50494/EN 50607 + PIN 变体 0x5C/0x71 + 字段隔离 + EN 50607 极化不变性，21 case，frame_bytes 十进制列表） | L1：规格表手推（四实现源码级共识 tvheadend/VDR/MuMuDVB/minisatip #145/#162，无 src 参与，无条款号）+ #162 向量常量第二独立手推互证 + conformance 生产 `build_tuning_message` 对拍 | registered |
+| `unicable-frequency-formula` | state_eval | SPEC-623 §6 频率公式数值向量（公式 I：取整四元组 + `+2`/`−350` 常数路径 + 10-bit 上界；公式 II：六例含 t=0 与 11-bit 上界，13 case） | L1：公式数值手算（无 src 参与，minisatip 偏差多数派标注）+ #162 独立预手推互证 + conformance 生产 `en50494_t_value`/`en50607_t_value` 对拍 | registered |
+
 ### #14 Q3 三 TODO 落实路径（已闭环）
 
 1. **packet-header.bin → `golden/packet-header-set/`**（SPEC-100 已批准即做）：位级手造三件套，字节由 `tools/make_golden_packet_header_set.py` 从 SPEC-100 §3 wire 表逐位推导；L1 验证（推导脚本 + 评审 + 自解析器逐字段对拍），无需 TSDuck。

@@ -44,6 +44,11 @@ POLL_BOUND = 2000  # event-driven yield points; no wall-clock waits
 
 SCENARIO_DIR = REPO_ROOT / "tests" / "fixtures" / "scenarios"
 
+#: The runtime scenario directory (the Lab Pack 落库形态 — SC-01..SC-11;
+#: the SIM_STATE 支路 reads the v3 pack from here, ticket #172 SHARED
+#: harness extension — registered on the #172 ticket).
+RUNTIME_SCENARIO_DIR = REPO_ROOT / "scenarios"
+
 #: The four golden fault pairs (docs/test-vectors/golden — SPEC-506).
 GOLDEN_VECTOR_IDS = (
     "pat-missing",
@@ -56,6 +61,14 @@ GOLDEN_VECTOR_IDS = (
 def load_scenario(name: str) -> tuple[dict[str, Any], ScenarioDocument]:
     """The fixture document + the production-loader's parsed form."""
     path = SCENARIO_DIR / f"fault-lab-{name}.json"
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    return raw, parse_scenario_document(raw)
+
+
+def load_runtime_scenario(name: str) -> tuple[dict[str, Any], ScenarioDocument]:
+    """A runtime scenario (``scenarios/`` — the Lab Pack 落库形态) as the
+    raw wire mapping + the production-loader's parsed form (#172)."""
+    path = RUNTIME_SCENARIO_DIR / f"{name}.json"
     raw = json.loads(path.read_text(encoding="utf-8"))
     return raw, parse_scenario_document(raw)
 
@@ -168,6 +181,81 @@ class FaultLab:
             == 200
         )
 
+    def create_scenario_session(self, document: ScenarioDocument) -> str:
+        """Create — the #80 加载即建 branch over a REGISTRY scenario
+        (the Lab 开局 body shape for the Lab Pack 落库 scenarios, #172):
+        the request echoes the scenario identity, the DOCUMENT governs
+        (open_scenario_session full semantics run inside — CREATED →
+        VALIDATING → READY), then the READY → RUNNING start transition
+        (runs require a RUNNING session — the SPEC-200 run face)."""
+        body: dict[str, Any] = {
+            "topology_id": document.topology.topology_id,
+            "topology_revision": document.topology.revision,
+            "seed": document.seed,
+            "scenario_id": document.scenario_id,
+        }
+        response = self._client.post("/api/v1/sessions", json=body)
+        assert response.status_code == 201, response.text
+        view = response.json()
+        assert view["lifecycle"] == "ready", view
+        session_id = view["session_id"]
+        started = self._client.post(f"/api/v1/sessions/{session_id}/start")
+        assert started.status_code == 200, started.text
+        return session_id
+
+    def submit_state_run(
+        self, session_id: str, fault_plan: list[dict[str, Any]]
+    ) -> str:
+        """Generate/Inject/Recover on the SIM_STATE face (#165/#172):
+        202 + run_id — the state-domain submission carries NO generator
+        config (a state run has no generator; the backend refuses one)."""
+        response = self._client.post(
+            f"/api/v1/sessions/{session_id}/runs",
+            json={"fidelity": "SIM_STATE", "fault_plan": fault_plan},
+        )
+        assert response.status_code == 202, response.text
+        return response.json()["run_id"]
+
+    def await_state_run(self, session_id: str, run_id: str) -> dict[str, Any]:
+        """Poll the async job to its terminal state (event-driven); the
+        SIM_STATE terminal body carries the L0 products (fidelity +
+        graph_health/node_health, honestly no artifacts)."""
+        for _ in range(POLL_BOUND):
+            view = self._client.get(
+                f"/api/v1/sessions/{session_id}/runs/{run_id}"
+            )
+            assert view.status_code == 200, view.text
+            body = view.json()
+            if body["status"] != "running":
+                assert body["status"] == "completed", body
+                assert body["fidelity"] == "SIM_STATE", body
+                assert body["artifacts"] == [], body
+                return body
+        raise AssertionError(f"run {run_id} never completed ({POLL_BOUND} yields)")
+
+    def evaluate_alerts(self, session_id: str) -> None:
+        """The #52 alert lifecycle over the REAL metrics reader (the
+        in-process driver face — same posture as drain_gateway): metrics
+        consumer catch-up first (the state-snapshot gauges ride the
+        committed journal), then TWO evaluation ticks at the newest
+        observed virtual time (event-driven now_ns — no wall clock):
+        the arming tick opens the breach as pending, the second tick's
+        fresh breach reading fires the for_duration=0 rules (the #52
+        pending→firing cadence, test_obs_ws_hint_pull posture)."""
+        self.stack.process_observation(session_id)
+        newest = 0
+        for item in self.events(session_id):
+            newest = max(
+                newest,
+                int((item.get("time") or {}).get("source", {}).get("value_ns", 0)),
+            )
+        for _ in range(2):
+            self.stack.evaluate_alerts(
+                session_id,
+                now_ns=newest + 1,
+                clock_domain=f"sim:{session_id}",
+            )
+
     def submit_run(
         self, session_id: str, fault_plan: list[dict[str, Any]]
     ) -> str:
@@ -277,6 +365,12 @@ class FaultLab:
         response = self._client.get(f"/api/v1/sessions/{session_id}/diagnoses")
         assert response.status_code == 200, response.text
         return response.json()
+
+    def alerts(self, session_id: str) -> dict[str, Any]:
+        """The alert-list read face (record authority; the #52 REST pull)."""
+        response = self._client.get(f"/api/v1/sessions/{session_id}/alerts")
+        assert response.status_code == 200, response.text
+        return response.json()["data"]
 
     # --- WS face ------------------------------------------------------------
 

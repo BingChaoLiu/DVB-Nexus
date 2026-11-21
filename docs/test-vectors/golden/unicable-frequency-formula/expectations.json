@@ -1,0 +1,200 @@
+{
+  "expectations": [
+    {
+      "event_type": "sec.state_observed",
+      "locator": {
+        "node_type": "lnb",
+        "formula": "I",
+        "f_if_mhz": 1000,
+        "f_ub_mhz": 1210
+      },
+      "detail": {
+        "formula": "I",
+        "protocol": "EN50494",
+        "f_if_mhz": 1000,
+        "f_ub_mhz": 1210,
+        "t": 203
+      }
+    },
+    {
+      "event_type": "sec.state_observed",
+      "locator": {
+        "node_type": "lnb",
+        "formula": "I",
+        "f_if_mhz": 1001,
+        "f_ub_mhz": 1210
+      },
+      "detail": {
+        "formula": "I",
+        "protocol": "EN50494",
+        "f_if_mhz": 1001,
+        "f_ub_mhz": 1210,
+        "t": 203
+      }
+    },
+    {
+      "event_type": "sec.state_observed",
+      "locator": {
+        "node_type": "lnb",
+        "formula": "I",
+        "f_if_mhz": 1002,
+        "f_ub_mhz": 1210
+      },
+      "detail": {
+        "formula": "I",
+        "protocol": "EN50494",
+        "f_if_mhz": 1002,
+        "f_ub_mhz": 1210,
+        "t": 204
+      }
+    },
+    {
+      "event_type": "sec.state_observed",
+      "locator": {
+        "node_type": "lnb",
+        "formula": "I",
+        "f_if_mhz": 1003,
+        "f_ub_mhz": 1210
+      },
+      "detail": {
+        "formula": "I",
+        "protocol": "EN50494",
+        "f_if_mhz": 1003,
+        "f_ub_mhz": 1210,
+        "t": 204
+      }
+    },
+    {
+      "event_type": "sec.state_observed",
+      "locator": {
+        "node_type": "lnb",
+        "formula": "I",
+        "f_if_mhz": 1002,
+        "f_ub_mhz": 1210
+      },
+      "detail": {
+        "formula": "I",
+        "protocol": "EN50494",
+        "f_if_mhz": 1002,
+        "f_ub_mhz": 1210,
+        "t": 204
+      }
+    },
+    {
+      "event_type": "sec.state_observed",
+      "locator": {
+        "node_type": "lnb",
+        "formula": "I",
+        "f_if_mhz": 1000,
+        "f_ub_mhz": 1210
+      },
+      "detail": {
+        "formula": "I",
+        "protocol": "EN50494",
+        "f_if_mhz": 1000,
+        "f_ub_mhz": 1210,
+        "t": 203
+      }
+    },
+    {
+      "event_type": "sec.state_observed",
+      "locator": {
+        "node_type": "lnb",
+        "formula": "I",
+        "f_if_mhz": 3448,
+        "f_ub_mhz": 2040
+      },
+      "detail": {
+        "formula": "I",
+        "protocol": "EN50494",
+        "f_if_mhz": 3448,
+        "f_ub_mhz": 2040,
+        "t": 1023
+      }
+    },
+    {
+      "event_type": "sec.state_observed",
+      "locator": {
+        "node_type": "lnb",
+        "formula": "II",
+        "f_if_mhz": 1000
+      },
+      "detail": {
+        "formula": "II",
+        "protocol": "EN50607",
+        "f_if_mhz": 1000,
+        "t": 900
+      }
+    },
+    {
+      "event_type": "sec.state_observed",
+      "locator": {
+        "node_type": "lnb",
+        "formula": "II",
+        "f_if_mhz": 1950
+      },
+      "detail": {
+        "formula": "II",
+        "protocol": "EN50607",
+        "f_if_mhz": 1950,
+        "t": 1850
+      }
+    },
+    {
+      "event_type": "sec.state_observed",
+      "locator": {
+        "node_type": "lnb",
+        "formula": "II",
+        "f_if_mhz": 100
+      },
+      "detail": {
+        "formula": "II",
+        "protocol": "EN50607",
+        "f_if_mhz": 100,
+        "t": 0
+      }
+    },
+    {
+      "event_type": "sec.state_observed",
+      "locator": {
+        "node_type": "lnb",
+        "formula": "II",
+        "f_if_mhz": 2147
+      },
+      "detail": {
+        "formula": "II",
+        "protocol": "EN50607",
+        "f_if_mhz": 2147,
+        "t": 2047
+      }
+    },
+    {
+      "event_type": "sec.state_observed",
+      "locator": {
+        "node_type": "lnb",
+        "formula": "II",
+        "f_if_mhz": 1100
+      },
+      "detail": {
+        "formula": "II",
+        "protocol": "EN50607",
+        "f_if_mhz": 1100,
+        "t": 1000
+      }
+    },
+    {
+      "event_type": "sec.state_observed",
+      "locator": {
+        "node_type": "lnb",
+        "formula": "II",
+        "f_if_mhz": 1500
+      },
+      "detail": {
+        "formula": "II",
+        "protocol": "EN50607",
+        "f_if_mhz": 1500,
+        "t": 1400
+      }
+    }
+  ]
+}
