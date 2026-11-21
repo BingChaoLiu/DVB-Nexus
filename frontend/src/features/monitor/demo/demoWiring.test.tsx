@@ -132,11 +132,12 @@ function mockHappyOrchestration(): void {
       ? {
           run_id: runId,
           status: "completed",
+          fidelity: "SIM_TS",
           packet_count: 600,
           artifacts: [{ artifact_id: "art-faulted-1", kind: "faulted_ts", sha256: "f".repeat(64), byte_size: 112800, partial: false }],
           warnings: [],
         }
-      : { run_id: runId, status: "completed", packet_count: 600, artifacts: [], warnings: [] },
+      : { run_id: runId, status: "completed", fidelity: "SIM_TS", packet_count: 600, artifacts: [], warnings: [] },
   );
   diagnoseRunMock.mockResolvedValue({ session_id: SESSION, run_id: "run-2", evaluated_at_utc_ms: 1, candidates: [] });
 }

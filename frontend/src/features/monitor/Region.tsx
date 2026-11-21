@@ -262,7 +262,10 @@ function MonitorPage({ sessionId, onUntrack }: { sessionId: string; onUntrack: (
     async (config: unknown) => {
       setRunBusy(true);
       try {
-        const accepted = await submitRun(sessionId, { config: config as never, fault_plan: [] });
+        // Monitor Run 触发 = the SIM_TS config face (the #170 fidelity split is
+        // the Lab 提交面; a state-form submission has no generator config to
+        // carry here — the backend 双向钉 answers it honestly).
+        const accepted = await submitRun(sessionId, { config: config as never, fault_plan: [], fidelity: "SIM_TS" });
         const deadline = Date.now() + RUN_POLL_DEADLINE_MS;
         for (;;) {
           const status = await getRun(sessionId, accepted.run_id);

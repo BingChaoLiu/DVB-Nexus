@@ -146,6 +146,7 @@ export async function runAndWait(sessionId: string, faultPlan: ReadonlyArray<unk
   const accepted = await submitRun(sessionId, {
     config: LAB_RUN_CONFIG as unknown as Parameters<typeof submitRun>[1]["config"],
     fault_plan: faultPlan as Parameters<typeof submitRun>[1]["fault_plan"],
+    fidelity: "SIM_TS",
   });
   const deadline = Date.now() + RUN_POLL_DEADLINE_MS;
   for (;;) {

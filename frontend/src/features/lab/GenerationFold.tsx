@@ -30,6 +30,7 @@ import {
   type GenJumpTarget,
   type GenRunFace,
 } from "./genEvents";
+import { parseStateSnapshotSummary, STATE_SNAPSHOT_EVENT_TYPES } from "./stateEvents";
 
 /** Poll window while the fold is open and a run is executing (same posture
  * family as the console's 200ms run poller — bounded, page-local). */
@@ -59,9 +60,15 @@ export function GenerationFold({ sessionId, runs, active, onJump }: GenerationFo
   // Uncontrolled <details> with a state mirror: the body renders ONLY while
   // opened (folded = no fetch, no faces — the summary line is the signpost).
   const [open, setOpen] = useState(false);
+  // #170 状态域承载: the query rides BOTH fact families — the gen.*
+  // construction face AND the #164 state_observed snapshot face (a SIM_STATE
+  // Run has no gen.* events; its journal composition is rf./sec. snapshots +
+  // topology.state_changed + fault.*, SPEC-303 §Phase3). One read, two pure
+  // parses, two honest faces.
   const query = useQuery({
     queryKey: [...qk.events(sessionId, "lab-gen")],
-    queryFn: () => queryEvents(sessionId, { limit: GEN_EVENTS_LIMIT, event_type: [...GEN_EVENT_TYPES] }),
+    queryFn: () =>
+      queryEvents(sessionId, { limit: GEN_EVENTS_LIMIT, event_type: [...GEN_EVENT_TYPES, ...STATE_SNAPSHOT_EVENT_TYPES] }),
     enabled: open,
     retry: 1,
     refetchInterval: open && active ? GEN_POLL_INTERVAL_MS : false,
@@ -84,6 +91,15 @@ export function GenerationFold({ sessionId, runs, active, onJump }: GenerationFo
     () => parseGenEvents((query.data?.data.items ?? []) as ReadonlyArray<unknown>),
     [query.data],
   );
+  // The state-domain face (#170): the L0 求值摘要 — 节点数 / 各节点 health /
+  // 快照事件计数 over the rf./sec. snapshot events. Data source = journal
+  // 快照事件, NOT the construction pipeline — 状态域 Generate 产物即
+  // state_observed 流, 不冒充构造事件.
+  const stateSummary = useMemo(
+    () => parseStateSnapshotSummary((query.data?.data.items ?? []) as ReadonlyArray<unknown>),
+    [query.data],
+  );
+  const hasStateFace = stateSummary.nodes.length > 0 || stateSummary.rfCount > 0 || stateSummary.secCount > 0;
 
   // --- jump affordance across page-memory loss (review-fix F1 posture) ------
   // The console's §6.3 DERIVED rows (refresh / deep-link / REST-seeded walks)
@@ -170,14 +186,17 @@ export function GenerationFold({ sessionId, runs, active, onJump }: GenerationFo
             <div className="dvb-lab-error" data-testid="lab-gen-error">
               生成事件读取失败（失败 ≠ 空库）：{errorMessage(query.error)}
             </div>
-          ) : face.stages.length === 0 && face.samples.length === 0 ? (
+          ) : face.stages.length === 0 && face.samples.length === 0 && !hasStateFace ? (
             // §4.6 空态纪律: gen.* events exist only for layered runs — v1
             // scenarios and MVP single-layer runs answer the honest empty
-            // face (无记录 ≠ 干净), never a fabricated pipeline.
+            // face (无记录 ≠ 干净), never a fabricated pipeline. #170 状态域
+            // 诚实: a SIM_STATE Run has NO gen.* 构造事件 by construction
+            // (its Generate products ARE the state_observed snapshot stream)
+            // — the empty face names both honest reasons, 空态不冒充.
             <div data-testid="lab-gen-empty">
               <EmptyState
                 title="尚无分层生成事件"
-                note="gen.* 构造事件仅分层 Run 发射（MVP 单层 Run 与 v1 场景为诚实空态——无记录 ≠ 干净）。下一步：注入 Phase 2 分层故障（如 BBHEADER_SYNC_FAULT）后重新展开"
+                note="gen.* 构造事件仅分层 Run 发射（MVP 单层 Run 与 v1 场景为诚实空态——无记录 ≠ 干净）；SIM_STATE Run 无 gen.* 构造事件（状态域 Generate 产物 = state_observed 快照流，不冒充构造事件）。下一步：注入 Phase 2 分层故障（如 BBHEADER_SYNC_FAULT）后重新展开"
               />
             </div>
           ) : (
@@ -224,6 +243,36 @@ export function GenerationFold({ sessionId, runs, active, onJump }: GenerationFo
                 </ul>
               )}
             </>
+          )}
+          {hasStateFace && (
+            // #170 L0 求值摘要 (SPEC-406 §Phase3 状态域形态): 节点数 / 各节点
+            // health / 快照事件计数, 数据源 = journal rf./sec. 快照事件.
+            // Wire values verbatim (health 词表原样; source/confidence 恒定
+            // 配对原样呈现 — 呈现层不混标 parsed/measured). Static rows, no
+            // timeline, no gauges — 排除项守住 (非拟物控件).
+            <div className="dvb-lab-gen-state" data-testid="lab-gen-state-summary">
+              <div className="dvb-lab-line">
+                L0 求值摘要（SIM_STATE Run 无 gen.* 构造事件——求值产物 = state_observed 快照流）
+              </div>
+              <ul className="dvb-lab-gen-stages" data-testid="lab-gen-state-nodes">
+                {stateSummary.nodes.map((node) => (
+                  <li key={node.nodeId} data-testid={`lab-gen-state-node-${node.nodeId}`} className="dvb-lab-gen-stage">
+                    <span className="dvb-lab-line dvb-lab-mono">{node.nodeId}</span>
+                    <Badge tone={node.health === "ok" ? "good" : node.health === "error" ? "bad" : node.health === "warn" ? "warn" : "neutral"}>
+                      {node.health}
+                    </Badge>
+                  </li>
+                ))}
+              </ul>
+              <div className="dvb-lab-line dvb-lab-mono">
+                节点数 {stateSummary.nodes.length} · 快照事件 rf.state_observed {stateSummary.rfCount} · sec.state_observed {stateSummary.secCount}
+              </div>
+              {(stateSummary.source !== null || stateSummary.confidence !== null) && (
+                <div className="dvb-lab-line dvb-lab-note">
+                  source={stateSummary.source ?? "null"} · confidence={stateSummary.confidence ?? "null"}（state_observed 恒定配对）
+                </div>
+              )}
+            </div>
           )}
         </div>
       )}

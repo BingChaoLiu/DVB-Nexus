@@ -44,8 +44,7 @@ import { qk } from "../../query/keys";
 import { monitorKeys } from "../monitor/Region";
 import { DiagnosisCandidateList, DiagnosisList } from "../monitor/components";
 import { VerifyResultCard } from "../monitor/components";
-import { LAB_RUN_CONFIG } from "./labGeometry";
-import { buildVerifyBody } from "./labBodies";
+import { buildRunSubmitBody, buildVerifyBody, readScenarioFidelity } from "./labBodies";
 import { useHintsReveal } from "./hintsStorage";
 import { HintsLadder, type LabHintWire } from "./HintsLadder";
 import { currentActionGuide, deriveCurrentAction, type CurrentActionKey } from "./currentAction";
@@ -95,13 +94,19 @@ interface RegistryEntry {
 }
 
 /** §7.3 hop-3 carrier (review-fix F6 诚实化): the at-accept MINIMUM face —
- * run id + async status only. It does NOT claim the full RunStatusDTO
- * read-back shape: artifacts/packet faces are simply not held at accept time
- * (omitted, never fabricated) — the console's poller fills the real face
- * from getRun answers. RunStatusDTO values are assignable to it. */
+ * run id + async status + the run form the page itself submitted (#170: the
+ * fidelity discriminator + the empty-plan fact ride the carrier so the
+ * eight-step facts stay honest for artifact-less SIM_STATE rows). It does
+ * NOT claim the full RunStatusDTO read-back shape: artifacts/packet faces
+ * are simply not held at accept time (omitted, never fabricated) — the
+ * console's poller fills the real face from getRun answers. */
 export interface AcceptedRunCarrier {
   run_id: string;
   status: RunStatusDTO["status"];
+  /** The run form the opening hop submitted (wire string verbatim). */
+  fidelity: RunStatusDTO["fidelity"];
+  /** The plan-presence fact of the page's own submission (hop-3 = empty). */
+  faultPlanPresent: boolean;
 }
 
 function errorMessage(error: unknown): string {
@@ -185,11 +190,11 @@ export function ExperimentConsole({
   const [registry, setRegistry] = useState<RegistryEntry[]>(
     () =>
       initialRuns?.map((view) => ({
-        view: { run_id: view.run_id, status: view.status },
+        view: { run_id: view.run_id, status: view.status, fidelity: view.fidelity },
         submittedAtMs: Date.now(),
         pollSinceMs: Date.now(),
         timedOut: false,
-        faultPlanPresent: null,
+        faultPlanPresent: view.faultPlanPresent,
       })) ?? [],
   );
   const refreshSnapshot = useCallback(() => {
@@ -218,6 +223,7 @@ export function ExperimentConsole({
           run_id: row.run_id,
           status: row.status,
           packet_count: row.packet_count ?? undefined,
+          fidelity: row.fidelity,
         },
         submittedAtMs: row.submitted_at_ms,
         pollSinceMs: null,
@@ -227,26 +233,35 @@ export function ExperimentConsole({
   }, [registry, serverRuns]);
   const rowEntries = useMemo(() => [...registry, ...derivedRows], [registry, derivedRows]);
 
+  // #170 承载: the run form rides the scenario document's simulation_config
+  // (readScenarioFidelity — the exact wire string, SIM_TS default). The body
+  // builder owns the #165 双向钉 contract (SIM_TS: frozen geometry config;
+  // SIM_STATE: config key ABSENT).
+  const fidelity = useMemo(
+    () => (detailQuery.data !== undefined ? readScenarioFidelity(detailQuery.data) : "SIM_TS"),
+    [detailQuery.data],
+  );
   const submit = useCallback(
     async (faultPlan: ReadonlyArray<unknown>) => {
-      const accepted = await submitRun(sessionId, {
-        config: LAB_RUN_CONFIG as unknown as Parameters<typeof submitRun>[1]["config"],
-        fault_plan: faultPlan as Parameters<typeof submitRun>[1]["fault_plan"],
-      });
+      const accepted = await submitRun(sessionId, buildRunSubmitBody(fidelity, faultPlan));
       setRegistry((prev) => [
         ...prev,
-        // Honest at-accept face (F6): run_id + status only — artifacts are
-        // NOT claimed until a real getRun answer holds them.
+        // Honest at-accept face (F6): run_id + status + the submitted form
+        // only — artifacts are NOT claimed until a real getRun answer holds
+        // them. faultPlanPresent = the page's OWN submission fact (the plan
+        // this very click sent — the artifact-kind path cannot speak for
+        // artifact-less SIM_STATE rows, so the honest submission fact does;
+        // the §6.3 server list face wins once a derived row exists).
         {
-          view: { run_id: accepted.run_id, status: "running" },
+          view: { run_id: accepted.run_id, status: "running", fidelity },
           submittedAtMs: Date.now(),
           pollSinceMs: Date.now(),
           timedOut: false,
-          faultPlanPresent: null,
+          faultPlanPresent: faultPlan.length > 0,
         },
       ]);
     },
-    [sessionId],
+    [sessionId, fidelity],
   );
 
   // Poll-window origins for DERIVED §6.3 rows: the 30s window anchors at this
@@ -346,8 +361,15 @@ export function ExperimentConsole({
   );
 
   const completed = rowEntries.filter((entry) => entry.view.status === "completed");
-  const injectRun = completed.find((entry) =>
-    (entry.view.artifacts ?? []).some((artifact) => artifact.kind === "faulted_ts"),
+  // The diagnose anchor (注入锚): the faulted_artifact kind for SIM_TS rows;
+  // for SIM_STATE rows (no artifact face by construction, #165) the honest
+  // plan-presence fact — the §6.3 server boolean for derived rows, the
+  // page's own submission fact for page rows — speaks instead (#170 承载).
+  // A completed non-faulted row (artifact clean / plan absent) never anchors.
+  const injectRun = completed.find(
+    (entry) =>
+      (entry.view.artifacts ?? []).some((artifact) => artifact.kind === "faulted_ts") ||
+      entry.faultPlanPresent === true,
   );
   // 名实一致（review-fix F5，#96 命名陷阱解除）: 该变量指注入 Run id
   // （diagnose 的「注入锚」）。verify 不消费任何自动派生 run id —

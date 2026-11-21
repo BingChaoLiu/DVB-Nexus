@@ -116,6 +116,54 @@ describe("GenerationFold — the static-wayfinding signpost", () => {
     expect(empty).toHaveTextContent("分层 Run");
   });
 
+  // --- #170 状态域形态: SIM_STATE Run 无 gen.* — L0 求值摘要 ---------------
+  it("renders the L0 求值摘要 from state_observed snapshots (SIM_STATE Run 无 gen.* — 不冒充构造事件)", async () => {
+    const STATE_STREAM = [
+      envelope("rf.state_observed", { node_id: "tuner-a", health: "warn", source: "state_evaluator", confidence: "simulated" }, 1),
+      envelope("rf.state_observed", { node_id: "tuner-b", health: "error", source: "state_evaluator", confidence: "simulated" }, 2),
+      envelope("sec.state_observed", { node_id: "lnb-0", health: "ok", source: "state_evaluator", confidence: "simulated" }, 3),
+      // tuner-a's later snapshot wins (journal asc — the latest truth).
+      envelope("rf.state_observed", { node_id: "tuner-a", health: "error", source: "state_evaluator", confidence: "simulated" }, 4),
+      // foreign events are not snapshots — never counted.
+      envelope("topology.state_changed", { changed: [] }, 5),
+      envelope("gen.packet_sampled", { layer: "TS", packet_index: 0, byte_size: 188, sha256: SHA }, 6, "run-1"),
+    ];
+    mocked.queryEvents.mockResolvedValue({ data: { sort: "journal_asc", items: STATE_STREAM } } as never);
+    renderFold();
+    await openFold();
+
+    const summary = await screen.findByTestId("lab-gen-state-summary");
+    // L0 求值摘要 honesty: SIM_STATE Run 无 gen.* 构造事件 (the state form is
+    // named, never passed off as construction events).
+    expect(summary).toHaveTextContent("SIM_STATE Run 无 gen.*");
+    // 节点数 (distinct nodes) + 快照事件计数 (rf 3 / sec 1).
+    expect(summary).toHaveTextContent("节点数 3");
+    expect(summary).toHaveTextContent("rf.state_observed 3");
+    expect(summary).toHaveTextContent("sec.state_observed 1");
+    // Per-node health rows, wire values verbatim, latest per node.
+    expect(screen.getByTestId("lab-gen-state-node-tuner-a")).toHaveTextContent("tuner-a");
+    expect(screen.getByTestId("lab-gen-state-node-tuner-a")).toHaveTextContent("error");
+    expect(screen.getByTestId("lab-gen-state-node-tuner-b")).toHaveTextContent("error");
+    expect(screen.getByTestId("lab-gen-state-node-lnb-0")).toHaveTextContent("ok");
+    // 恒定配对诚实口径 (source/confidence wire values verbatim).
+    expect(summary).toHaveTextContent("state_evaluator");
+    expect(summary).toHaveTextContent("simulated");
+    // Both faces coexist honestly (a mixed journal renders gen faces AND
+    // the state summary — one face per fact family, no suppression).
+    expect(screen.getByTestId("lab-gen-samples")).toBeInTheDocument();
+    expect(screen.queryByTestId("lab-gen-empty")).not.toBeInTheDocument();
+  });
+
+  it("states the SIM_STATE no-gen.* honesty on the empty face when no snapshots exist either", async () => {
+    mocked.queryEvents.mockResolvedValue({ data: { sort: "journal_asc", items: [] } } as never);
+    renderFold();
+    await openFold();
+    const empty = await screen.findByTestId("lab-gen-empty");
+    // 状态域诚实: SIM_STATE Run 无 gen.* 构造事件(空 ≠ 干净, 不冒充构造事件).
+    expect(empty).toHaveTextContent("SIM_STATE Run 无 gen.* 构造事件");
+    expect(empty).toHaveTextContent("无记录 ≠ 干净");
+  });
+
   it("renders stage progress rows with verbatim wire layer values and item counts", async () => {
     mocked.queryEvents.mockResolvedValue({ data: { sort: "journal_asc", items: LAYERED_STREAM } } as never);
     renderFold();

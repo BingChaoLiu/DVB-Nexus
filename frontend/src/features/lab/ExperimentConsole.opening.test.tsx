@@ -53,7 +53,7 @@ import {
   submitRun,
   verifyRun,
 } from "../../api";
-import { ExperimentConsole } from "./ExperimentConsole";
+import { ExperimentConsole, type AcceptedRunCarrier } from "./ExperimentConsole";
 
 const mocked = {
   getScenario: vi.mocked(getScenario),
@@ -110,6 +110,7 @@ function setupApiMocks() {
     return {
       run_id: runId,
       status: "completed",
+      fidelity: "SIM_TS",
       artifacts: [
         {
           artifact_id: `${runId}-ts`,
@@ -135,7 +136,7 @@ function setupApiMocks() {
   );
 }
 
-function renderConsole(initialRuns?: ReadonlyArray<RunStatusDTO>) {
+function renderConsole(initialRuns?: ReadonlyArray<AcceptedRunCarrier>) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const router = createMemoryRouter(
     [
@@ -159,7 +160,7 @@ beforeEach(() => {
 
 describe("ExperimentConsole — auto-baseline declaration note (§4.4/§7.3)", () => {
   it("renders the standing note ABOVE the Stepper when an auto run was carried in, with the verbatim declaration + inject signpost", async () => {
-    renderConsole([{ run_id: "run-auto", status: "running", artifacts: [] } as RunStatusDTO]);
+    renderConsole([{ run_id: "run-auto", status: "running", fidelity: "SIM_TS", faultPlanPresent: false }]);
     const note = await screen.findByTestId("lab-autorun-note", {}, { timeout: 3_000 });
     expect(note).toHaveTextContent("开局已自动提交基线 Run——真实沙盘数据，非示例");
     expect(note).toHaveTextContent("下一步：注入故障");
@@ -218,6 +219,7 @@ describe("ExperimentConsole — §6.3 run-list reconstruction (refresh/deep-link
     status: "completed",
     submitted_at_ms: 1_700_000_000_000,
     fault_plan_present: false,
+    fidelity: "SIM_TS",
     ...over,
   });
 
@@ -258,6 +260,7 @@ describe("ExperimentConsole — §6.3 run-list reconstruction (refresh/deep-link
     mocked.getRun.mockResolvedValue({
       run_id: "srv-running",
       status: "completed",
+      fidelity: "SIM_TS",
       artifacts: [
         { artifact_id: "srv-running-ts", kind: "faulted_ts", sha256: "ab", byte_size: 1880, partial: false },
       ],
@@ -385,5 +388,100 @@ describe("ExperimentConsole — verify editable prefill form (§7.5 同口径)",
     expect(JSON.stringify(body)).not.toContain("lab-ui-unpinned");
     expect(Object.keys(body)).not.toContain("ui_state");
     expect(await screen.findByTestId("verify-verdict", {}, { timeout: 3_000 })).toHaveTextContent("PASS");
+  });
+});
+
+// --- #170 SIM_STATE 承载(SPEC-406 §Phase3; #165 fidelity 契约) --------------
+// A v3 SIM_STATE document drives the console's run form: run buttons submit
+// fidelity=SIM_STATE with the config key ABSENT (双向钉), and the inject
+// anchor + eight-step facts light from the plan-presence fact — an
+// artifact-less face is the honest SIM_STATE shape, never a missing step.
+describe("ExperimentConsole — SIM_STATE 场景承载 (#170)", () => {
+  const SCENARIO_STATE: ScenarioDetailDTO = {
+    ...SCENARIO,
+    schema_version: "3",
+    simulation_config: { fidelity: "SIM_STATE", seed: 1234567 },
+  };
+
+  function renderStateConsole() {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const router = createMemoryRouter(
+      [
+        {
+          path: "/lab",
+          element: <ExperimentConsole scenarioId={SCENARIO.scenario_id} sessionId="s-1" onBack={() => {}} />,
+        },
+      ],
+      { initialEntries: ["/lab"] },
+    );
+    render(
+      <QueryClientProvider client={queryClient}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>,
+    );
+  }
+
+  it("run buttons submit fidelity=SIM_STATE with the config key ABSENT; the frozen geometry never rides a state run", async () => {
+    mocked.getScenario.mockResolvedValue(SCENARIO_STATE);
+    mocked.getRun.mockImplementation(async (_sessionId, runId) =>
+      ({
+        run_id: runId,
+        status: "completed",
+        fidelity: "SIM_STATE",
+        artifacts: [],
+      }) satisfies RunStatusDTO,
+    );
+    const user = userEvent.setup();
+    renderStateConsole();
+    await screen.findByTestId("lab-action-guide", {}, { timeout: 3_000 });
+
+    await user.click(screen.getByRole("button", { name: "生成基线（Generate，空 plan）" }));
+    await user.click(screen.getByRole("button", { name: "注入故障（Inject，场景 fault_plan）" }));
+    await waitFor(() => expect(screen.getByTestId("lab-run-row-run-2")).toHaveTextContent("completed"), {
+      timeout: 3_000,
+    });
+
+    expect(mocked.submitRun).toHaveBeenCalledTimes(2);
+    for (const [, body] of mocked.submitRun.mock.calls) {
+      expect(body?.fidelity).toBe("SIM_STATE");
+      // 缺省 — never null, never a dummy geometry (#165 模型双向钉).
+      expect("config" in (body ?? {})).toBe(false);
+    }
+    // The empty-plan Generate form stays empty; Inject carries the document's
+    // fault_plan VERBATIM (no UI rewrite).
+    expect(mocked.submitRun.mock.calls[0]?.[1]?.fault_plan).toEqual([]);
+    expect(mocked.submitRun.mock.calls[1]?.[1]?.fault_plan).toEqual(SCENARIO.fault_plan);
+  });
+
+  it("the inject anchor lights from the submission plan fact (no artifact face needed) and Generate/Recover light from clean state rows", async () => {
+    mocked.getScenario.mockResolvedValue(SCENARIO_STATE);
+    mocked.getRun.mockImplementation(async (_sessionId, runId) =>
+      ({
+        run_id: runId,
+        status: "completed",
+        fidelity: "SIM_STATE",
+        artifacts: [],
+      }) satisfies RunStatusDTO,
+    );
+    const user = userEvent.setup();
+    renderStateConsole();
+    await screen.findByTestId("lab-action-guide", {}, { timeout: 3_000 });
+
+    await user.click(screen.getByRole("button", { name: "生成基线（Generate，空 plan）" }));
+    await user.click(screen.getByRole("button", { name: "注入故障（Inject，场景 fault_plan）" }));
+    await user.click(screen.getByRole("button", { name: "恢复重跑（Recover，空 plan）" }));
+    await waitFor(() => expect(screen.getByTestId("lab-run-row-run-3")).toHaveTextContent("completed"), {
+      timeout: 3_000,
+    });
+
+    // Eight-step facts from honest SIM_STATE faces (no fabricated artifacts).
+    expect(screen.getByTestId("lab-step-generate")).toHaveTextContent("基线完成");
+    expect(screen.getByTestId("lab-step-inject")).toHaveTextContent("注入完成");
+    expect(screen.getByTestId("lab-step-recover")).toHaveTextContent("恢复完成");
+    // The diagnose button enables: the inject anchor exists via the plan fact.
+    expect(screen.getByRole("button", { name: "对注入 Run 评估（diagnose）" })).toBeEnabled();
+    // Run rows honestly carry NO artifact chips.
+    expect(screen.getByTestId("lab-run-row-run-2").textContent).not.toContain("faulted_ts");
+    expect(screen.getByTestId("lab-run-row-run-2").textContent).not.toContain("generated_ts");
   });
 });
