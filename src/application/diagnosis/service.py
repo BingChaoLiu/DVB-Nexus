@@ -58,7 +58,12 @@ from domain.diagnosis.events import (
     updated_envelope,
 )
 from domain.diagnosis.report import DiagnosisReport
-from domain.observation.registry import EVIDENCE_EVENT_TYPES, TS_EVENT_TYPES
+from domain.observation.registry import (
+    EVIDENCE_EVENT_TYPES,
+    RF_EVENT_TYPES,
+    SEC_EVENT_TYPES,
+    TS_EVENT_TYPES,
+)
 
 __all__ = [
     "DiagnosisService",
@@ -97,6 +102,18 @@ NowUtcMs = Callable[[], int]
 _INNER_TS_ANCHORED_EVENT_TYPES = frozenset(
     {"t2mi.plp_mismatch", "bbframe.recovery_failed"}
 )
+
+#: The Phase 3 state-snapshot family (ticket #172, ruling A21): the #164
+#: per-node L0 evaluation snapshots join the diagnosis input family.  A
+#: SIM_STATE run lands no TS artifact — each snapshot record is stamped
+#: with its OWN journal-row identity (the envelope ``event_id``): the
+#: committed journal row IS the evidence terminus, resolvable through
+#: the events face via the candidate's ``observation_refs`` journal_seq.
+#: The gate's third state (``domain.diagnosis.rules.model._evidence_of``)
+#: consumes the stamp + the state-discriminator locator; an unstamped
+#: record (tests-layer constructors) produces no candidate (no anchor,
+#: no candidate — the #168 honesty face).
+STATE_SNAPSHOT_EVENT_TYPES = frozenset(RF_EVENT_TYPES | SEC_EVENT_TYPES)
 
 #: The journal reference-chain carriers for the ``biss.*`` anchor: the
 #: run's first non-``None`` ``mutation_log_ref`` on these event types
@@ -220,10 +237,11 @@ class DiagnosisService:
         """Read the run's observation-class records from the journal.
 
         Pagination walks the full session stream (hard-capped pages);
-        records of the run outside the ``ts.*`` observation family and
-        the Phase 2 evidence family are skipped (fault.*/simulation.*
-        engine events are NOT observations or evidence, brief §6 +
-        SPEC-306 §Phase2; the domain only sees those two faces).
+        records of the run outside the ``ts.*`` observation family, the
+        Phase 2 evidence family and the Phase 3 state-snapshot family
+        are skipped (fault.*/simulation.* engine events are NOT
+        observations or evidence, brief §6 + SPEC-306 §Phase2/§Phase3;
+        the domain only sees those three faces).
 
         The Phase 2 evidence records get their anchors stamped here
         (SPEC-306 §Phase2 补丁修订, ticket #138 — the engine stays pure,
@@ -233,7 +251,12 @@ class DiagnosisService:
           first non-``None`` ``mutation_log_ref`` on ``fault.applied`` /
           ``biss.scramble_applied`` (the mutation-log artifact binding);
         - ``t2mi.*`` / ``bbframe.*`` through the injected Inner-TS
-          resolver (the run's received-leg ``kind=inner_ts`` artifact).
+          resolver (the run's received-leg ``kind=inner_ts`` artifact);
+        - ``rf.*`` / ``sec.*`` state snapshots (ticket #172, ruling A21)
+          through their OWN journal-row identity: stamped with the
+          snapshot event's ``event_id`` at record construction — no
+          resolver involved (a SIM_STATE run lands no TS artifact; the
+          committed journal row IS the evidence terminus).
 
         An unresolved anchor leaves the record unstamped — the domain
         then produces no candidate for it (no anchor, no candidate,
@@ -262,14 +285,16 @@ class DiagnosisService:
                 if not (
                     row.event_type in TS_EVENT_TYPES
                     or row.event_type in EVIDENCE_EVENT_TYPES
+                    or row.event_type in STATE_SNAPSHOT_EVENT_TYPES
                 ):
                     continue
                 correlation = envelope.get("correlation") or {}
+                event_id = str(envelope.get("event_id"))
                 records.append(
                     ObservationRecord(
                         journal_seq=int(row.journal_seq),
                         event_type=row.event_type,
-                        event_id=str(envelope.get("event_id")),
+                        event_id=event_id,
                         payload=dict(envelope.get("payload") or {}),
                         node_id=correlation.get("node_id"),
                         pid=correlation.get("pid"),
@@ -277,6 +302,17 @@ class DiagnosisService:
                             (envelope.get("time") or {})
                             .get("source", {})
                             .get("value_ns", 0)
+                        ),
+                        # A21 stamp (ticket #172): a state snapshot's
+                        # evidence anchor is its own journal row — the
+                        # envelope event_id; the gate's third state
+                        # consumes it. TS/evidence records stay unstamped
+                        # here (their anchors resolve below / ride the
+                        # payload triple).
+                        evidence_artifact_id=(
+                            event_id
+                            if row.event_type in STATE_SNAPSHOT_EVENT_TYPES
+                            else None
                         ),
                     )
                 )
@@ -532,9 +568,22 @@ class DiagnosisService:
             ) from exc
 
 
+class RunEndDiagnosisEngine(Protocol):
+    """The run-end trigger's engine face (structural): the service object
+    whose ``evaluate`` runs per terminal-run commit (SPEC-306 §4).  The
+    #172 ticket fix: the annotation now states the ACTUAL contract (the
+    tests bind the service object; the callback body invokes
+    ``engine.evaluate``) — the stale ``Callable`` annotation had the
+    bootstrap binding pass the bound ``evaluate`` function, an
+    ``AttributeError`` every commit (swallowed by the gateway's
+    subscriber isolation; the REST re-serve masked it)."""
+
+    def evaluate(self, session_id: str, run_id: str) -> DiagnosisReport: ...
+
+
 def bind_run_completion_trigger(
     gateway: Any,
-    engine: Callable[[str, str], DiagnosisReport],
+    engine: RunEndDiagnosisEngine,
 ) -> Callable[[dict[str, Any]], None]:
     """SPEC-306 §4 run-end trigger: evaluate when a terminal run event
     commits (gateway commit fan-out). Subscriber errors are counted by

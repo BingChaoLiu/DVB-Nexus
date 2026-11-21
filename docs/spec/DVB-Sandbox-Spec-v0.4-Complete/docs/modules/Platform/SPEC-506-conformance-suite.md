@@ -1,7 +1,7 @@
 ---
 spec_id: SPEC-506
 title: Conformance Suite
-version: 0.6.0
+version: 0.7.0
 status: APPROVED
 phase: MVP
 owner: Platform
@@ -14,7 +14,7 @@ requirements: [REQ-CNF-506-001, REQ-CNF-506-002, REQ-CNF-506-003, REQ-CNF-506-00
 
 ## 1. 目标
 
-MPEG-TS 标准测试向量与 golden streams 的**管理机制与验收策略**：目录结构、登记格式、三层来源验收地位、独立验证规则、CI 门（含 TSDuck 安装策略）与批准/失效流程。0.5.0（ticket #13 Q6）只定机制骨架；0.6.0 并入 golden streams 与 conformance 策略票据（[#14](https://github.com/BingChaoLiu/DVB-Nexus/issues/14)）的全部裁决：向量内容、首批清单、来源分层、CI 行为与生命周期粒度，本版即为权威。
+MPEG-TS 标准测试向量与 golden streams 的**管理机制与验收策略**：目录结构、登记格式、三层来源验收地位、独立验证规则、CI 门（含 TSDuck 安装策略）与批准/失效流程。0.5.0（ticket #13 Q6）只定机制骨架；0.6.0 并入 golden streams 与 conformance 策略票据（[#14](https://github.com/BingChaoLiu/DVB-Nexus/issues/14)）的全部裁决：向量内容、首批清单、来源分层、CI 行为与生命周期粒度，本版即为权威。0.7.0（ticket #172）最小 additive 修订：新增 `state_eval` 向量类型承载 Phase 3 state 域向量转正（机制零变更——三件套/sha 身份/独立验证红线/CI 门全部沿用）。
 
 ## 2. 范围
 
@@ -40,7 +40,8 @@ docs/test-vectors/
 ├── TEST-VECTOR-INDEX.md              # 权威索引（位级文档 + golden 三件套清单）
 ├── CRC32-MPEG2.md / PCR-PTS.md       # 既有位级向量文档（随 0.6.0 迁出规格包）
 └── golden/<vector_id>/
-    ├── <vector_id>.ts                # 字节（TS 流或位级样本）
+    ├── <vector_id>.ts                # 字节（TS 流或位级样本；state_eval 向量
+    │                                 #  为向量表的 canonical JSON 序列化，见 §4）
     ├── manifest.json                 # 机器可读登记（§4）
     └── expectations.json             # 期望观测（§4）
 ```
@@ -48,6 +49,7 @@ docs/test-vectors/
 - 0.5.0 曾将本目录置于规格包内；0.6.0 迁至仓库级（#14：测试资产不是规格归档内容，归档包保持 pristine 精神）。
 - 三件套缺一不予登记。
 - `vector_id` 语义 slug（如 `pat-minimal`、`cc-discontinuity`），全局唯一。
+- 0.7.0（#172）：`state_eval` 向量的数据文件承载向量表的 **canonical JSON 序列化**（`json.dumps(indent=2, sort_keys=True, ensure_ascii=False)` + 尾随换行，UTF-8，LF 换行）——sha256 对该字节序列计算，即身份；canonical 形由 conformance 测试往返钉扎。
 
 ## 4. 登记格式
 
@@ -56,7 +58,7 @@ docs/test-vectors/
 ```json
 {
   "vector_id": "pat-minimal",
-  "kind": "generated_ts | faulted_ts | bit_level",
+  "kind": "generated_ts | faulted_ts | bit_level | state_eval",
   "related_specs": ["SPEC-103", "SPEC-108"],
   "generator_version": "tsduck 3.45-4798（外源 provenance；自研生成时为 Generator 版本）",
   "config_hash": "sha256:...",
@@ -85,6 +87,7 @@ docs/test-vectors/
 - 等位替换 golden：baseline 与 faulted 向量**共用包序 frame**（packet_index 同槽位，ADR-0007 第 4 条）；faulted 向量 `fault_plan_ref` 指向对应 baseline。
 - `TEST-VECTOR-INDEX.md` 每行指向 golden 目录，标注 status（`planned / registered / deprecated`）。
 - `generator_version`/`config_hash` 对外源向量仅为 **provenance 记录**，不是有效性判据（§6 重验条款，#14）。
+- 0.7.0（#172）`state_eval` 语义：Phase 3 state 域向量（L0 求值纯函数的规格表转录——逐格真值表/逐位帧布局/公式数值）。数据文件 = 向量表 canonical JSON（§3）；expectations 条目的 `event_type` 标向量事实所属的 SPEC-301 §4 家族面（state 域 = `rf.state_observed`/`sec.state_observed`），`locator`/`detail` 承载向量行标识与期望字段；`packet_count`/`config_hash`/`fault_plan_ref` 为 null（state 域无码流/无 config 指纹/无 fault 对）。conformance 消费面 = 生产纯函数对拍 golden 表（如 `select_band`/`build_tuning_message`/`t_value`）。
 
 ## 5. 独立验证红线与三层来源地位（#14）
 
@@ -102,6 +105,7 @@ TEST-VECTOR-INDEX 既有规则**升格为规格条款**：
 
 - 独立验证证据（方向 + 工具版本 + 报告锚点）登记进 manifest `verification` 字段（实现期细化字段 schema）。
 - 同源自证 = 登记拒绝。
+- 0.7.0（#172）`state_eval` 向量的独立验证路径：TSDuck 交叉不适用（state 域无码流）——走 **L1 规格表权威推导**（normative 表逐格/逐位/逐例转录，无 src 参与；`bit-level-review` 登记路径家族），并要求实现侧存在**第二独立转录**互证（向量先钉纪律的测试常量）+ conformance 生产纯函数对拍（实现对拍规格转录，非自身输出）。
 
 ## 6. CI 门与向量生命周期（#14）
 

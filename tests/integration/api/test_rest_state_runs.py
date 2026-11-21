@@ -232,6 +232,9 @@ class TestSimStateRunRestFace:
         assert not any(event_type.startswith("gen.") for event_type in types)
         assert not any(event_type.startswith("ts.") for event_type in types)
         # every state-domain event sits in the frozen composition set.
+        # (``diagnosis.*`` is NOT state-domain: the #54 run-end trigger —
+        # live since the #172 bootstrap binding fix — appends the
+        # SPEC-306 diagnosis family on top of the state composition.)
         from simulation.state.observation_bridge import (
             is_sim_state_journal_event_type,
         )
@@ -239,7 +242,7 @@ class TestSimStateRunRestFace:
         state_domain = [
             event_type
             for event_type in types
-            if not event_type.startswith("simulation.")
+            if not event_type.startswith(("simulation.", "diagnosis."))
         ]
         assert all(is_sim_state_journal_event_type(t) for t in state_domain)
 

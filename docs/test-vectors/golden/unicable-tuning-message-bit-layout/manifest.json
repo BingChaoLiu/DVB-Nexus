@@ -1,0 +1,18 @@
+{
+  "vector_id": "unicable-tuning-message-bit-layout",
+  "kind": "state_eval",
+  "related_specs": [
+    "SPEC-623",
+    "SPEC-622"
+  ],
+  "generator_version": "hand-transcribed from SPEC-623 section 6 bit-layout tables (normative; four-implementation source-level consensus tvheadend/VDR/MuMuDVB/minisatip, issue #145; no src/ involvement)",
+  "config_hash": null,
+  "sha256": "sha256:2b8ca36230ba7fb88d6310aa87081433020b636260b3832db9d98afc0b39e355",
+  "packet_count": null,
+  "fault_plan_ref": null,
+  "verification": {
+    "path": "bit-level-review",
+    "direction": "spec-section-6-bit-layout-derivation (四实现源码级共识 #145/#162, 无 src 参与) → self-parse — the frames were hand-derived field by field BEFORE the implementation was vector-pinned to them (#162)",
+    "evidence_ref": "docs/test-vectors/golden/unicable-tuning-message-bit-layout/unicable-tuning-message-bit-layout.verification.md"
+  }
+}

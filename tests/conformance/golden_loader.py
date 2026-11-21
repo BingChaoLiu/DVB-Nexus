@@ -35,8 +35,11 @@ from typing import Any, Mapping, Sequence
 
 from tests._support.paths import REPO_ROOT
 
-#: SPEC-506 §4 manifest kind closed enum.
-KINDS: tuple[str, ...] = ("generated_ts", "faulted_ts", "bit_level")
+#: SPEC-506 §4 manifest kind closed enum.  ``state_eval`` (ticket #172,
+#: the SPEC-506 0.7.0 minimal additive revision): the Phase 3 state-domain
+#: vector kind — the data file carries the vector TABLE's canonical JSON
+#: serialization (UTF-8), not a TS byte stream.
+KINDS: tuple[str, ...] = ("generated_ts", "faulted_ts", "bit_level", "state_eval")
 
 #: SPEC-506 §4 verification schema / §5 three-layer acceptance (#14 Q1, ticket
 #: #38): the only sanctioned independent-verification paths.  ``tsduck-cross``

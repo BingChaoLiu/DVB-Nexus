@@ -24,4 +24,4 @@ def test_all_registered_vectors_load_with_verified_sha():
     for vector in vectors:
         assert vector.sha256
         assert vector.ts_bytes  # non-empty registered bytes
-        assert vector.kind in ("generated_ts", "faulted_ts", "bit_level")
+        assert vector.kind in ("generated_ts", "faulted_ts", "bit_level", "state_eval")

@@ -119,6 +119,83 @@ class TestSegmentOneBaselineAnchor:
         assert criterion_result(outcome).result == RESULT_PASS
 
 
+class TestStateLayerAnchorChain:
+    """State-layer faults (RF/SEC — SPEC-204 §Phase3, ticket #172): the
+    state face enters as a PRE-EVALUATION pure transform, so no packet
+    phase exists — the closed lifecycle is injected→cleared (the SC-10
+    hidden_reference_solution 口径).  The #59 activated requirement
+    stays scoped to the package-layer faces (unchanged for TS faults)."""
+
+    def _state_layer_baseline(self, layer: str) -> list:
+        return [
+            v.fault_event(
+                "fault.injected",
+                journal_seq=10,
+                layer=layer,
+                node_id="tuner-b",
+                pid=None,
+                expected_observations=("sec.state_observed", "rf.state_observed"),
+            ),
+            v.fault_event(
+                "fault.cleared",
+                journal_seq=13,
+                layer=layer,
+                node_id="tuner-b",
+                pid=None,
+            ),
+        ]
+
+    @pytest.mark.parametrize("layer", ["RF", "SEC"])
+    def test_injected_cleared_is_the_closed_state_lifecycle(self, layer):
+        outcome = evaluate(
+            v.baseline_verified_input(
+                fault_inactive_only(),
+                baseline_fault_events=self._state_layer_baseline(layer),
+                recovery_fault_events=[],
+            )
+        )
+        entry = criterion_result(outcome)
+        assert entry.result == RESULT_PASS
+        assert outcome.verdict == VERDICT_PASS
+
+    @pytest.mark.parametrize("layer", ["RF", "SEC"])
+    def test_state_layer_injected_only_stays_incomplete(self, layer):
+        # The state-layer relaxation is NOT a lifecycle weakening: the
+        # cleared half of the closure is still mandatory evidence.
+        baseline = [
+            event
+            for event in self._state_layer_baseline(layer)
+            if event.event_type != "fault.cleared"
+        ]
+        outcome = evaluate(
+            v.baseline_verified_input(
+                fault_inactive_only(),
+                baseline_fault_events=baseline,
+                recovery_fault_events=[],
+            )
+        )
+        entry = criterion_result(outcome)
+        assert entry.result == RESULT_NOT_EVALUATED
+        assert outcome.verdict == VERDICT_INCONCLUSIVE
+
+    def test_package_layer_still_requires_activated(self):
+        # The layer is declared on the injected payload; a package-layer
+        # fault without fault.activated stays the #59 NOT_EVALUATED face
+        # (the relaxation never leaks across layers).
+        baseline = [
+            event
+            for event in v.closed_baseline_lifecycle()
+            if event.event_type != "fault.activated"
+        ]
+        outcome = evaluate(
+            v.baseline_verified_input(
+                fault_inactive_only(), baseline_fault_events=baseline
+            )
+        )
+        assert criterion_result(outcome).result == RESULT_NOT_EVALUATED
+        assert outcome.verdict == VERDICT_INCONCLUSIVE
+
+
 class TestSegmentTwoRecoveryPlanDeclaration:
     """主承重件: the recovery prepared plan must not declare the fault."""
 

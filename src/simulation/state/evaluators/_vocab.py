@@ -11,11 +11,14 @@ upstream site needed.  The tests layer three-way drift lock
 pins every face against the domain config DTOs (rulings A1/A14).
 
 The evaluation-time drive keys (``voltage`` / ``tone_commanded`` /
-``tone_actual`` / ``tone_composite`` / ``short_circuit_state`` on the lnb;
-``diseqc_commands`` on the switch) are NOT config-DTO fields: they arrive
-through fault transforms (SPEC-204 §Phase3, #163) or scenario calibration
-after config validation — the DTO gate never sees them, so the validator's
-``extra="forbid"`` surface stays untouched.
+``tone_actual`` / ``tone_composite`` / ``short_circuit_state`` on the lnb)
+are FIRST-CLASS optional config-DTO fields since ticket #171 (ruling A20 —
+the「验证后进入」path is honest: the keys are part of the declared surface
+the DTO gate validates), so the pre-A20 docstring paragraph claiming they
+bypass the DTO gate is RETIRED (ticket #172); ``diseqc_commands`` was
+always a DTO field.  Fault transforms (#163) still rewrite them at run
+time — on the faulted path the rewrite is the SPEC-204 §Phase3 declared
+mechanism, not a schema bypass.
 """
 
 from __future__ import annotations
