@@ -8,11 +8,11 @@ and **fails fast on malformed files** — so every shipped file must pass
 the production loader. These tests pin that obligation plus the SPEC-406
 §4.9 authoring contract:
 
-- nine files, filename-ASC = SC-01..09 library order (v1 five + the v2
-  four riding ticket #131);
+- eleven files, filename-ASC = SC-01..11 library order (v1 five + the v2
+  four riding ticket #131 + the v3 two riding ticket #171);
 - every file parses through ``parse_scenario_document`` (the schema gate)
   and passes the SPEC-204 §11 fault-plan gate;
-- nine distinct uuid4 scenario ids, all declaring a non-empty
+- eleven distinct uuid4 scenario ids, all declaring a non-empty
   ``hidden_reference_solution`` (the reveal-face content carrier);
 - SC-01's pass criteria = the single ``fault_inactive`` mandatory
   criterion (the pure-REST PASS-reachable chain, M4 裁定 B posture);
@@ -49,6 +49,8 @@ EXPECTED_FILES = (
     "SC-07-bbheader_sync_fault.json",
     "SC-08-biss_key_mismatch.json",
     "SC-09-pmt_pid_drift.json",
+    "SC-10-unicable_ub_conflict.json",
+    "SC-11-tone_residue.json",
 )
 
 #: SPEC-206 §7 MVP criterion closed enum (verbatim wire slugs).
@@ -69,23 +71,23 @@ def _lab_pack() -> list[tuple[str, dict]]:
     return [(path.name, json.loads(path.read_text(encoding="utf-8"))) for path in paths]
 
 
-def test_lab_pack_directory_holds_exactly_the_nine_pack_files() -> None:
+def test_lab_pack_directory_holds_exactly_the_eleven_pack_files() -> None:
     names = tuple(path.name for path in sorted(SCENARIO_DIR.glob("*.json")))
     assert names == EXPECTED_FILES
 
 
 def test_every_lab_pack_file_passes_the_production_loader_and_fault_gate() -> None:
     pack = _lab_pack()
-    assert len(pack) == 9
+    assert len(pack) == 11
     for name, raw in pack:
         document = parse_scenario_document(raw)  # schema gate (raises on malformed)
         assert document.content_hash, name
         assert validate_scenario_fault_plan(document) == (), name
 
 
-def test_lab_pack_scenario_ids_are_nine_distinct_uuid4s() -> None:
+def test_lab_pack_scenario_ids_are_eleven_distinct_uuid4s() -> None:
     ids = [parse_scenario_document(raw).scenario_id for _name, raw in _lab_pack()]
-    assert len(set(ids)) == 9
+    assert len(set(ids)) == 11
     for scenario_id in ids:
         # uuid4 shape: version nibble 4, variant nibble 8/9/a/b.
         assert scenario_id[14] == "4" and scenario_id[19] in "89ab"
@@ -146,7 +148,8 @@ def test_difficulty_ladder_ascends_across_the_v1_pack() -> None:
 
 def test_topologies_use_the_frozen_node_type_strings() -> None:
     # MVP four (#67) + the Phase 2 encapsulator/demux pair (#121/#135,
-    # consumed by SC-06/07 — the #110 ruled three-level structure).
+    # consumed by SC-06/07 — the #110 ruled three-level structure) + the
+    # Phase 3 RF/SEC trio (#160; lnb/tuner consumed by SC-10/11, #171).
     frozen = {
         "ts_generator",
         "ts_mux",
@@ -154,6 +157,9 @@ def test_topologies_use_the_frozen_node_type_strings() -> None:
         "ts_monitor",
         "t2mi_encapsulator",
         "t2mi_demux",
+        "lnb",
+        "tuner",
+        "diseqc_switch",
     }
     enabled_planes = {
         "MPEG_TS",
@@ -168,7 +174,10 @@ def test_topologies_use_the_frozen_node_type_strings() -> None:
             assert node["nodeType"] in frozen, name
             for port in node["ports"]:
                 assert port["plane"] in enabled_planes, name
-                assert port["maxConnections"] == 1, name
+                # maxConnections 1 is the MVP-era default; 2 is the lnb
+                # coax_out shared-coax fan-out template (SPEC-003 §Phase3
+                # 1:N over per-port cardinality, #148/#160/#171).
+                assert port["maxConnections"] in (1, 2), name
                 planes.add(port["plane"])
         if index < 5:  # the v1 five stay MPEG_TS-only (zero-regression)
             assert planes == {"MPEG_TS"}, name

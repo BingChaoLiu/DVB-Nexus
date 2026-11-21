@@ -84,7 +84,9 @@ def _v2_pack() -> dict[str, dict]:
 
 def test_v2_files_sit_after_the_v1_five_in_filename_order() -> None:
     names = [path.name for path in sorted(SCENARIO_DIR.glob("*.json"))]
-    assert names[-4:] == list(V2_FILES)
+    # Registration face (#171): the v2 four follow the v1 five; the v3
+    # two ride after them (SC-10/SC-11, pinned in test_lab_pack_v3.py).
+    assert names[5:9] == list(V2_FILES)
 
 
 @pytest.mark.parametrize("name", V2_FILES)
@@ -101,7 +103,7 @@ def test_v2_scenario_ids_are_distinct_uuid4s_disjoint_from_v1() -> None:
         parse_scenario_document(json.loads(path.read_text(encoding="utf-8"))).scenario_id
         for path in sorted(SCENARIO_DIR.glob("*.json"))
     ]
-    assert len(set(all_ids)) == 9
+    assert len(set(all_ids)) == 11  # v1 five + v2 four + v3 two (#171)
     for scenario_id in V2_IDS.values():
         assert scenario_id[14] == "4" and scenario_id[19] in "89ab"
 

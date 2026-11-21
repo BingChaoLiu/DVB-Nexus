@@ -1,0 +1,144 @@
+{
+  "schema_version": 3,
+  "scenario_id": "5c010000-0000-4000-8000-00000000000a",
+  "version": "1.0.0",
+  "title": "共享冲突：Unicable UB 槽位（双 tuner 堆叠互扰无法锁定）",
+  "difficulty": "intermediate",
+  "required_engine_versions": {
+    "fault_registry": ">=0.7.0",
+    "l0_state_evaluators": ">=0.7.0"
+  },
+  "initial_topology": {
+    "topology_id": "topo-labpack-v3",
+    "revision": 1,
+    "nodes": [
+      {
+        "nodeId": "lnb-0",
+        "nodeType": "lnb",
+        "config": {
+          "lnb_kind": "universal",
+          "lo_frequencies": { "low_khz": 9750000, "high_khz": 10600000 },
+          "voltage": "13V",
+          "scr": {
+            "protocol": "EN50494",
+            "ub_assignments": [
+              { "tuner_node": "tuner-a", "ub_slot": 0, "ub_center_freq_mhz": 1210, "position": "A", "ub_bandwidth_mhz": 46 },
+              { "tuner_node": "tuner-b", "ub_slot": 1, "ub_center_freq_mhz": 1420, "position": "B", "ub_bandwidth_mhz": 46 }
+            ]
+          }
+        },
+        "ports": [
+          {
+            "portId": "coax_out",
+            "direction": "output",
+            "plane": "SEC_CONTROL",
+            "maxConnections": 2
+          }
+        ]
+      },
+      {
+        "nodeId": "tuner-a",
+        "nodeType": "tuner",
+        "config": {
+          "tuning_request": { "frequency_khz": 11804000, "polarization": "vertical" },
+          "ub_slot": 0
+        },
+        "ports": [
+          {
+            "portId": "rf_in",
+            "direction": "input",
+            "plane": "SEC_CONTROL",
+            "maxConnections": 1
+          }
+        ]
+      },
+      {
+        "nodeId": "tuner-b",
+        "nodeType": "tuner",
+        "config": {
+          "tuning_request": { "frequency_khz": 11444000, "polarization": "horizontal" },
+          "ub_slot": 1
+        },
+        "ports": [
+          {
+            "portId": "rf_in",
+            "direction": "input",
+            "plane": "SEC_CONTROL",
+            "maxConnections": 1
+          }
+        ]
+      }
+    ],
+    "connections": [
+      { "connectionId": "conn-lnb-tunera", "plane": "SEC_CONTROL", "from": { "nodeId": "lnb-0", "portId": "coax_out" }, "to": { "nodeId": "tuner-a", "portId": "rf_in" } },
+      { "connectionId": "conn-lnb-tunerb", "plane": "SEC_CONTROL", "from": { "nodeId": "lnb-0", "portId": "coax_out" }, "to": { "nodeId": "tuner-b", "portId": "rf_in" } }
+    ]
+  },
+  "simulation_config": {
+    "fidelity": "SIM_STATE",
+    "seed": 42
+  },
+  "fault_plan": [
+    {
+      "fault_id": "fd000000-0000-4000-8000-00000000f110",
+      "fault_type": "UB_SLOT_CONFLICT",
+      "target_id": "tuner-b:ub_slot",
+      "parameters": {
+        "conflicting_ub_slot": 0
+      },
+      "activation": {
+        "kind": "session_start"
+      },
+      "expected_observations": [
+        "sec.state_observed",
+        "rf.state_observed"
+      ]
+    }
+  ],
+  "objectives": [
+    "确认单根同轴共享拓扑下 tuner-a 正常锁定、tuner-b 无法锁定——「共享介质上冲突是成对事实」",
+    "用节点详情面板核对 ub_assignments 表与 tuner-b 实际 ub_slot：错配方请求了已被 tuner-a 占用的 UB 0——SCR 在同一频槽堆叠两路信号互扰（冲突在 SCR 堆叠层，与 LNB 本振无关）",
+    "恢复（空 fault_plan 重跑新 Run）并提交通关判定"
+  ],
+  "hints": [
+    {
+      "hint_id": "sc10-hint-1",
+      "trigger": "experiment opened",
+      "level": "nudge",
+      "content": "Unicable 把多个接收端塞进一根同轴：SCR（Satellite Channel Router）按命令把 transponder 变频到各接收端的 User Band 槽位并堆叠。先在基线 Run 确认双 tuner 各自锁定（ub_assignments 表：tuner-a→UB0@1210、tuner-b→UB1@1420）。",
+      "requirement_ids": [
+        "REQ-SIM-204-P3"
+      ],
+      "standard_ref": null
+    },
+    {
+      "hint_id": "sc10-hint-2",
+      "trigger": "after Inject",
+      "level": "direction",
+      "content": "tuner-b unlocked 了吗？节点详情面板看两件事：① tuner-b 快照的 causes 是否指向冲突对；② SCR 的 ub_assignments 表里 UB 0 被谁占用。注意 SCR 展开名是 Satellite Channel Router——冲突是堆叠层共享资源冲突，不是 LNB 本振冲突。",
+      "requirement_ids": [
+        "REQ-SIM-204-P3"
+      ],
+      "standard_ref": null
+    },
+    {
+      "hint_id": "sc10-hint-3",
+      "trigger": "before Diagnose",
+      "level": "solution",
+      "content": "UB_SLOT_CONFLICT 把 tuner-b 的 ub_slot 运行期错配到 0（tuner-a 已占用）——同 UB 双请求 = SCR 堆叠互扰，tuner-b lock 失败且 CauseRef 指向冲突对。恢复路径 = 空 fault_plan 重跑新 Run，verify 以 fault_inactive 判据提交（配置期静态校验 SIM_TOPO_UB_* 在基线永远合法，错配只存在于 fault plan）。",
+      "requirement_ids": [
+        "REQ-SIM-204-P3"
+      ],
+      "standard_ref": null
+    }
+  ],
+  "pass_criteria": [
+    {
+      "criterion_id": "fault-cleared",
+      "kind": "fault_inactive",
+      "mandatory": true,
+      "fault_id": "fd000000-0000-4000-8000-00000000f110"
+    }
+  ],
+  "hidden_reference_solution": "恢复路径：空 fault_plan 重跑新 Run（同 config 确定性复现，状态流逐字段一致）。verify 以 Inject Run 为 baseline_run_id、恢复 Run 为 recovery_run_id，fault_inactive 判据核对：① Inject Run 上 fault.* 生命周期闭合；② 恢复 Run prepared plan 不含该 fault_id；③ 恢复 Run journal 无该 fault 复发。教学锚点（roadmap §4 A1 订正口径）：SCR 展开名 = Satellite Channel Router（EN 50494；非 Subscriber Channel Radio）；冲突本质 = 同一 User Band 被两个接收端占用导致 SCR 堆叠信号互扰，不是 LNB 本振冲突；EN 50607（dCSS/Unicable II）扩展至 32 UB。状态域证据：tuner-b rf.state_observed lock_state=unlocked + CauseRef 冲突对（SIM_TOPO_UB_* 静态校验确认基线合法，错配仅 fault plan 期生效）。"
+}

@@ -1,0 +1,156 @@
+{
+  "schema_version": 3,
+  "scenario_id": "5c010000-0000-4000-8000-00000000000b",
+  "version": "1.0.0",
+  "title": "供电残留：22kHz 持续音调残留（低频段失锁/错锁，高频段正常）",
+  "difficulty": "intermediate",
+  "required_engine_versions": {
+    "fault_registry": ">=0.7.0",
+    "l0_state_evaluators": ">=0.7.0"
+  },
+  "initial_topology": {
+    "topology_id": "topo-labpack-v3",
+    "revision": 1,
+    "nodes": [
+      {
+        "nodeId": "lnb-0",
+        "nodeType": "lnb",
+        "config": {
+          "lnb_kind": "universal",
+          "lo_frequencies": { "low_khz": 9750000, "high_khz": 10600000 },
+          "voltage": "13V",
+          "tone_commanded": "none"
+        },
+        "ports": [
+          {
+            "portId": "coax_out",
+            "direction": "output",
+            "plane": "SEC_CONTROL",
+            "maxConnections": 2
+          }
+        ]
+      },
+      {
+        "nodeId": "lnb-1",
+        "nodeType": "lnb",
+        "config": {
+          "lnb_kind": "universal",
+          "lo_frequencies": { "low_khz": 9750000, "high_khz": 10600000 },
+          "voltage": "18V",
+          "tone_commanded": "continuous"
+        },
+        "ports": [
+          {
+            "portId": "coax_out",
+            "direction": "output",
+            "plane": "SEC_CONTROL",
+            "maxConnections": 2
+          }
+        ]
+      },
+      {
+        "nodeId": "tuner-low",
+        "nodeType": "tuner",
+        "config": {
+          "tuning_request": { "frequency_khz": 11095000, "polarization": "vertical" },
+          "ub_slot": null
+        },
+        "ports": [
+          {
+            "portId": "rf_in",
+            "direction": "input",
+            "plane": "SEC_CONTROL",
+            "maxConnections": 1
+          }
+        ]
+      },
+      {
+        "nodeId": "tuner-high",
+        "nodeType": "tuner",
+        "config": {
+          "tuning_request": { "frequency_khz": 12070000, "polarization": "horizontal" },
+          "ub_slot": null
+        },
+        "ports": [
+          {
+            "portId": "rf_in",
+            "direction": "input",
+            "plane": "SEC_CONTROL",
+            "maxConnections": 1
+          }
+        ]
+      }
+    ],
+    "connections": [
+      { "connectionId": "conn-lnb0-low", "plane": "SEC_CONTROL", "from": { "nodeId": "lnb-0", "portId": "coax_out" }, "to": { "nodeId": "tuner-low", "portId": "rf_in" } },
+      { "connectionId": "conn-lnb1-high", "plane": "SEC_CONTROL", "from": { "nodeId": "lnb-1", "portId": "coax_out" }, "to": { "nodeId": "tuner-high", "portId": "rf_in" } }
+    ]
+  },
+  "simulation_config": {
+    "fidelity": "SIM_STATE",
+    "seed": 42
+  },
+  "fault_plan": [
+    {
+      "fault_id": "fd000000-0000-4000-8000-00000000f111",
+      "fault_type": "TONE_RESIDUE",
+      "target_id": "lnb-0",
+      "parameters": {
+        "tone_actual": "continuous"
+      },
+      "activation": {
+        "kind": "session_start"
+      },
+      "expected_observations": [
+        "sec.state_observed",
+        "rf.state_observed"
+      ]
+    }
+  ],
+  "objectives": [
+    "确认不对称症状：低频段请求（tuner-low，tone_commanded=none）失锁或错锁，高频段请求（tuner-high，tone_commanded=continuous）却正常——「残留 tone 与高频段意图恰好一致」",
+    "用节点详情面板核对 lnb 快照：tone_commanded=none 而 tone_actual=continuous（双字段分离）——残留 22kHz 使 LO 停在 10600，接收机按 9750 计算 IF → 实际输出偏移 850 MHz（远超 LO 漂移 ±3MHz）",
+    "恢复（空 fault_plan 重跑新 Run）并提交通关判定"
+  ],
+  "hints": [
+    {
+      "hint_id": "sc11-hint-1",
+      "trigger": "experiment opened",
+      "level": "nudge",
+      "content": "Universal LNB 的 band 选择 = 电压 × 22kHz 组合（13V/18V × 无 tone/持续 tone → 低/高频段，见 14 态真值表）。先在基线 Run 确认两个 tuner 都锁定：tuner-low 走 LO 9750，tuner-high 走 LO 10600。",
+      "requirement_ids": [
+        "REQ-SIM-204-P3"
+      ],
+      "standard_ref": null
+    },
+    {
+      "hint_id": "sc11-hint-2",
+      "trigger": "after Inject",
+      "level": "direction",
+      "content": "症状是不对称的：tuner-low（低频段请求）失锁或错锁，tuner-high（高频段请求）正常——为什么？查 lnb 快照的 tone_commanded 与 tone_actual：它们一致吗？22kHz 物理层权威 = ETSI TS 101 964 §A.1（免费），不是失传的 Eutelsat 原版入口。",
+      "requirement_ids": [
+        "REQ-SIM-204-P3"
+      ],
+      "standard_ref": null
+    },
+    {
+      "hint_id": "sc11-hint-3",
+      "trigger": "before Diagnose",
+      "level": "solution",
+      "content": "TONE_RESIDUE 使 tone_actual=continuous ≠ tone_commanded=none：残留 tone 让 LO 停在 10600，tuner-low 按 9750 计算 IF → 实际 IF 偏移 850 MHz（远超漂移 ±3MHz 与捕获范围）→ 失锁或错锁到同一 IF 槽位的高频段转发器（ber_state=severe）；tuner-high 因残留 tone 与意图恰好一致而正常。恢复路径 = 空 fault_plan 重跑新 Run，verify 以 fault_inactive 判据提交。",
+      "requirement_ids": [
+        "REQ-SIM-204-P3"
+      ],
+      "standard_ref": null
+    }
+  ],
+  "pass_criteria": [
+    {
+      "criterion_id": "fault-cleared",
+      "kind": "fault_inactive",
+      "mandatory": true,
+      "fault_id": "fd000000-0000-4000-8000-00000000f111"
+    }
+  ],
+  "hidden_reference_solution": "恢复路径：空 fault_plan 重跑新 Run（同 config 确定性复现，状态流逐字段一致）。verify 以 Inject Run 为 baseline_run_id、恢复 Run 为 recovery_run_id，fault_inactive 判据核对：① Inject Run 上 fault.* 生命周期闭合；② 恢复 Run prepared plan 不含该 fault_id；③ 恢复 Run journal 无该 fault 复发。教学锚点（roadmap §4 A2 订正口径）：LNB 供电/多路开关异常使低频段指令混入残留 22kHz，LNB 错误切入高频本振（10600）；训练目标 = 物理视图电压（13/18V）× 22kHz 组合逻辑排查（14 态真值表，SPEC-621 附录 A）；22kHz 物理层引用落点 = ETSI TS 101 964 §A.1 + TI SLVA863（免费 normative，禁引未核条款号）。状态域证据：lnb sec.state_observed tone_commanded=none/tone_actual=continuous；tuner-low rf.state_observed lock_state=unlocked 或 locked_transponder_id ≠ 目标（错锁素材）+ ber_state=severe + CauseRef 指向 lnb；诊断规则候选 TONE_RESIDUE_SUSPECT（SPEC-307）消费该组合。"
+}

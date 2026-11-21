@@ -35,6 +35,13 @@ SPEC-622 §5 / SPEC-623 §5):
 - ``SwitchConfigDTO`` = ``power_pass`` (config passthrough; the power
   domain evaluation belongs to SPEC-621).
 
+Ticket #171 (orchestrator ruling A20) adds the lnb evaluation-time drive
+keys (``voltage`` / ``tone_commanded`` / ``tone_actual`` /
+``tone_composite`` / ``short_circuit_state``) as first-class optional
+:class:`LnbConfigDTO` fields — the scenario-calibration and fault-transform
+face becomes part of the declared schema instead of an undeclared
+post-validation bypass.
+
 Node ``config`` stays an opaque dict on the wire (``TopologyNodeDTO``);
 these Pydantic models are the schema authority the topology validator and
 the scenario loader (#128) validate against via
@@ -282,11 +289,43 @@ class LoFrequenciesDTO(DomainModel):
 
 
 class LnbConfigDTO(DomainModel):
-    """``lnb`` node config (SPEC-621 §5; ``scr`` structure = SPEC-623)."""
+    """``lnb`` node config (SPEC-621 §5; ``scr`` structure = SPEC-623).
+
+    The five evaluation-time drive keys (ticket #171, orchestrator ruling
+    A20's SHARED minimal additive) are first-class **optional** config
+    fields: ``voltage`` / ``tone_commanded`` / ``tone_actual`` /
+    ``tone_composite`` / ``short_circuit_state``.  The L0 evaluators
+    (#161) read these keys from ``node.config`` and the fault transform
+    TONE_RESIDUE (#163) rewrites ``tone_actual`` — before A20 the keys
+    entered "after config validation" as an undeclared bypass; declaring
+    them makes the drive face part of the schema authority (键是声明面的
+    一部分，非旁路).  Defaults mirror the evaluator's fallback semantics
+    (voltage ``off`` / tones ``none`` / absent ``tone_actual`` follows the
+    commanded value / short-circuit ``normal`` — an unconfigured LNB
+    delivers no carrier); a present key is vocabulary-checked (a foreign
+    value is a ``NODE_CONFIG_INVALID`` rejection, not a silent degrade).
+    The mirrored key names/vocabularies are drift-locked from the tests
+    layer (ruling A20: ``test_evaluator_vocab_drift_lock`` +
+    ``TestPhase3VocabularyDriftLock``).
+    """
 
     lnb_kind: Literal["universal", "legacy_cascade"]
     lo_frequencies: LoFrequenciesDTO
     scr: ScrConfigDTO | None = None
+    # -- evaluation-time drive keys (ruling A20; SPEC-621 §5 vocabularies) --
+    voltage: Literal["off", "13V", "18V"] = "off"
+    tone_commanded: Literal["none", "continuous", "tone_burst", "data_burst"] = (
+        "none"
+    )
+    #: ``None`` = absent — the LNB follows its commanded tone (the #161
+    #: fallback face); TONE_RESIDUE (#163) rewrites this key.
+    tone_actual: (
+        Literal["none", "continuous", "tone_burst", "data_burst"] | None
+    ) = None
+    tone_composite: Literal["none", "continuous_plus_data_burst"] = "none"
+    short_circuit_state: Literal[
+        "normal", "clamping", "hiccup", "thermal_fault", "fault_latched"
+    ] = "normal"
 
     @model_validator(mode="after")
     def _legacy_cascade_carries_no_scr(self) -> "LnbConfigDTO":
