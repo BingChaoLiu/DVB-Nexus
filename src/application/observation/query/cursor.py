@@ -52,13 +52,17 @@ class CursorState:
 def filter_fingerprint(request: Any) -> str:
     """Stable hash of the §5 whitelist filter binding (scope + filters +
     sort + time bounds + domain). Changing ANY of them invalidates the
-    cursor."""
+    cursor. The Phase 3 dimensions (``namespaces``/``node_types``, ticket
+    #167) bind exactly like the other whitelist filters — the binding
+    protocol itself is unchanged."""
     material = {
         "session_id": request.session_id,
         "sort": request.sort,
         "event_types": list(request.event_types),
         "severities": list(request.severities),
         "producer_ids": list(request.producer_ids),
+        "namespaces": list(request.namespaces),
+        "node_types": list(request.node_types),
         "run_id": request.run_id,
         "clock_domain": request.clock_domain,
         "clock_epoch": request.clock_epoch,

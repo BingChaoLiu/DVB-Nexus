@@ -46,12 +46,25 @@ from application.observation.query.events import (
     SORT_JOURNAL_DESC,
     SORT_TIME_ASC,
     SORT_TIME_DESC,
+    VALID_QUERY_NAMESPACES,
+    VALID_QUERY_NODE_TYPES,
     VALID_SORTS,
     EventsPage,
     EventsQueryRequest,
     enforce_single_shape,
     require_clock_domain_for_time_query,
     validate_limit,
+)
+from domain.observation.registry import (
+    RF_EVENT_TYPES,
+    SEC_EVENT_TYPES,
+    SEC_LNB_SNAPSHOT_KEYS,
+    SEC_SWITCH_SNAPSHOT_KEYS,
+)
+from domain.topology.node_types import (
+    NODE_TYPE_DISEQC_SWITCH,
+    NODE_TYPE_LNB,
+    NODE_TYPE_TUNER,
 )
 
 #: The session-scope 404 code (the simulation plane's registry string,
@@ -60,6 +73,37 @@ SIM_SESSION_NOT_FOUND = "SIM_SESSION_NOT_FOUND"
 
 #: The SPEC-305 §8 hint topic for health roll-up changes.
 HEALTH_CHANGED_TOPIC = "observation.health_changed"
+
+#: The ``sec.*`` shape-discriminator signatures, derived from the registry's
+#: frozen key-set constants (the shared base keys cancel; the metric
+#: signatures are disjoint — the registry refuses any mix at ingestion, so
+#: the filter below always sees exactly one shape). Single source = the
+#: registry; no parallel vocabulary here.
+_SWITCH_SHAPE_KEYS = SEC_SWITCH_SNAPSHOT_KEYS - SEC_LNB_SNAPSHOT_KEYS
+_LNB_SHAPE_KEYS = SEC_LNB_SNAPSHOT_KEYS - SEC_SWITCH_SNAPSHOT_KEYS
+
+
+def resolve_snapshot_node_type(event_type: str, payload) -> Optional[str]:
+    """Resolve one state snapshot's observed node type (SPEC-305 §Phase3
+    node_type dimension — the #164 REPORT discriminator).
+
+    ``rf.*`` archives by main plane to the tuner; ``sec.*`` splits lnb /
+    switch by the payload metric-key signature (the payload does not carry
+    ``node_type`` — #164 REPORT). Non-snapshot event types and unresolvable
+    ``sec.*`` payloads resolve to ``None``: under a ``node_types`` filter
+    they never match (honest strict semantics — the filter names the
+    observed node's type, and only snapshots have one here).
+    """
+    if event_type in RF_EVENT_TYPES:
+        return NODE_TYPE_TUNER
+    if event_type in SEC_EVENT_TYPES:
+        keys = set(payload)
+        if keys & _SWITCH_SHAPE_KEYS:
+            return NODE_TYPE_DISEQC_SWITCH
+        if keys & _LNB_SHAPE_KEYS:
+            return NODE_TYPE_LNB
+        return None
+    return None
 
 
 @dataclass(frozen=True)
@@ -558,7 +602,10 @@ def _validate_sort(sort: str) -> None:
 
 def _validate_filter_values(request: EventsQueryRequest) -> None:
     """Whitelist filters accept flat scalar/list values only (§5 过滤器按
-    端点白名单; no expression strings, no object shapes)."""
+    端点白名单; no expression strings, no object shapes). The Phase 3
+    dimensions additionally whitelist their vocabulary: unknown namespace
+    prefixes / node types are the 400 row — a typo is refused, not
+    silently an empty page."""
     for name, value in (
         ("event_types", request.event_types),
         ("severities", request.severities),
@@ -572,6 +619,26 @@ def _validate_filter_values(request: EventsQueryRequest) -> None:
                 f"{name} must be a list of strings",
                 details={"param": name},
             )
+    for name, value, vocabulary in (
+        ("namespaces", request.namespaces, VALID_QUERY_NAMESPACES),
+        ("node_types", request.node_types, VALID_QUERY_NODE_TYPES),
+    ):
+        if not isinstance(value, tuple) or not all(
+            isinstance(item, str) for item in value
+        ):
+            raise BadRequestError(
+                REQUEST_BODY_INVALID,
+                f"{name} must be a list of strings",
+                details={"param": name},
+            )
+        for item in value:
+            if item not in vocabulary:
+                raise BadRequestError(
+                    REQUEST_BODY_INVALID,
+                    f"{name} value {item!r} is outside the registered "
+                    f"vocabulary (SPEC-305 §5 whitelist)",
+                    details={"param": name, "value": item},
+                )
 
 
 def _time_sort_key(envelope: dict) -> tuple:
@@ -597,6 +664,17 @@ def _matches_filters(
         return False
     if request.event_types and envelope["event_type"] not in request.event_types:
         return False
+    if request.namespaces and not any(
+        envelope["event_type"].startswith(namespace + ".")
+        for namespace in request.namespaces
+    ):
+        return False
+    if request.node_types:
+        resolved = resolve_snapshot_node_type(
+            envelope["event_type"], envelope["payload"]
+        )
+        if resolved not in request.node_types:
+            return False
     if request.severities and envelope["severity"] not in request.severities:
         return False
     if (

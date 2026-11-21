@@ -43,6 +43,11 @@ from domain.observation import (
     TimelineTimepoint,
     parse_envelope,
 )
+from domain.observation.registry import (
+    RF_TUNER_SNAPSHOT_KEYS,
+    SEC_LNB_SNAPSHOT_KEYS,
+    SEC_SWITCH_SNAPSHOT_KEYS,
+)
 
 from tests.unit.application.observation.alerts._alerts_fixtures import CannedReader
 from tests.unit.application.observation.test_gateway_accept import _raw_envelope
@@ -67,6 +72,84 @@ def _append(stack, **overrides) -> int:
     if "run_id" in overrides:
         envelope["scope"]["run_id"] = overrides.pop("run_id")
     assert not overrides
+    seq, _ = journal.append(envelope)
+    return seq
+
+
+def _tuner_snapshot_payload(node_id="tuner-a", **overrides) -> dict:
+    """The exact ``rf.state_observed`` shape (``RF_TUNER_SNAPSHOT_KEYS``)."""
+    payload = {
+        "node_id": node_id,
+        "health": "ok",
+        "causes": [],
+        "source": "state_evaluator",
+        "confidence": "simulated",
+        "lock_state": "locked",
+        "if_frequency_khz": 1_420_000,
+        "ber_state": "normal",
+        "locked_transponder_id": "tp-1",
+        "stale": False,
+    }
+    payload.update(overrides)
+    return payload
+
+
+def _lnb_snapshot_payload(node_id="lnb-0", legacy=False, **overrides) -> dict:
+    """The exact ``sec.state_observed`` lnb shape (+ legacy ``sat_selected``)."""
+    payload = {
+        "node_id": node_id,
+        "health": "ok",
+        "causes": [],
+        "source": "state_evaluator",
+        "confidence": "simulated",
+        "voltage": "13V",
+        "tone_commanded": "none",
+        "tone_actual": "none",
+        "tone_composite": "none",
+        "band_selected": "low",
+        "lo_frequency_khz": 9750,
+        "polarization_delivered": "vertical",
+        "short_circuit_state": "normal",
+        "ub_assignments": [],
+    }
+    if legacy:
+        payload["sat_selected"] = "A"
+    payload.update(overrides)
+    return payload
+
+
+def _switch_snapshot_payload(node_id="sw-0", **overrides) -> dict:
+    """The exact ``sec.state_observed`` switch shape."""
+    payload = {
+        "node_id": node_id,
+        "health": "ok",
+        "causes": [],
+        "source": "state_evaluator",
+        "confidence": "simulated",
+        "committed_switch_state": 0b0010,
+        "uncommitted_switch_state": 0b0000,
+        "port_selected": 2,
+        "power_pass": "on",
+    }
+    payload.update(overrides)
+    return payload
+
+
+def _append_snapshot(stack, event_type, payload, value_ns=1) -> int:
+    """Append one state snapshot through the spec-validated raw builder.
+
+    ``parse_envelope`` runs the payload registry (the #164 strict shapes) —
+    the query-face tests only ever seed spec-valid snapshots.
+    """
+    journal = stack["journal"]
+    envelope = _raw_envelope(
+        event_type=event_type,
+        session_id=SESSION,
+        payload=payload,
+    )
+    envelope["time"]["source"]["value_ns"] = value_ns
+    envelope["time"]["source"]["clock_domain"] = f"sim:{SESSION}"
+    parse_envelope(envelope)  # payload registry strict validation
     seq, _ = journal.append(envelope)
     return seq
 
@@ -387,3 +470,185 @@ class TestPaginationAndBoundsOverHttp:
         missing = client.get(f"/api/v1/sessions/{SESSION}/exports/nope")
         assert missing.status_code == 404, missing.text
         assert missing.json()["error"]["error_code"] == "PLT_ARTIFACT_NOT_FOUND"
+
+
+def _seed_state_journal(stack) -> None:
+    """One mixed journal: rf tuner snapshots, sec lnb/switch snapshots, one
+    plain TS-face event (the zero-regression witness)."""
+    _append(stack, event_type="simulation.run_started", value_ns=1)
+    _append_snapshot(
+        stack,
+        "rf.state_observed",
+        _tuner_snapshot_payload(
+            "tuner-a",
+            health="error",
+            lock_state="unlocked",
+            if_frequency_khz=None,
+            ber_state=None,
+            locked_transponder_id=None,
+            stale=True,
+        ),
+        value_ns=2,
+    )
+    _append_snapshot(
+        stack, "sec.state_observed", _lnb_snapshot_payload("lnb-0"), value_ns=3
+    )
+    _append_snapshot(
+        stack, "sec.state_observed", _switch_snapshot_payload("sw-0"), value_ns=4
+    )
+    _append_snapshot(
+        stack, "rf.state_observed", _tuner_snapshot_payload("tuner-b"), value_ns=5
+    )
+
+
+class TestStateSnapshotQueryFace:
+    """#167: the rf.*/sec.* snapshot query face (SPEC-305 §Phase3).
+
+    Flat scalar query parameters only (SPEC-305 §5 — 禁嵌套对象参数);
+    the journal_seq cursor binding covers the new filter dimensions;
+    payloads ride the response untrimmed (JSON-safe metrics 全量).
+    """
+
+    def test_namespace_filter_answers_the_rf_family_only(self, client, wired_stack):
+        _seed_state_journal(wired_stack)
+        response = client.get(
+            f"/api/v1/sessions/{SESSION}/events", params={"namespace": "rf"}
+        )
+        assert response.status_code == 200, response.text
+        items = response.json()["data"]["items"]
+        assert [item["event_type"] for item in items] == [
+            "rf.state_observed",
+            "rf.state_observed",
+        ]
+        assert all(item["payload"]["node_id"].startswith("tuner") for item in items)
+
+    def test_namespace_filter_answers_the_sec_family_only(self, client, wired_stack):
+        _seed_state_journal(wired_stack)
+        response = client.get(
+            f"/api/v1/sessions/{SESSION}/events", params={"namespace": "sec"}
+        )
+        assert response.status_code == 200, response.text
+        items = response.json()["data"]["items"]
+        assert [item["payload"]["node_id"] for item in items] == ["lnb-0", "sw-0"]
+
+    def test_namespace_union_and_event_type_compose(self, client, wired_stack):
+        _seed_state_journal(wired_stack)
+        response = client.get(
+            f"/api/v1/sessions/{SESSION}/events",
+            params={"namespace": ["rf", "sec"], "event_type": "sec.state_observed"},
+        )
+        assert response.status_code == 200, response.text
+        items = response.json()["data"]["items"]
+        assert [item["payload"]["node_id"] for item in items] == ["lnb-0", "sw-0"]
+
+    def test_node_type_filter_resolves_the_three_snapshot_shapes(
+        self, client, wired_stack
+    ):
+        _seed_state_journal(wired_stack)
+        url = f"/api/v1/sessions/{SESSION}/events"
+
+        tuners = client.get(url, params={"node_type": "tuner"}).json()["data"]["items"]
+        assert [item["payload"]["node_id"] for item in tuners] == [
+            "tuner-a",
+            "tuner-b",
+        ]
+
+        lnbs = client.get(url, params={"node_type": "lnb"}).json()["data"]["items"]
+        assert [item["payload"]["node_id"] for item in lnbs] == ["lnb-0"]
+
+        switches = client.get(
+            url, params={"node_type": "diseqc_switch"}
+        ).json()["data"]["items"]
+        assert [item["payload"]["node_id"] for item in switches] == ["sw-0"]
+
+    def test_node_type_union_answers_tuner_and_lnb(self, client, wired_stack):
+        _seed_state_journal(wired_stack)
+        response = client.get(
+            f"/api/v1/sessions/{SESSION}/events",
+            params={"node_type": ["tuner", "lnb"]},
+        )
+        assert response.status_code == 200, response.text
+        items = response.json()["data"]["items"]
+        assert [item["payload"]["node_id"] for item in items] == [
+            "tuner-a",
+            "lnb-0",
+            "tuner-b",
+        ]
+
+    def test_snapshot_payloads_ride_the_response_untrimmed(self, client, wired_stack):
+        """JSON-safe metrics 全量: the NodeEvalResult-shape projection passes
+        through with its exact registered key set (no server-side trimming)."""
+        _seed_state_journal(wired_stack)
+        items = client.get(
+            f"/api/v1/sessions/{SESSION}/events", params={"namespace": ["rf", "sec"]}
+        ).json()["data"]["items"]
+
+        by_node = {item["payload"]["node_id"]: item["payload"] for item in items}
+        assert set(by_node["tuner-a"]) == set(RF_TUNER_SNAPSHOT_KEYS)
+        assert set(by_node["lnb-0"]) == set(SEC_LNB_SNAPSHOT_KEYS)
+        assert set(by_node["sw-0"]) == set(SEC_SWITCH_SNAPSHOT_KEYS)
+
+    def test_namespace_cursor_pagination_walks_the_filtered_order(
+        self, client, wired_stack
+    ):
+        _seed_state_journal(wired_stack)
+        url = f"/api/v1/sessions/{SESSION}/events"
+        params = {"namespace": "sec", "limit": 1}
+        seen: list[str] = []
+        while True:
+            response = client.get(url, params=params)
+            assert response.status_code == 200, response.text
+            body = response.json()
+            seen.extend(item["payload"]["node_id"] for item in body["data"]["items"])
+            if body["meta"]["next_cursor"] is None:
+                break
+            params = {
+                "namespace": "sec",
+                "limit": 1,
+                "cursor": body["meta"]["next_cursor"],
+            }
+        assert seen == ["lnb-0", "sw-0"]
+
+    def test_cursor_replayed_under_a_changed_filter_is_409(self, client, wired_stack):
+        _seed_state_journal(wired_stack)
+        url = f"/api/v1/sessions/{SESSION}/events"
+        first = client.get(url, params={"namespace": "sec", "limit": 1})
+        cursor = first.json()["meta"]["next_cursor"]
+        assert cursor is not None
+
+        replayed = client.get(
+            url, params={"namespace": "rf", "limit": 1, "cursor": cursor}
+        )
+        assert replayed.status_code == 409, replayed.text
+        assert replayed.json()["error"]["error_code"] == "OBS_CURSOR_EXPIRED"
+
+    def test_unknown_namespace_is_the_400_row(self, client, wired_stack):
+        _seed_state_journal(wired_stack)
+        response = client.get(
+            f"/api/v1/sessions/{SESSION}/events", params={"namespace": "nope"}
+        )
+        assert response.status_code == 400, response.text
+        assert response.json()["error"]["error_code"] == "REQUEST_BODY_INVALID"
+
+    def test_unknown_node_type_is_the_400_row(self, client, wired_stack):
+        _seed_state_journal(wired_stack)
+        response = client.get(
+            f"/api/v1/sessions/{SESSION}/events", params={"node_type": "not_a_node"}
+        )
+        assert response.status_code == 400, response.text
+        assert response.json()["error"]["error_code"] == "REQUEST_BODY_INVALID"
+
+    def test_ts_face_query_zero_regression_alongside_state_filters(
+        self, client, wired_stack
+    ):
+        _seed_state_journal(wired_stack)
+        response = client.get(
+            f"/api/v1/sessions/{SESSION}/events",
+            params={"event_type": "simulation.run_started"},
+        )
+        assert response.status_code == 200, response.text
+        items = response.json()["data"]["items"]
+        assert [item["event_type"] for item in items] == ["simulation.run_started"]
+
+        unfiltered = client.get(f"/api/v1/sessions/{SESSION}/events")
+        assert len(unfiltered.json()["data"]["items"]) == 5
