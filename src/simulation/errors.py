@@ -156,6 +156,24 @@ SIM_TOPO_UB_PROTOCOL_MIXED = "SIM_TOPO_UB_PROTOCOL_MIXED"
 #: THERMAL_FAULT stay unregistered in the first version).
 SIM_FAULT_STATE_TRANSFORM_UNREGISTERED = "SIM_FAULT_STATE_TRANSFORM_UNREGISTERED"
 
+#: SPEC-204 §Phase3 (ticket #165) — the bidirectional mixed-plan prepare
+#: gate: a plan entry's effective layer is outside the consuming run
+#: form's layer set.  A SIM_STATE run (state-domain execution, ADR-0012
+#: decision 2) receiving a package-layer (TS/BBFRAME/T2MI/BISS) fault and
+#: a SIM_TS run receiving an RF/SEC fault are both rejected at prepare
+#: with this detail code — never routed into the wrong execution通路
+#: (the #163 REPORT note: a ``LayerFaultFilter`` construction KeyError is
+#: unacceptable; the run form declares its layer set explicitly).
+SIM_FAULT_PLAN_LAYER_MISMATCH = "SIM_FAULT_PLAN_LAYER_MISMATCH"
+
+#: ADR-0012 decision 2 (ticket #165) — the SIM_STATE run's plan face:
+#: the fault plan was rejected at the state-run prepare stage (topology
+#: gate violations ride ``SIM_VALIDATION_FAILED``; plan content and layer
+#: routing violations raise :class:`StatePlanInvalidError` with this code
+#: and the per-element ``SIM_FAULT_*`` / ``SIM_TOPO_*`` detail list — the
+#: ``SIM_TS_PLAN_INVALID`` mirror for the state domain).
+SIM_STATE_PLAN_INVALID = "SIM_STATE_PLAN_INVALID"
+
 # --- SPEC-200 section 8 (ticket #41) ------------------------------------------
 
 #: SPEC-200 section 8 — session_id does not exist (404 semantics).
@@ -362,6 +380,26 @@ class TSPlanInvalidError(SimulationError):
     """
 
     code = SIM_TS_PLAN_INVALID
+
+    def __init__(self, message: str, details: tuple[str, ...] = ()) -> None:
+        super().__init__(message)
+        self.details = details
+
+
+class StatePlanInvalidError(SimulationError):
+    """``SIM_STATE_PLAN_INVALID``: SIM_STATE Run 的 plan/装配 prepare 拒绝
+    (ticket #165, ADR-0012 decision 2 — the ``TSPlanInvalidError`` mirror
+    for the state domain).
+
+    Carries ``details`` — the per-element detail list
+    (``SIM_FAULT_PLAN_LAYER_MISMATCH`` for the bidirectional mixed-plan
+    gate, ``SIM_FAULT_*`` registry/prepare-check codes for content, in
+    plan order).  Topology-gate violations do NOT ride here — they raise
+    :class:`SimulationValidationError` with the path-addressed report
+    (the session validation translation path, reused verbatim).
+    """
+
+    code = SIM_STATE_PLAN_INVALID
 
     def __init__(self, message: str, details: tuple[str, ...] = ()) -> None:
         super().__init__(message)

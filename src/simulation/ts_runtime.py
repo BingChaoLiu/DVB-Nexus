@@ -86,7 +86,11 @@ from simulation.errors import (
     TSSinkIOError,
     TSWorkerUnavailableError,
 )
-from simulation.fault_plan import FaultDefinition, validate_fault_plan
+from simulation.fault_plan import (
+    PACKAGE_PLAN_LAYERS,
+    FaultDefinition,
+    validate_fault_plan,
+)
 from simulation.layered_pipeline import (
     LayerFaultFilter,
     is_layered_plan,
@@ -633,6 +637,12 @@ class TSRuntime:
             # the activation against the prepared output frame).
             # #44 append-only: see the module changelog note in faults docs.
             expected_packet_count=config.output_packet_count,
+            # Ticket #165 (ADR-0012 decisions 2/3): the SIM_TS face executes
+            # the package-layer filter chain only — an RF/SEC fault is
+            # rejected cleanly HERE, never routed into a LayerFaultFilter
+            # construction KeyError at run stage (#163 REPORT note).  The
+            # state-domain face lives in simulation.state.run.
+            allowed_layers=PACKAGE_PLAN_LAYERS,
         )
         return PreparedTSRun(
             session_id=session.session_id,

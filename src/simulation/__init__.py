@@ -111,6 +111,7 @@ from simulation.errors import (
     SIM_CLOCK_PAUSED,
     SIM_CLOCK_TIME_BACKWARDS,
     SIM_ENGINE_ERROR,
+    SIM_FAULT_PLAN_LAYER_MISMATCH,
     SIM_FAULT_STATE_TRANSFORM_UNREGISTERED,
     SIM_INTERNAL,
     SIM_INVALID_LIFECYCLE_TRANSITION,
@@ -118,6 +119,7 @@ from simulation.errors import (
     SIM_RESOURCE_LIMIT,
     SIM_SCHEDULER_OVERLOAD,
     SIM_SESSION_NOT_FOUND,
+    SIM_STATE_PLAN_INVALID,
     SIM_TOPO_CARDINALITY,
     SIM_TOPO_CYCLE,
     SIM_TOPO_DIRECTION_INVALID,
@@ -255,6 +257,9 @@ __all__ = [
     "SIM_TOPO_UB_SLOT_UNMATCHED",
     # State-layer fault prepare gate (SPEC-204 §Phase3, ticket #163)
     "SIM_FAULT_STATE_TRANSFORM_UNREGISTERED",
+    # Bidirectional mixed-plan gate + SIM_STATE plan face (ticket #165)
+    "SIM_FAULT_PLAN_LAYER_MISMATCH",
+    "SIM_STATE_PLAN_INVALID",
     "TopologyViolation",
     "validate_topology",
     "SIM_EVAL_NODE_FAILED",
