@@ -13,6 +13,10 @@ evaluates as **idle** (which also implements the SPEC-202 section 5
 "isolated nodes report idle" semantics). The deferral basis is recorded on
 :data:`L0_DEFERRED_RATIONALE` for audit. Canvas health displays degrade to
 Run state + diagnostic-event mapping per ADR-0005 decision 2.
+*(Retired by ticket #161 per ADR-0012 decision 5: the Phase 3 evaluators
+live in :mod:`simulation.state.evaluators`; the idle path above remains
+as the fallback for unregistered node types and the historical record
+stays for audit.)*
 
 What the skeleton *does* implement, deterministically and purely:
 
@@ -73,18 +77,25 @@ __all__ = [
     "severity_rank",
 ]
 
-#: Deferred-basis record for the L0 evaluation point (issue #40 acceptance:
-#"L0 求值点显式 stub 并记录 deferred 依据"). Full L0 node-semantics
-#: evaluation is deferred out of MVP by ADR-0005 decision 2 (#7); the
-#: interface stays frozen for SIM-E (#44) and the post-MVP roadmap.
+#: Retired deferral record (issue #40 acceptance kept auditable; retired
+#: by ticket #161 per ADR-0012 decision 5).  Full L0 node-semantics
+#: evaluation WAS deferred out of MVP by ADR-0005 decision 2 (#7) — the
+#: deferral rationale below is historical.  Since #161 the three Phase 3
+#: evaluators (lnb / tuner / diseqc_switch, SPEC-620/621/622) are
+#: implemented in :mod:`simulation.state.evaluators` and register via the
+#: :func:`evaluate_topology` injection seam; unregistered node types still
+#: evaluate idle as the plain fallback (SPEC-202 section 5).  The name
+#: stays on the frozen export surface as the audit trail.
 L0_DEFERRED_RATIONALE = (
-    "Full L0 (SIM_STATE) node-semantics evaluation is deferred out of MVP "
-    "by ADR-0005 decision 2 (#7): the eight-step closed loop has no "
-    "SIM_STATE dependency, and the canvas health display degrades to Run "
-    "state + diagnostic-event mapping. SPEC-202 keeps only the skeleton: "
-    "frozen evaluation interface + deterministic walk; unregistered node "
-    "types evaluate idle (SPEC-202 section 5 isolated-node semantics). "
-    "Recorded by ticket #40."
+    "RETIRED by ticket #161 (ADR-0012 decision 5): the L0 (SIM_STATE) "
+    "node-semantics evaluators are now implemented — see "
+    "simulation.state.evaluators; register them via the evaluate_topology "
+    "injection seam.  Historical basis: full L0 evaluation was deferred "
+    "out of MVP by ADR-0005 decision 2 (#7) because the eight-step closed "
+    "loop had no SIM_STATE dependency and the canvas health display "
+    "degraded to Run state + diagnostic-event mapping.  Unregistered node "
+    "types still evaluate idle (SPEC-202 section 5 isolated-node "
+    "semantics).  Originally recorded by ticket #40."
 )
 
 
@@ -133,10 +144,28 @@ class CauseRef:
 
 @dataclass(frozen=True)
 class PortState:
-    """The evaluated state of one port."""
+    """The evaluated state of one port.
+
+    Additive fields (orchestrator ruling A2, ticket #161; the protocol
+    signature ``evaluate(node, inputs, context)`` stays unchanged and
+    every pre-existing constructor call keeps working via the defaults):
+
+    - ``metrics`` carries the upstream node's evaluation-fact summary the
+      walk threads into downstream ``inputs`` — the SPEC-620/621
+      evaluators consume upstream ``band_selected`` / ``lo_frequency_khz``
+      / ``tone_actual`` style facts through it.  Producers must keep the
+      values JSON-safe.
+    - ``upstream_node_id`` is the feeding node's identity (the walk fills
+      it from the connection's from-side), so a downstream evaluator can
+      self-report a causal reference to the upstream that carries an
+      anomaly the health axis cannot express (the healthy-but-tone-
+      mismatched LNB of the TONE_RESIDUE chain, SPEC-307 §Phase3).
+    """
 
     port_id: PortId
     health: Health
+    metrics: Mapping = field(default_factory=dict)
+    upstream_node_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -220,7 +249,8 @@ class TopologyEvalResult:
 
 
 def _idle_result(node: NodeConfig) -> NodeEvalResult:
-    """The explicit L0 deferred stub result (see L0_DEFERRED_RATIONALE)."""
+    """The idle fallback for node types with no registered evaluator
+    (historically the L0 deferred stub; see :data:`L0_DEFERRED_RATIONALE`)."""
     return NodeEvalResult(
         node_id=node.node_id,
         health=Health.IDLE,
@@ -260,23 +290,40 @@ def _input_states(
     upstream node's health when the port has no explicit state). Upstream
     identity for causal chains is threaded by the walk itself, not via
     inputs.
+
+    The value's ``metrics`` (ruling A2) carry the upstream evaluation-fact
+    summary: the feeding port's own ``PortState.metrics`` when non-empty,
+    else the upstream node's ``NodeEvalResult.metrics`` — topological
+    order guarantees every upstream result already exists.  Producers keep
+    both JSON-safe; the L0 evaluators (:mod:`simulation.state.evaluators`)
+    publish their signal facts on output ports through this channel.  The
+    value's ``upstream_node_id`` names the feeding node so a downstream
+    evaluator can self-report a causal reference to an upstream anomaly
+    that the health axis cannot express (SPEC-307 §Phase3 chains).
     """
     inputs: dict[PortId, PortState] = {}
     for connection in _feeding_connections(graph, node_id):
         upstream = results_by_node.get(connection.from_node)
         feeding: Health | None = None
+        feeding_metrics: Mapping | None = None
         if upstream is not None:
             for port_state in upstream.port_states:
                 if port_state.port_id == connection.from_port:
                     feeding = port_state.health
+                    feeding_metrics = port_state.metrics or None
                     break
             if feeding is None:
                 feeding = upstream.health
+            if feeding_metrics is None:
+                feeding_metrics = upstream.metrics or None
         else:
             feeding = Health.IDLE
         if connection.to_port not in inputs:
             inputs[connection.to_port] = PortState(
-                port_id=connection.to_port, health=feeding
+                port_id=connection.to_port,
+                health=feeding,
+                metrics=feeding_metrics or {},
+                upstream_node_id=connection.from_node,
             )
     return inputs
 
