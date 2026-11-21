@@ -59,6 +59,12 @@ from application.observation.metrics.store import (
 
 Number = Union[int, float]
 
+# Discrete tuner-state sample codes (ticket #166, frozen comparison
+# semantics — see the catalog Phase 3 note): the alarm-worthy state is the
+# higher value, so a rule's open/close band never overlaps the neutral grade.
+_STATE_CODE_LOCK_STATE = {"locked": 0.0, "unlocked": 1.0}
+_STATE_CODE_BER_STATE = {"normal": 0.0, "elevated": 1.0, "severe": 2.0}
+
 _REJECT_MODE = "reject"
 _QUARANTINE_MODE = "quarantine"
 _SIM_DOMAIN_PREFIX = "sim:"
@@ -588,6 +594,35 @@ class MetricsEngine:
             )
         ]
 
+    def _build_tuner_lock_state(
+        self, definition, session_id, source, payload, correlation
+    ) -> list:
+        # Discrete-state gauge (ticket #166): locked=0.0 / unlocked=1.0
+        # (alarm=1).  Unknown strings yield no sample (缺失 ≠ 零) — the
+        # payload registry is the first line of defence, this is the second.
+        value = _STATE_CODE_LOCK_STATE.get(payload.get("lock_state"))
+        if value is None:
+            return []
+        dims = self._dimensions(definition, session_id, payload, correlation)
+        return [
+            self._sample_from_source(definition, session_id, source, value, dims, None)
+        ]
+
+    def _build_tuner_ber_state(
+        self, definition, session_id, source, payload, correlation
+    ) -> list:
+        # Ordinal ladder (ticket #166): normal=0.0 / elevated=1.0 / severe=2.0.
+        # ``ber_state=null`` (unlocked keeps no grade — the #164 registry face)
+        # and unknown strings yield no sample; the retired grade is never
+        # re-fabricated as a fresh reading (SPEC-620 §8 honesty).
+        value = _STATE_CODE_BER_STATE.get(payload.get("ber_state"))
+        if value is None:
+            return []
+        dims = self._dimensions(definition, session_id, payload, correlation)
+        return [
+            self._sample_from_source(definition, session_id, source, value, dims, None)
+        ]
+
     def _dimensions(
         self,
         definition: MetricDefinition,
@@ -655,6 +690,8 @@ class MetricsEngine:
         "ts.scrambled_packet_ratio": _build_ts_scrambled_packet_ratio,
         "psi.section_repetition_gap_ms": _build_psi_section_repetition_gap_ms,
         "topology.degraded_node_count": _build_topology_degraded_node_count,
+        "tuner.lock_state": _build_tuner_lock_state,
+        "tuner.ber_state": _build_tuner_ber_state,
     }
 
 
