@@ -113,6 +113,38 @@ VALID_PAYLOADS: dict[str, dict] = {
         "byte_size": 213,
         "sha256": "a" * 64,
     },
+    # Phase 3 state-observation minimal valid payloads (ticket #164): the
+    # envelope-layer all-types test consumes this face — the strict per-
+    # shape pins live in test_event_registry.py /
+    # test_phase3_payload_key_sets.py.
+    "rf.state_observed": {
+        "node_id": "tuner-a",
+        "health": "ok",
+        "causes": [],
+        "source": "state_evaluator",
+        "confidence": "simulated",
+        "lock_state": "locked",
+        "if_frequency_khz": 1_230_000,
+        "ber_state": "normal",
+        "locked_transponder_id": "tp-1",
+        "stale": False,
+    },
+    "sec.state_observed": {
+        "node_id": "lnb-0",
+        "health": "ok",
+        "causes": [],
+        "source": "state_evaluator",
+        "confidence": "simulated",
+        "voltage": "13V",
+        "tone_commanded": "none",
+        "tone_actual": "none",
+        "tone_composite": "none",
+        "band_selected": "low",
+        "lo_frequency_khz": 9_750_000,
+        "polarization_delivered": "vertical",
+        "short_circuit_state": "normal",
+        "ub_assignments": [],
+    },
 }
 
 PHASE2_EVENT_TYPES = (

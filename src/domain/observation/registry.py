@@ -147,6 +147,25 @@ GEN_EVENT_TYPES = frozenset(
     }
 )
 
+# --- Phase 3 state-observation namespaces (SPEC-303 §Phase3, ticket #164) ------
+#
+# Per-node L0 evaluation snapshots (ADR-0012 decision 1/2), archived by the
+# node's PRIMARY plane: ``node_type=tuner`` → ``rf.state_observed``;
+# ``lnb``/``diseqc_switch`` → ``sec.state_observed``.  Unlike the Phase 2
+# construction faces these ARE observation events: every payload carries the
+# constant observation-axes pairing ``state_evaluator`` + ``simulated``
+# (SPEC-003 §Phase3 轴纪律 — never parsed/measured, SPEC-303 §Phase3
+# 恒定配对).  State-change propagation reuses the ``topology.state_changed``
+# obligation — no per-metric change stream is added (#112 precedent), and a
+# UB conflict is never a separate event: it is the tuner snapshot's
+# ``lock_state="unlocked"`` + CauseRef combination fact.
+
+#: ``rf.*`` — the tuner snapshot namespace.
+RF_EVENT_TYPES = frozenset({"rf.state_observed"})
+
+#: ``sec.*`` — the lnb / diseqc_switch snapshot namespace.
+SEC_EVENT_TYPES = frozenset({"sec.state_observed"})
+
 #: The unique legal ``event_type`` set (SPEC-301 section 4, REQ-OBS-301-006).
 REGISTERED_EVENT_TYPES = (
     SIMULATION_SESSION_EVENT_TYPES
@@ -162,6 +181,8 @@ REGISTERED_EVENT_TYPES = (
     | BBFRAME_EVENT_TYPES
     | BISS_EVENT_TYPES
     | GEN_EVENT_TYPES
+    | RF_EVENT_TYPES
+    | SEC_EVENT_TYPES
 )
 
 # --- withdrawn / abolished (must never be re-registered) --------------------
@@ -306,6 +327,101 @@ _SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 _DIGITS_PATTERN = re.compile(r"^[0-9]+$")
 
 
+# --- Phase 3 state-observation payload vocabularies (ticket #164) ---------------
+#
+# SPEC-303 §Phase3 state_observed shapes: NodeEvalResult-shape JSON-safe
+# projections (#161 metric key sets + ``health`` + ``causes`` + ``node_id``).
+# Every vocabulary below is RESTATED here instead of imported — the
+# dependency edge points simulation → domain.observation, never the reverse
+# (importlinter contract 8; the same posture as the #54 diagnosis
+# restatement).  The tests layer pins the two faces item-for-item against
+# ``simulation.state.evaluators._vocab`` (the #161 payload-registration
+# source) and the walk's ``Health`` —
+# tests/unit/domain/observation/test_phase3_payload_key_sets.py.
+
+#: Constant observation-axes pairing (SPEC-303 §Phase3): every
+#: ``*_state_observed`` payload is a state_evaluator product at simulated
+#: confidence — any other provenance axis is refused at the payload face.
+STATE_OBSERVED_SOURCES = frozenset({"state_evaluator"})
+STATE_OBSERVED_CONFIDENCES = frozenset({"simulated"})
+
+#: Node/port health vocabulary (mirrors ``simulation.state.evaluate.Health``).
+STATE_OBSERVED_HEALTHS = frozenset({"ok", "warn", "error", "idle"})
+
+#: Shared snapshot-projection keys: identity + health + the JSON-safe
+#: CauseRef projection (``[{node_id, port_id?}]``, ticket #164 REPORT).
+_STATE_NODE_BASE_KEYS = frozenset(
+    {"node_id", "health", "causes", "source", "confidence"}
+)
+
+#: ``rf.state_observed`` (tuner): the #161 TUNER_METRIC_KEYS + the shared
+#: projection base.  ``stale`` is present on every snapshot (true iff
+#: unlocked, SPEC-620 §8).  ``tuning_message`` is deliberately absent
+#: (ruling A16 — SPEC-303 is the payload-face authority).
+_RF_TUNER_METRIC_KEYS = frozenset(
+    {"lock_state", "if_frequency_khz", "ber_state", "locked_transponder_id", "stale"}
+)
+
+#: ``sec.state_observed`` (lnb): the #161 LNB_METRIC_KEYS + base.
+_SEC_LNB_METRIC_KEYS = frozenset(
+    {
+        "voltage",
+        "tone_commanded",
+        "tone_actual",
+        "tone_composite",
+        "band_selected",
+        "lo_frequency_khz",
+        "polarization_delivered",
+        "short_circuit_state",
+        "ub_assignments",
+    }
+)
+
+#: ``sec.state_observed`` (lnb, ``legacy_cascade`` only): the additive
+#: satellite-select fact; universal LNBs and switches never carry it.
+_SEC_LNB_SAT_SELECTED_KEY = "sat_selected"
+SEC_LNB_SAT_SELECTED_KEYS = frozenset({_SEC_LNB_SAT_SELECTED_KEY})
+
+#: ``sec.state_observed`` (diseqc_switch): the #161 SWITCH_METRIC_KEYS + base.
+_SEC_SWITCH_METRIC_KEYS = frozenset(
+    {
+        "committed_switch_state",
+        "uncommitted_switch_state",
+        "port_selected",
+        "power_pass",
+    }
+)
+
+#: Exact per-shape payload key sets (validator constants — cited by symbol
+#: in tests and by the emission seam's own self-checks).
+RF_TUNER_SNAPSHOT_KEYS = _STATE_NODE_BASE_KEYS | _RF_TUNER_METRIC_KEYS
+SEC_LNB_SNAPSHOT_KEYS = _STATE_NODE_BASE_KEYS | _SEC_LNB_METRIC_KEYS
+SEC_SWITCH_SNAPSHOT_KEYS = _STATE_NODE_BASE_KEYS | _SEC_SWITCH_METRIC_KEYS
+
+STATE_OBSERVED_LOCK_STATES = frozenset({"unlocked", "locked"})
+STATE_OBSERVED_BER_STATES = frozenset({"normal", "elevated", "severe"})
+STATE_OBSERVED_VOLTAGES = frozenset({"off", "13V", "18V"})
+STATE_OBSERVED_TONES = frozenset({"none", "continuous", "tone_burst", "data_burst"})
+STATE_OBSERVED_TONE_COMPOSITES = frozenset({"none", "continuous_plus_data_burst"})
+STATE_OBSERVED_BANDS = frozenset({"low", "high", "none"})
+STATE_OBSERVED_POLARIZATIONS_DELIVERED = frozenset(
+    {"vertical", "horizontal", "none"}
+)
+STATE_OBSERVED_SHORT_CIRCUIT_STATES = frozenset(
+    {"normal", "clamping", "hiccup", "thermal_fault", "fault_latched"}
+)
+STATE_OBSERVED_SAT_SELECTED = frozenset({"A", "B"})
+STATE_OBSERVED_POWER_PASS = frozenset({"on", "off"})
+
+#: 8-bit DiSEqC register state (two 4-bit nibble groups) and the 2-bit
+#: port-select face (SPEC-622 §5/§6).
+_SWITCH_REGISTER_MAX = 255
+_PORT_SELECTED_MAX = 3
+
+#: The frontend same-source face additions (the maximal sec.* union renders
+#: per-shape absent keys as nothing — the biss.scramble_applied discipline).
+
+
 def validate_payload(event_type: str, payload: Mapping[str, Any]) -> None:
     """Validate a payload against the event type's registered schema.
 
@@ -328,6 +444,10 @@ def validate_payload(event_type: str, payload: Mapping[str, Any]) -> None:
         _validate_recovery_payload(event_type, payload)
     if event_type in GEN_EVENT_TYPES:
         _validate_generation_payload(event_type, payload)
+    if event_type in RF_EVENT_TYPES:
+        _validate_state_observed_payload(event_type, payload)
+    if event_type in SEC_EVENT_TYPES:
+        _validate_state_observed_payload(event_type, payload)
     if event_type in T2MI_EVENT_TYPES:
         _validate_t2mi_payload(event_type, payload)
     if event_type in BBFRAME_EVENT_TYPES:
@@ -462,6 +582,42 @@ PHASE2_PAYLOAD_KEY_SETS: dict[str, tuple[str, ...]] = {
         "byte_size",
         "sha256",
     ),
+    # Phase 3 state-observation faces (ticket #164): rf = the exact tuner
+    # shape; sec = the maximal union of the lnb (+ legacy additive) and
+    # switch shapes — per-shape absent keys render nothing.
+    "rf.state_observed": (
+        "node_id",
+        "health",
+        "causes",
+        "source",
+        "confidence",
+        "lock_state",
+        "if_frequency_khz",
+        "ber_state",
+        "locked_transponder_id",
+        "stale",
+    ),
+    "sec.state_observed": (
+        "node_id",
+        "health",
+        "causes",
+        "source",
+        "confidence",
+        "voltage",
+        "tone_commanded",
+        "tone_actual",
+        "tone_composite",
+        "band_selected",
+        "lo_frequency_khz",
+        "polarization_delivered",
+        "short_circuit_state",
+        "ub_assignments",
+        "sat_selected",
+        "committed_switch_state",
+        "uncommitted_switch_state",
+        "port_selected",
+        "power_pass",
+    ),
 }
 
 for _event_type, _keys, _frozen in (
@@ -483,6 +639,13 @@ for _event_type, _keys, _frozen in (
         ("gen.stage_started", _GEN_STAGE_STARTED_KEYS),
         ("gen.stage_completed", _GEN_STAGE_COMPLETED_KEYS),
         ("gen.packet_sampled", _GEN_PACKET_SAMPLED_KEYS),
+        ("rf.state_observed", RF_TUNER_SNAPSHOT_KEYS),
+        (
+            "sec.state_observed",
+            SEC_LNB_SNAPSHOT_KEYS
+            | SEC_LNB_SAT_SELECTED_KEYS
+            | SEC_SWITCH_SNAPSHOT_KEYS,
+        ),
     )
 ):
     if set(_keys) != _frozen:
@@ -520,6 +683,264 @@ def _validate_generation_payload(
                 f"payload 'sha256' for {event_type!r} must be a lowercase "
                 f"64-hex digest, got {digest!r}",
             )
+
+
+def _validate_state_observed_payload(
+    event_type: str, payload: Mapping[str, Any]
+) -> None:
+    """``rf.state_observed`` / ``sec.state_observed`` shapes (SPEC-303
+    §Phase3; ticket #164 contract).
+
+    Payload = the NodeEvalResult-shape JSON-safe projection: the #161
+    metric key sets + ``health`` + the CauseRef projection + ``node_id``.
+    ``tuning_message`` is deliberately not part of the face (ruling A16 —
+    SPEC-303 is the payload-face authority).  The constant observation-
+    axes pairing (``state_evaluator`` + ``simulated``, SPEC-303 §Phase3
+    恒定配对) is enforced before the shape walk.  Out-of-vocabulary metric
+    values are refused loudly: the journal never records a fabricated or
+    normalised state fact (prepare rejection is the #163/#165 face).
+    """
+    for field, vocabulary in (
+        ("source", STATE_OBSERVED_SOURCES),
+        ("confidence", STATE_OBSERVED_CONFIDENCES),
+    ):
+        value = payload.get(field)
+        if value not in vocabulary:
+            raise EnvelopeError(
+                EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+                f"payload {field!r} for {event_type!r} must be {sorted(vocabulary)} "
+                "(SPEC-303 §Phase3 恒定配对 — state_evaluator + simulated only)",
+            )
+    if event_type == "rf.state_observed":
+        _require_exact_keys(event_type, payload, RF_TUNER_SNAPSHOT_KEYS)
+        _validate_state_projection_fields(event_type, payload)
+        _validate_rf_snapshot_fields(event_type, payload)
+        return
+    # sec.* — two exact shapes by metric-key signature (lnb / switch);
+    # the metric key sets are disjoint, so any mix (or neither) is refused.
+    keys = set(payload)
+    has_switch = bool(keys & _SEC_SWITCH_METRIC_KEYS)
+    has_lnb = bool(keys & _SEC_LNB_METRIC_KEYS)
+    if has_switch and has_lnb:
+        raise EnvelopeError(
+            EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+            f"payload for {event_type!r} mixes the lnb and switch snapshot "
+            "shapes (SPEC-303 §Phase3 — one exact shape per node type)",
+        )
+    if has_switch:
+        _require_exact_keys(event_type, payload, SEC_SWITCH_SNAPSHOT_KEYS)
+        _validate_state_projection_fields(event_type, payload)
+        _validate_switch_snapshot_fields(event_type, payload)
+        return
+    if not has_lnb:
+        raise EnvelopeError(
+            EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+            f"payload for {event_type!r} must carry exactly one snapshot "
+            "shape — the lnb keys or the switch keys (SPEC-303 §Phase3)",
+        )
+    present = set(payload)
+    legal_shapes = (
+        SEC_LNB_SNAPSHOT_KEYS,
+        SEC_LNB_SNAPSHOT_KEYS | SEC_LNB_SAT_SELECTED_KEYS,
+    )
+    if present not in legal_shapes:
+        raise EnvelopeError(
+            EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+            f"payload keys for {event_type!r} (lnb shape) must be exactly "
+            f"{sorted(SEC_LNB_SNAPSHOT_KEYS)} or that plus "
+            f"{sorted(SEC_LNB_SAT_SELECTED_KEYS)} (legacy_cascade only); "
+            f"got {sorted(present)}",
+        )
+    _validate_state_projection_fields(event_type, payload)
+    _validate_lnb_snapshot_fields(event_type, payload)
+
+
+def _validate_state_projection_fields(
+    event_type: str, payload: Mapping[str, Any]
+) -> None:
+    """Shared projection face: identity, health and the CauseRef chain."""
+    _require_non_empty_str(event_type, payload, "node_id")
+    _require_vocabulary(event_type, payload, "health", STATE_OBSERVED_HEALTHS)
+    causes = payload.get("causes")
+    if not isinstance(causes, list):
+        raise EnvelopeError(
+            EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+            f"payload 'causes' for {event_type!r} must be a list of "
+            f"{{node_id, port_id?}} CauseRef projections, got {causes!r}",
+        )
+    for cause in causes:
+        if not isinstance(cause, Mapping):
+            raise EnvelopeError(
+                EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+                f"causes entries for {event_type!r} must be objects, "
+                f"got {cause!r}",
+            )
+        unknown = set(cause) - {"node_id", "port_id"}
+        if unknown or "node_id" not in cause:
+            raise EnvelopeError(
+                EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+                f"causes entries for {event_type!r} must be "
+                "{node_id, port_id?} projections; missing node_id, "
+                f"unexpected {sorted(unknown)}",
+            )
+        _require_non_empty_str(event_type, cause, "node_id")
+        port_id = cause.get("port_id")
+        if port_id is not None and (not isinstance(port_id, str) or not port_id):
+            raise EnvelopeError(
+                EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+                f"causes port_id for {event_type!r} must be a non-empty "
+                f"string or null, got {port_id!r}",
+            )
+
+
+def _validate_rf_snapshot_fields(
+    event_type: str, payload: Mapping[str, Any]
+) -> None:
+    """Tuner snapshot fields (SPEC-620 §5/§8 value shapes)."""
+    _require_vocabulary(
+        event_type, payload, "lock_state", STATE_OBSERVED_LOCK_STATES
+    )
+    ber_state = payload.get("ber_state")
+    if ber_state is not None and ber_state not in STATE_OBSERVED_BER_STATES:
+        raise EnvelopeError(
+            EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+            f"payload 'ber_state' for {event_type!r} must be one of "
+            f"{sorted(STATE_OBSERVED_BER_STATES)} or null (unlocked keeps "
+            f"no grade), got {ber_state!r}",
+        )
+    _require_optional_non_negative_int(
+        event_type, payload, "if_frequency_khz"
+    )
+    transponder = payload.get("locked_transponder_id")
+    if transponder is not None and (
+        not isinstance(transponder, str) or not transponder
+    ):
+        raise EnvelopeError(
+            EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+            f"payload 'locked_transponder_id' for {event_type!r} must be a "
+            f"non-empty string or null (unlocked = null), got "
+            f"{transponder!r}",
+        )
+    if not isinstance(payload.get("stale"), bool):
+        raise EnvelopeError(
+            EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+            f"payload 'stale' for {event_type!r} must be a boolean (present "
+            f"on every snapshot, true iff unlocked — SPEC-620 §8), got "
+            f"{payload.get('stale')!r}",
+        )
+
+
+def _validate_lnb_snapshot_fields(
+    event_type: str, payload: Mapping[str, Any]
+) -> None:
+    """LNB snapshot fields (SPEC-621 §5 value shapes)."""
+    _require_vocabulary(event_type, payload, "voltage", STATE_OBSERVED_VOLTAGES)
+    _require_vocabulary(
+        event_type, payload, "tone_commanded", STATE_OBSERVED_TONES
+    )
+    _require_vocabulary(event_type, payload, "tone_actual", STATE_OBSERVED_TONES)
+    _require_vocabulary(
+        event_type, payload, "tone_composite", STATE_OBSERVED_TONE_COMPOSITES
+    )
+    _require_vocabulary(
+        event_type, payload, "band_selected", STATE_OBSERVED_BANDS
+    )
+    _require_optional_non_negative_int(
+        event_type, payload, "lo_frequency_khz"
+    )
+    _require_vocabulary(
+        event_type,
+        payload,
+        "polarization_delivered",
+        STATE_OBSERVED_POLARIZATIONS_DELIVERED,
+    )
+    _require_vocabulary(
+        event_type,
+        payload,
+        "short_circuit_state",
+        STATE_OBSERVED_SHORT_CIRCUIT_STATES,
+    )
+    table = payload.get("ub_assignments")
+    if not isinstance(table, list):
+        raise EnvelopeError(
+            EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+            f"payload 'ub_assignments' for {event_type!r} must be a list "
+            f"(the SCR table snapshot, empty without an scr segment), got "
+            f"{table!r}",
+        )
+    for entry in table:
+        if not isinstance(entry, Mapping):
+            raise EnvelopeError(
+                EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+                f"ub_assignments entries for {event_type!r} must be objects "
+                "(the SPEC-623 UbAssignmentDTO wire shape; entry-schema "
+                f"authority = the config-period gates), got {entry!r}",
+            )
+    if _SEC_LNB_SAT_SELECTED_KEY in payload:
+        _require_vocabulary(
+            event_type,
+            payload,
+            _SEC_LNB_SAT_SELECTED_KEY,
+            STATE_OBSERVED_SAT_SELECTED,
+        )
+
+
+def _validate_switch_snapshot_fields(
+    event_type: str, payload: Mapping[str, Any]
+) -> None:
+    """Switch snapshot fields (SPEC-622 §5 value shapes)."""
+    for field in ("committed_switch_state", "uncommitted_switch_state"):
+        value = payload.get(field)
+        if (
+            not isinstance(value, int)
+            or isinstance(value, bool)
+            or not 0 <= value <= _SWITCH_REGISTER_MAX
+        ):
+            raise EnvelopeError(
+                EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+                f"payload {field!r} for {event_type!r} must be an 8-bit "
+                f"integer in 0..{_SWITCH_REGISTER_MAX} (two 4-bit nibble "
+                f"groups), got {value!r}",
+            )
+    port_selected = payload.get("port_selected")
+    if port_selected is not None and (
+        not isinstance(port_selected, int)
+        or isinstance(port_selected, bool)
+        or not 0 <= port_selected <= _PORT_SELECTED_MAX
+    ):
+        raise EnvelopeError(
+            EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+            f"payload 'port_selected' for {event_type!r} must be an integer "
+            f"in 0..{_PORT_SELECTED_MAX} (2-bit committed port select) or "
+            f"null (no command intent), got {port_selected!r}",
+        )
+    power_pass = payload.get("power_pass")
+    if power_pass is not None and power_pass not in STATE_OBSERVED_POWER_PASS:
+        raise EnvelopeError(
+            EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+            f"payload 'power_pass' for {event_type!r} must be one of "
+            f"{sorted(STATE_OBSERVED_POWER_PASS)} or null (config "
+            f"passthrough; a missing key stays null — never invented), got "
+            f"{power_pass!r}",
+        )
+
+
+def _require_optional_non_negative_int(
+    event_type: str, payload: Mapping[str, Any], field: str
+) -> None:
+    value = payload.get(field)
+    if value is None:
+        return
+    if (
+        not isinstance(value, int)
+        or isinstance(value, bool)
+        or value < 0
+    ):
+        raise EnvelopeError(
+            EnvelopeErrorCode.OBS_INVALID_ENVELOPE,
+            f"payload {field!r} for {event_type!r} must be a non-negative "
+            f"integer or null, got {value!r}",
+        )
 
 
 def _validate_t2mi_payload(
@@ -1221,10 +1642,29 @@ __all__ = [
     "PHASE2_PAYLOAD_KEY_SETS",
     "RECOVERY_EVENT_TYPES",
     "REGISTERED_EVENT_TYPES",
+    "RF_EVENT_TYPES",
+    "RF_TUNER_SNAPSHOT_KEYS",
     "SCENARIO_EVENT_TYPES",
+    "SEC_EVENT_TYPES",
+    "SEC_LNB_SAT_SELECTED_KEYS",
+    "SEC_LNB_SNAPSHOT_KEYS",
+    "SEC_SWITCH_SNAPSHOT_KEYS",
     "SIMULATION_CLOCK_EVENT_TYPES",
     "SIMULATION_RUN_EVENT_TYPES",
     "SIMULATION_SESSION_EVENT_TYPES",
+    "STATE_OBSERVED_BANDS",
+    "STATE_OBSERVED_BER_STATES",
+    "STATE_OBSERVED_CONFIDENCES",
+    "STATE_OBSERVED_HEALTHS",
+    "STATE_OBSERVED_LOCK_STATES",
+    "STATE_OBSERVED_POLARIZATIONS_DELIVERED",
+    "STATE_OBSERVED_POWER_PASS",
+    "STATE_OBSERVED_SAT_SELECTED",
+    "STATE_OBSERVED_SHORT_CIRCUIT_STATES",
+    "STATE_OBSERVED_SOURCES",
+    "STATE_OBSERVED_TONES",
+    "STATE_OBSERVED_TONE_COMPOSITES",
+    "STATE_OBSERVED_VOLTAGES",
     "T2MI_EVENT_TYPES",
     "TOPOLOGY_EVENT_TYPES",
     "TS_EVENT_TYPES",
