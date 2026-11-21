@@ -59,7 +59,8 @@ FROZEN_STATE_EXPORTS = frozenset(
 )
 
 #: SPEC-202 section 8 codes appended to the package-level error module,
-#: plus the SPEC-003 §Phase3 SIM_TOPO_UB_* family (ticket #160).
+#: plus the SPEC-003 §Phase3 SIM_TOPO_UB_* family (ticket #160) and the
+#: SPEC-204 §Phase3 state-layer prepare gate code (ticket #163).
 FROZEN_ERROR_CODES = frozenset(
     {
         "SIM_TOPO_DUPLICATE_ID",
@@ -74,6 +75,7 @@ FROZEN_ERROR_CODES = frozenset(
         "SIM_TOPO_UB_SLOT_CONFLICT",
         "SIM_TOPO_UB_SLOT_OUT_OF_RANGE",
         "SIM_TOPO_UB_PROTOCOL_MIXED",
+        "SIM_FAULT_STATE_TRANSFORM_UNREGISTERED",
     }
 )
 

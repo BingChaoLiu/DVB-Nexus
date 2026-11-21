@@ -1,11 +1,12 @@
-"""SPEC-204 §4/§6/§11 — the fault-type registry and schema validation.
+"""SPEC-204 §4/§6/§11 + §Phase3 — the fault-type registry and schema validation.
 
 One registry entry per fault type (§6, ADR-0007 item 5 — single
 attributable symptom each), carrying:
 
 - the versioned parameter schema (``PARAMETERS_SCHEMA_VERSION = 1``);
 - the declared pipeline ``layer`` (Phase 2, SPEC-204 §Phase2 /
-  ADR-0010 §3: {TS, BBFRAME, T2MI, BISS});
+  ADR-0010 §3: {TS, BBFRAME, T2MI, BISS}; Phase 3 §Phase3 / ticket #163
+  appends the state layers {RF, SEC});
 - the per-type activation set (Phase 2 pins some primitives to a single
   activation kind);
 - the transform builder used by the semantic stream filter
@@ -13,7 +14,12 @@ attributable symptom each), carrying:
   free of the packet model).  Phase 2 (#121, orchestrator ruling §10-4)
   makes the builder table pluggable via
   :func:`faults.factory.register_transform` — downstream tickets
-  self-register their filter builders from their own modules.
+  self-register their filter builders from their own modules.  The Phase 3
+  state-layer primitives (RF/SEC) do NOT ride this mechanism: their
+  execution path is the pre-evaluation pure config transform
+  (``simulation.state.fault_transforms``, ADR-0012 decision 3 /
+  orchestrator ruling A18) — a different signature domain from the
+  package-level ``FaultTransform.apply(index, packet)`` filter contract.
 
 :func:`validate_fault_definition` is the pure validation half of prepare
 (SPEC-204 §11): it returns the per-fault error detail list, each detail
@@ -47,11 +53,14 @@ __all__ = [
     "FAULT_TYPE_PMT_PID_DRIFT",
     "FAULT_TYPE_PMT_PID_MISMATCH",
     "FAULT_TYPE_T2MI_PLP_MISMATCH",
+    "FAULT_TYPE_TONE_RESIDUE",
+    "FAULT_TYPE_UB_SLOT_CONFLICT",
     "KNOWN_FAULT_TYPES",
     "LAYER_BY_FAULT_TYPE",
     "MVP_FAULT_TYPES",
     "PARAMETERS_SCHEMA_VERSION",
     "PHASE2_FAULT_TYPES",
+    "PHASE3_FAULT_TYPES",
     "transform_builder_for",
     "validate_fault_definition",
 ]
@@ -88,11 +97,30 @@ PHASE2_FAULT_TYPES: frozenset[str] = frozenset(
     }
 )
 
-#: The full known registry: MVP four + Phase 2 four (additive union).
-KNOWN_FAULT_TYPES: frozenset[str] = MVP_FAULT_TYPES | PHASE2_FAULT_TYPES
+# --- Phase 3 state-layer primitives (SPEC-204 §Phase3, ticket #163) --------------
 
-#: The pipeline layer set (SPEC-204 §Phase2 / ADR-0010 §3).
-FAULT_LAYERS: tuple[str, ...] = ("TS", "BBFRAME", "T2MI", "BISS")
+FAULT_TYPE_TONE_RESIDUE = "TONE_RESIDUE"
+FAULT_TYPE_UB_SLOT_CONFLICT = "UB_SLOT_CONFLICT"
+
+#: The two first-version state-layer primitives (ADR-0012 decision 3:
+#: RF/SEC faults enter evaluation as pre-evaluation pure config transforms
+#: — the transform face lives in ``simulation.state.fault_transforms``,
+#: orchestrator ruling A18).  The candidate pool (LNB_SHORT_CIRCUIT /
+#: SWITCH_MISCONFIG / THERMAL_FAULT) stays out of this version — declared
+#: candidates, honestly not registered (SPEC-204 §Phase3 诚实标注).
+PHASE3_FAULT_TYPES: frozenset[str] = frozenset(
+    {FAULT_TYPE_TONE_RESIDUE, FAULT_TYPE_UB_SLOT_CONFLICT}
+)
+
+#: The full known registry: MVP four + Phase 2 four + Phase 3 two (additive).
+KNOWN_FAULT_TYPES: frozenset[str] = (
+    MVP_FAULT_TYPES | PHASE2_FAULT_TYPES | PHASE3_FAULT_TYPES
+)
+
+#: The pipeline layer set (SPEC-204 §Phase2 / ADR-0010 §3 + §Phase3):
+#: the state layers RF/SEC route to the pre-evaluation transform path,
+#: the package layers keep the ADR-0007 filter contract.
+FAULT_LAYERS: tuple[str, ...] = ("TS", "BBFRAME", "T2MI", "BISS", "RF", "SEC")
 
 #: Declared layer per fault type — the runtime routes filters by this
 #: (``FaultDefinition.layer`` must equal the declared value; the MVP four
@@ -106,24 +134,40 @@ LAYER_BY_FAULT_TYPE: dict[str, str] = {
     FAULT_TYPE_BBHEADER_SYNC_FAULT: "BBFRAME",
     FAULT_TYPE_BISS_KEY_MISMATCH: "BISS",
     FAULT_TYPE_PMT_PID_DRIFT: "TS",
+    FAULT_TYPE_TONE_RESIDUE: "RF",
+    FAULT_TYPE_UB_SLOT_CONFLICT: "SEC",
 }
 
 #: Per-type activation sets.  Types not listed accept both MVP kinds
 #: (``T2MI_PLP_MISMATCH`` keeps session_start (default) | packet_index).
+#: The Phase 3 state-layer primitives are session_start only — a state
+#: fault has no packet frame to index (SPEC-204 §Phase3).
 _ACTIVATION_KINDS_BY_TYPE: dict[str, frozenset[str]] = {
     FAULT_TYPE_BBHEADER_SYNC_FAULT: frozenset({"packet_index"}),
     FAULT_TYPE_BISS_KEY_MISMATCH: frozenset({"session_start"}),
     FAULT_TYPE_PMT_PID_DRIFT: frozenset({"packet_index"}),
+    FAULT_TYPE_TONE_RESIDUE: frozenset({"session_start"}),
+    FAULT_TYPE_UB_SLOT_CONFLICT: frozenset({"session_start"}),
 }
 
-#: Fault types that address a node-internal layer target (bare
-#: ``node_id`` slug): BBFrame/T2-MI/BISS carry no shared-frame pid, so
-#: the pid form is rejected for them.  Every other known type (the MVP
-#: four, the TS-layer PMT_PID_DRIFT — and any unknown type, conservatively)
-#: requires the stream-level ``node:pid:0x{hex}`` form.
-_TARGET_REJECTS_PID: frozenset[str] = PHASE2_FAULT_TYPES - {
-    FAULT_TYPE_PMT_PID_DRIFT,
-}
+#: Fault types that reject the stream-level ``node:pid:0x{hex}`` target:
+#: the Phase 2 node-internal-layer types (BBFrame/T2-MI/BISS carry no
+#: shared-frame pid) plus the Phase 3 state-layer primitives (RF/SEC
+#: faults address nodes, not stream pids).  Every other known type (the
+#: MVP four, the TS-layer PMT_PID_DRIFT — and any unknown type,
+#: conservatively) requires the stream-level form.
+_TARGET_REJECTS_PID: frozenset[str] = (
+    PHASE2_FAULT_TYPES - {FAULT_TYPE_PMT_PID_DRIFT}
+) | PHASE3_FAULT_TYPES
+
+#: Fault types that accept the node-attribute target form
+#: ``{node_id}:{attr_name}`` (SPEC-204 §Phase3 / ruling A4): only
+#: UB_SLOT_CONFLICT (the attr segment's value contract — it must address
+#: ``ub_slot`` — is the state transform's face).  TONE_RESIDUE addresses
+#: the whole lnb node.
+_TARGET_ACCEPTS_ATTR_FORM: frozenset[str] = frozenset(
+    {FAULT_TYPE_UB_SLOT_CONFLICT}
+)
 
 #: Versioned parameter schema generation (SPEC-204 §4).
 PARAMETERS_SCHEMA_VERSION = 1
@@ -164,6 +208,13 @@ _BBHEADER_FIELDS = ("MATYPE", "UPL", "DFL", "SYNC", "SYNCD", "CRC-8")
 #: BBHEADER_SYNC_FAULT mode enumeration (SPEC-204 §Phase2 item 2).
 _BBHEADER_FAULT_MODES = ("corrupt", "shift")
 
+#: The 22 kHz tone vocabulary (SPEC-621 §5) mirrored for the faults
+#: package — the import contract forbids ``faults`` importing
+#: ``simulation`` (contract 7), so the authoritative vocabulary
+#: (``simulation.state.evaluators._vocab.TONES``) is drift-locked from the
+#: tests layer (``tests/unit/faults/test_phase3_registry.py``).
+_TONE_VALUES: tuple[str, ...] = ("none", "continuous", "tone_burst", "data_burst")
+
 _ACTIVATION_KINDS = ("packet_index", "session_start")
 
 
@@ -198,7 +249,7 @@ def _validate_activation(
                 SIM_FAULT_PARAM_INVALID,
                 f"{label}: activation kind {activation.kind!r} is not "
                 f"allowed for {fault.fault_type} (allowed: "
-                f"{sorted(allowed_kinds)}, SPEC-204 §Phase2)",
+                f"{sorted(allowed_kinds)}, SPEC-204 §Phase2/§Phase3)",
             )
         ]
     if activation.kind == "session_start":
@@ -273,6 +324,14 @@ _SCHEMAS: dict[str, dict[str, set[str]]] = {
     FAULT_TYPE_PMT_PID_DRIFT: {
         "allowed": {"new_pid_map", "pmt_version_bump"},
         "required": {"new_pid_map", "pmt_version_bump"},
+    },
+    FAULT_TYPE_TONE_RESIDUE: {
+        "allowed": {"tone_actual"},
+        "required": {"tone_actual"},
+    },
+    FAULT_TYPE_UB_SLOT_CONFLICT: {
+        "allowed": {"conflicting_ub_slot"},
+        "required": {"conflicting_ub_slot"},
     },
 }
 
@@ -371,6 +430,10 @@ def _validate_parameters(
         _validate_biss_key_mismatch_params(parameters, reject)
     elif fault_type == FAULT_TYPE_PMT_PID_DRIFT:
         _validate_pmt_pid_drift_params(parameters, reject)
+    elif fault_type == FAULT_TYPE_TONE_RESIDUE:
+        _validate_tone_residue_params(parameters, reject)
+    elif fault_type == FAULT_TYPE_UB_SLOT_CONFLICT:
+        _validate_ub_slot_conflict_params(parameters, reject)
     return details
 
 
@@ -529,6 +592,47 @@ def _validate_pmt_pid_drift_params(
         )
 
 
+def _validate_tone_residue_params(parameters: dict, reject) -> None:
+    """TONE_RESIDUE value rules (SPEC-204 §Phase3 / SPEC-621 §5).
+
+    ``tone_actual`` carries the residue — the value the pre-evaluation
+    transform writes into the target lnb's ``tone_actual`` drive key while
+    ``tone_commanded`` stays (the mismatch IS the injected seam, ADR-0012
+    decision 3).  The value must be one of the SPEC-621 §5 tone states.
+    """
+    tone_actual = parameters["tone_actual"]
+    if not isinstance(tone_actual, str) or tone_actual not in _TONE_VALUES:
+        reject(
+            f"TONE_RESIDUE tone_actual {tone_actual!r} is not one of "
+            f"{list(_TONE_VALUES)} (the SPEC-621 §5 22 kHz tone vocabulary, "
+            "SPEC-204 §Phase3)"
+        )
+
+
+def _validate_ub_slot_conflict_params(parameters: dict, reject) -> None:
+    """UB_SLOT_CONFLICT value rules (SPEC-204 §Phase3 / SPEC-623 §6-§7).
+
+    ``conflicting_ub_slot`` is the already-claimed UB slot the
+    pre-evaluation transform misassigns the target tuner to (runtime
+    stacking interference; the conflict judgement itself goes exclusively
+    through ``simulation.state.unicable.ub_conflicts`` — ruling A13, and
+    the static config-period gate stays the validator's SIM_TOPO_UB_*
+    family).  0-based int; the protocol bit width is graph knowledge the
+    registry deliberately does not see.
+    """
+    slot = parameters["conflicting_ub_slot"]
+    if not isinstance(slot, int) or isinstance(slot, bool):
+        reject(
+            "UB_SLOT_CONFLICT conflicting_ub_slot must be an int "
+            "(0-based UB slot index, SPEC-204 §Phase3)"
+        )
+    elif slot < 0:
+        reject(
+            f"UB_SLOT_CONFLICT conflicting_ub_slot {slot} is negative "
+            "(0-based UB slot indexing, SPEC-204 §Phase3)"
+        )
+
+
 # --- the registry validator (SPEC-204 §11 prepare half) ---------------------------
 
 
@@ -552,11 +656,11 @@ def validate_fault_definition(
                 SIM_FAULT_UNKNOWN_TYPE,
                 f"{label}: fault_type {fault.fault_type!r} is not in the "
                 f"registry {sorted(KNOWN_FAULT_TYPES)} (SPEC-204 §6 + "
-                "§Phase2)",
+                "§Phase2/§Phase3)",
             )
         )
 
-    # --- layer (SPEC-204 §Phase2 / ADR-0010 §3) --------------------------
+    # --- layer (SPEC-204 §Phase2 / ADR-0010 §3 + §Phase3) ----------------
     declared_layer = LAYER_BY_FAULT_TYPE.get(fault.fault_type)
     if fault.fault_type in KNOWN_FAULT_TYPES:
         if fault.layer not in FAULT_LAYERS:
@@ -565,7 +669,7 @@ def validate_fault_definition(
                     SIM_FAULT_PARAM_INVALID,
                     f"{label}: layer {fault.layer!r} is outside the "
                     f"pipeline layer set {list(FAULT_LAYERS)} (SPEC-204 "
-                    "§Phase2)",
+                    "§Phase2/§Phase3)",
                 )
             )
         elif declared_layer is not None and fault.layer != declared_layer:
@@ -574,7 +678,7 @@ def validate_fault_definition(
                     SIM_FAULT_PARAM_INVALID,
                     f"{label}: layer {fault.layer!r} does not match the "
                     f"layer declared for {fault.fault_type} "
-                    f"({declared_layer!r}, SPEC-204 §Phase2)",
+                    f"({declared_layer!r}, SPEC-204 §Phase2/§Phase3)",
                 )
             )
 
@@ -587,7 +691,24 @@ def validate_fault_definition(
             _detail(SIM_FAULT_TARGET_INVALID, f"{label}: {error}")
         )
     else:
-        if target.pid is None and fault.fault_type not in _TARGET_REJECTS_PID:
+        if (
+            target.attr is not None
+            and fault.fault_type not in _TARGET_ACCEPTS_ATTR_FORM
+        ):
+            # The node-attribute form (SPEC-204 §Phase3 / ruling A4) is
+            # reserved for the state-layer primitives that declare it.
+            details.append(
+                _detail(
+                    SIM_FAULT_TARGET_INVALID,
+                    f"{label}: {fault.fault_type} does not address node "
+                    f"attributes — target {fault.target_id!r} must be the "
+                    "bare node_id slug or the '{node_id}:pid:0x{hex}' form "
+                    f"(attribute addressing is reserved for "
+                    f"{sorted(_TARGET_ACCEPTS_ATTR_FORM)}, SPEC-204 "
+                    "§Phase3)",
+                )
+            )
+        elif target.pid is None and fault.fault_type not in _TARGET_REJECTS_PID:
             # MVP four + PMT_PID_DRIFT are stream-level; unknown types keep
             # the strict MVP-era stream-level requirement (never looser).
             details.append(
@@ -642,6 +763,13 @@ def transform_builder_for(fault_type: str) -> Callable[[FaultDefinition], "Fault
     already rejected them by the time the filter builds.  The class is
     called with the canonical :class:`FaultDefinition` and receives the
     parsed stream target through it.
+
+    The Phase 3 state-layer primitives (RF/SEC) have NO package-level
+    builder by design (ruling A18): their pre-evaluation config
+    transforms resolve from
+    ``simulation.state.fault_transforms.STATE_TRANSFORM_BY_FAULT_TYPE``
+    — handing a state-layer fault to this package filter chain is an
+    orchestration error (#165 routes the plan by declared layer).
     """
     # Deferred import: factory imports the semantic filter, which imports
     # this module — resolving the override table at call time keeps the

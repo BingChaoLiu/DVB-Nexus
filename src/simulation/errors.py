@@ -48,6 +48,19 @@ territory):
 - ``SIM_TOPO_UB_PROTOCOL_MIXED``    one tuner's reachable SCR set mixes
   EN 50494 and EN 50607 (rule 4; the two UB spaces are independent).
 
+SPEC-204 §Phase3 codes (ticket #163, appended — the state-layer prepare
+gate; ADR-0012 decision 3 routes RF/SEC faults through pre-evaluation pure
+config transforms, so "layer routing reachable" = a transform is
+registered for the fault type):
+
+- ``SIM_FAULT_STATE_TRANSFORM_UNREGISTERED``  a fault declares a state
+  layer (RF/SEC) but no pre-evaluation transform exists for its type in
+  ``simulation.state.fault_transforms.STATE_TRANSFORM_BY_FAULT_TYPE``
+  (e.g. a prematurely used candidate-pool primitive; the SIM_FAULT_* code
+  family is SPEC-204 §11 — the constant lives here because the state
+  transform face is simulation-owned, while the faults package keeps its
+  own §11 codes).
+
 SPEC-200 section 8 codes (ticket #41, appended — SPEC-200 §5/§6/§8):
 
 - ``SIM_SESSION_NOT_FOUND``            unknown session_id (404 semantics).
@@ -132,6 +145,16 @@ SIM_TOPO_UB_SLOT_OUT_OF_RANGE = "SIM_TOPO_UB_SLOT_OUT_OF_RANGE"
 #: SPEC-003 §Phase3 — one tuner's reachable SCR set mixes EN 50494 and
 #: EN 50607; the two UB spaces are independent (rule 4; SPEC-623 §7).
 SIM_TOPO_UB_PROTOCOL_MIXED = "SIM_TOPO_UB_PROTOCOL_MIXED"
+
+# --- SPEC-204 §Phase3 (ticket #163 — the state-layer prepare gate) ---------------
+
+#: SPEC-204 §Phase3 — a fault routes to a state layer (RF/SEC) but no
+#: pre-evaluation transform is registered for its type in
+#: ``simulation.state.fault_transforms.STATE_TRANSFORM_BY_FAULT_TYPE``
+#: (the "layer routing reachable" prepare clause; e.g. a prematurely used
+#: candidate-pool primitive — LNB_SHORT_CIRCUIT / SWITCH_MISCONFIG /
+#: THERMAL_FAULT stay unregistered in the first version).
+SIM_FAULT_STATE_TRANSFORM_UNREGISTERED = "SIM_FAULT_STATE_TRANSFORM_UNREGISTERED"
 
 # --- SPEC-200 section 8 (ticket #41) ------------------------------------------
 

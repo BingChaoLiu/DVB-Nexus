@@ -111,6 +111,7 @@ from simulation.errors import (
     SIM_CLOCK_PAUSED,
     SIM_CLOCK_TIME_BACKWARDS,
     SIM_ENGINE_ERROR,
+    SIM_FAULT_STATE_TRANSFORM_UNREGISTERED,
     SIM_INTERNAL,
     SIM_INVALID_LIFECYCLE_TRANSITION,
     SIM_IO_ERROR,
@@ -252,6 +253,8 @@ __all__ = [
     "SIM_TOPO_UB_SLOT_CONFLICT",
     "SIM_TOPO_UB_SLOT_OUT_OF_RANGE",
     "SIM_TOPO_UB_SLOT_UNMATCHED",
+    # State-layer fault prepare gate (SPEC-204 §Phase3, ticket #163)
+    "SIM_FAULT_STATE_TRANSFORM_UNREGISTERED",
     "TopologyViolation",
     "validate_topology",
     "SIM_EVAL_NODE_FAILED",

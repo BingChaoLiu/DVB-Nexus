@@ -109,11 +109,21 @@ class TestRegistryExpansion:
         )
 
     def test_known_registry_is_the_additive_union(self) -> None:
-        assert KNOWN_FAULT_TYPES == MVP_FAULT_TYPES | PHASE2_FAULT_TYPES
-        assert len(KNOWN_FAULT_TYPES) == 8
+        # #163 appended the two Phase 3 state-layer primitives (additive
+        # union; the Phase 2 four stay verbatim members).
+        assert KNOWN_FAULT_TYPES == (
+            MVP_FAULT_TYPES
+            | PHASE2_FAULT_TYPES
+            | {"TONE_RESIDUE", "UB_SLOT_CONFLICT"}
+        )
+        assert len(KNOWN_FAULT_TYPES) == 10
+        assert PHASE2_FAULT_TYPES <= KNOWN_FAULT_TYPES
 
     def test_fault_layers_are_the_phase2_layer_set(self) -> None:
-        assert FAULT_LAYERS == ("TS", "BBFRAME", "T2MI", "BISS")
+        # The Phase 2 four stay a verbatim prefix; #163 appended RF/SEC
+        # (pinned in full by tests/unit/faults/test_phase3_registry.py).
+        assert FAULT_LAYERS[:4] == ("TS", "BBFRAME", "T2MI", "BISS")
+        assert len(FAULT_LAYERS) == 6
 
     def test_layer_declared_per_fault_type(self) -> None:
         assert LAYER_BY_FAULT_TYPE[FAULT_TYPE_T2MI_PLP_MISMATCH] == "T2MI"
