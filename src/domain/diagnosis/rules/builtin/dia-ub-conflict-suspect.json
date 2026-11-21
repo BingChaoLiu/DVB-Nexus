@@ -1,0 +1,84 @@
+{
+  "rule_id": "DIA-UB-CONFLICT-SUSPECT",
+  "rule_version": "1.0.0",
+  "code": "DIAG_UB_CONFLICT_SUSPECT",
+  "priority": 100,
+  "severity": "error",
+  "confidence": "high",
+  "title": "UB slot conflict / SCR stacking interference suspected on the tuner",
+  "summary_template": "Tuner {node_id} unlocked on a {ber_state}-graded face with conflict references in the cause chain — suspected UB slot conflict / SCR stacking interference",
+  "match": {
+    "event_type": "rf.state_observed",
+    "predicates": [
+      {
+        "field": "payload.node_id",
+        "op": "exists",
+        "value": null
+      },
+      {
+        "field": "payload.health",
+        "op": "exists",
+        "value": null
+      },
+      {
+        "field": "payload.causes",
+        "op": "exists",
+        "value": null
+      },
+      {
+        "field": "payload.source",
+        "op": "eq",
+        "value": "state_evaluator"
+      },
+      {
+        "field": "payload.confidence",
+        "op": "eq",
+        "value": "simulated"
+      },
+      {
+        "field": "payload.lock_state",
+        "op": "eq",
+        "value": "unlocked"
+      },
+      {
+        "field": "payload.if_frequency_khz",
+        "op": "exists",
+        "value": null
+      },
+      {
+        "field": "payload.ber_state",
+        "op": "eq",
+        "value": "severe"
+      },
+      {
+        "field": "payload.locked_transponder_id",
+        "op": "exists",
+        "value": null
+      },
+      {
+        "field": "payload.stale",
+        "op": "exists",
+        "value": null
+      }
+    ],
+    "group_by": [
+      "node_id"
+    ],
+    "window": null
+  },
+  "suppression": {
+    "key": [
+      "code",
+      "node_id"
+    ],
+    "window": "per_run"
+  },
+  "suggested_actions": [
+    "Re-assign the tuner ub_slot claim against the SCR ub_assignments table (conflict peer in the cause chain)"
+  ],
+  "expected_evidence": [
+    "rf.state_observed",
+    "sec.state_observed"
+  ],
+  "enabled": true
+}

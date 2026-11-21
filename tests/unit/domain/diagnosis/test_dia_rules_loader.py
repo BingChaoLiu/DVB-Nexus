@@ -165,8 +165,9 @@ class TestRulesetUniqueness:
 
 class TestBuiltinLoad:
     """SPEC-307 §6 + §Phase2: the builtin set and its table values —
-    the MVP four (§6 table) plus the Phase 2 four (#130, §Phase2 chapter,
-    one rule per encapsulation primitive)."""
+    the MVP four (§6 table), the Phase 2 four (#130, §Phase2 chapter,
+    one rule per encapsulation primitive) and the Phase 3 two (#168,
+    §Phase3 chapter, one rule per state-layer primitive)."""
 
     #: The MVP four in the §6 table order (零回归 anchor).
     MVP_RULE_IDS = (
@@ -184,6 +185,12 @@ class TestBuiltinLoad:
         "DIA-PMT-PID-DRIFT",
     )
 
+    #: The Phase 3 two in the §Phase3 candidate order.
+    PHASE3_RULE_IDS = (
+        "DIA-TONE-RESIDUE-SUSPECT",
+        "DIA-UB-CONFLICT-SUSPECT",
+    )
+
     @pytest.fixture(scope="class")
     def builtin(self) -> tuple[DiagnosticRule, ...]:
         return load_builtin_rules()
@@ -192,13 +199,16 @@ class TestBuiltinLoad:
         assert [rule.rule_id for rule in builtin] == [
             *self.MVP_RULE_IDS,
             *self.PHASE2_RULE_IDS,
+            *self.PHASE3_RULE_IDS,
         ]
 
     def test_load_order_follows_the_spec5_ordering(self, builtin):
         """Registration order is the SPEC-307 §5 output ordering (the
         evaluator re-applies it; the static set is pre-sorted)."""
         priorities = [rule.priority for rule in builtin]
-        assert priorities == sorted(priorities) == [10, 20, 30, 40, 50, 60, 70, 80]
+        assert priorities == sorted(priorities) == [
+            10, 20, 30, 40, 50, 60, 70, 80, 90, 100
+        ]
 
     @pytest.mark.parametrize(
         ("rule_id", "code", "priority", "severity", "confidence"),
@@ -211,6 +221,8 @@ class TestBuiltinLoad:
             ("DIA-BBHEADER-SYNC-FAULT", "DIAG_BBHEADER_SYNC_FAULT", 60, "error", "medium"),
             ("DIA-BISS-KEY-MISMATCH", "DIAG_BISS_KEY_MISMATCH", 70, "error", "medium"),
             ("DIA-PMT-PID-DRIFT", "DIAG_PMT_PID_DRIFT", 80, "error", "low"),
+            ("DIA-TONE-RESIDUE-SUSPECT", "DIAG_TONE_RESIDUE_SUSPECT", 90, "error", "medium"),
+            ("DIA-UB-CONFLICT-SUSPECT", "DIAG_UB_CONFLICT_SUSPECT", 100, "error", "high"),
         ],
     )
     def test_table_values_per_rule(
@@ -369,7 +381,7 @@ class TestBuiltinRuleSet:
         from domain.diagnosis.rules import BuiltinRuleSet
 
         rules = BuiltinRuleSet().rules()
-        assert len(rules) == 8
+        assert len(rules) == 10
         assert all(rule.enabled for rule in rules)
 
     def test_disabled_rule_is_flagged_not_removed(self):
@@ -379,7 +391,7 @@ class TestBuiltinRuleSet:
             disabled_rule_ids=["DIA-CC-DISCONTINUITY"]
         ).rules()
         by_id = {rule.rule_id: rule for rule in rules}
-        assert len(rules) == 8  # the set keeps the rule visible
+        assert len(rules) == 10  # the set keeps the rule visible
         assert by_id["DIA-CC-DISCONTINUITY"].enabled is False
         assert by_id["DIA-PAT-MISSING"].enabled is True
         # Everything except the switch stays byte-identical.
@@ -403,7 +415,7 @@ class TestRulesProvider:
         from domain.diagnosis.rules import builtin_rules_provider
 
         rules = builtin_rules_provider()
-        assert len(rules) == 8
+        assert len(rules) == 10
         for rule in rules:
             # Structural conformance with the #54 EvaluationRule face.
             for attribute in (

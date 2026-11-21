@@ -249,7 +249,9 @@ class TestOrderingMatrix:
         rules = load_builtin_rules()
         keys = [(rule.priority, rule.severity.value, rule.code) for rule in rules]
         assert keys == sorted(keys, key=lambda k: (k[0], k[1], k[2]))
-        assert [rule.priority for rule in rules] == [10, 20, 30, 40, 50, 60, 70, 80]
+        assert [rule.priority for rule in rules] == [
+            10, 20, 30, 40, 50, 60, 70, 80, 90, 100
+        ]
 
     def test_fixture_rules_and_real_rules_agree_on_the_pairing(self):
         """互锁 (M4 review fix F2): the fixture ruleset IS the production
